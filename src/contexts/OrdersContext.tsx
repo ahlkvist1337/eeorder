@@ -440,6 +440,24 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         from_status: currentStep.status,
         to_status: updates.status,
       });
+
+      // Auto-change order status to "started" when a step begins
+      if (updates.status === 'in_progress' && order) {
+        const statusesThatShouldChangeToStarted: ProductionStatus[] = ['created', 'planned', 'arrived'];
+        
+        if (statusesThatShouldChangeToStarted.includes(order.productionStatus)) {
+          await supabase.from('status_history').insert({
+            order_id: orderId,
+            from_status: order.productionStatus,
+            to_status: 'started',
+          });
+          
+          await supabase
+            .from('orders')
+            .update({ production_status: 'started' })
+            .eq('id', orderId);
+        }
+      }
     }
 
     const dbUpdates: Record<string, unknown> = {};
