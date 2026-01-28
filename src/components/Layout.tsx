@@ -41,7 +41,7 @@ export function Layout({ children }: LayoutProps) {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-14">
             <Link to="/" className="flex items-center gap-3">
-              <img src={eeLogo} alt="EE Logo" className="h-8 w-auto" />
+              <img src={eeLogo} alt="EE Logo" className="h-10 w-auto" />
               <span className="font-bold text-lg tracking-tight">Orderhantering</span>
             </Link>
             

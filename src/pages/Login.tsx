@@ -49,7 +49,7 @@ export default function Login() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <img src={eeLogo} alt="EE Logo" className="h-20 w-auto" />
+            <img src={eeLogo} alt="EE Logo" className="h-28 w-auto" />
           </div>
           <CardTitle className="text-2xl">Orderhantering</CardTitle>
           <CardDescription>Logga in för att fortsätta</CardDescription>

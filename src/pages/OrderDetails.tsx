@@ -99,7 +99,8 @@ export default function OrderDetails() {
 
   const handleStepsChange = async (newSteps: OrderStep[]) => {
     try {
-      await updateOrder(order.id, { steps: newSteps });
+      // Pass the current order.steps as previousSteps for comparison
+      await updateOrder(order.id, { steps: newSteps }, order.steps);
     } catch (error) {
       console.error('Error updating steps:', error);
     }
