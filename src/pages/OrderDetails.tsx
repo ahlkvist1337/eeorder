@@ -45,14 +45,20 @@ export default function OrderDetails() {
   // Local state for deviation comment to avoid saving on every keystroke
   const [localDeviationComment, setLocalDeviationComment] = useState(order?.deviationComment || '');
   const [hasUnsavedDeviationComment, setHasUnsavedDeviationComment] = useState(false);
+  
+  // Local state for order comment
+  const [localComment, setLocalComment] = useState(order?.comment || '');
+  const [hasUnsavedComment, setHasUnsavedComment] = useState(false);
 
   // Sync local state when order changes
   useEffect(() => {
     if (order) {
       setLocalDeviationComment(order.deviationComment || '');
       setHasUnsavedDeviationComment(false);
+      setLocalComment(order.comment || '');
+      setHasUnsavedComment(false);
     }
-  }, [order?.deviationComment]);
+  }, [order?.deviationComment, order?.comment]);
 
   if (isLoading) {
     return (
@@ -113,6 +119,15 @@ export default function OrderDetails() {
       setHasUnsavedDeviationComment(false);
     } catch (error) {
       console.error('Error updating deviation comment:', error);
+    }
+  };
+
+  const handleSaveComment = async () => {
+    try {
+      await updateOrder(order.id, { comment: localComment });
+      setHasUnsavedComment(false);
+    } catch (error) {
+      console.error('Error updating comment:', error);
     }
   };
 
@@ -204,12 +219,27 @@ export default function OrderDetails() {
                       <p className="font-medium">{order.deliveryAddress}</p>
                     </div>
                   )}
-                  {order.comment && (
-                    <div className="sm:col-span-2">
-                      <Label className="text-muted-foreground">Kommentar</Label>
-                      <p className="font-medium">{order.comment}</p>
-                    </div>
-                  )}
+                  <div className="sm:col-span-2 space-y-2">
+                    <Label className="text-muted-foreground">Kommentar</Label>
+                    <Textarea
+                      value={localComment}
+                      onChange={(e) => {
+                        setLocalComment(e.target.value);
+                        setHasUnsavedComment(e.target.value !== (order.comment || ''));
+                      }}
+                      placeholder="Skriv en kommentar..."
+                      rows={3}
+                    />
+                    {hasUnsavedComment && (
+                      <Button 
+                        size="sm" 
+                        onClick={handleSaveComment}
+                      >
+                        <Save className="h-4 w-4 mr-2" />
+                        Spara kommentar
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
