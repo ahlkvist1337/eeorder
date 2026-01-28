@@ -57,6 +57,12 @@ interface DbStatusHistory {
   timestamp: string;
 }
 
+interface BulkOrderUpdates {
+  productionStatus?: ProductionStatus;
+  billingStatus?: BillingStatus;
+  hasDeviation?: boolean;
+}
+
 interface OrdersContextType {
   orders: Order[];
   isLoading: boolean;
@@ -70,6 +76,7 @@ interface OrdersContextType {
   getOrderById: (id: string) => Order | undefined;
   orderNumberExists: (orderNumber: string) => boolean;
   refreshOrders: () => Promise<void>;
+  bulkUpdateOrders: (orderIds: string[], updates: BulkOrderUpdates) => Promise<void>;
 }
 
 const OrdersContext = createContext<OrdersContextType | null>(null);
@@ -421,6 +428,49 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     return orders.some(o => o.orderNumber === orderNumber);
   }, [orders]);
 
+  const bulkUpdateOrders = useCallback(async (orderIds: string[], updates: BulkOrderUpdates) => {
+    if (orderIds.length === 0) return;
+
+    // Build the update object for the orders table
+    const dbUpdates: Record<string, unknown> = {};
+    if (updates.productionStatus !== undefined) dbUpdates.production_status = updates.productionStatus;
+    if (updates.billingStatus !== undefined) dbUpdates.billing_status = updates.billingStatus;
+    if (updates.hasDeviation !== undefined) dbUpdates.has_deviation = updates.hasDeviation;
+
+    // If updating production status, we need to create status history entries
+    if (updates.productionStatus !== undefined) {
+      const historyEntries = orderIds
+        .map(orderId => {
+          const order = orders.find(o => o.id === orderId);
+          if (!order) return null;
+          return {
+            order_id: orderId,
+            from_status: order.productionStatus,
+            to_status: updates.productionStatus!,
+          };
+        })
+        .filter(Boolean);
+
+      if (historyEntries.length > 0) {
+        const { error: historyError } = await supabase
+          .from('status_history')
+          .insert(historyEntries);
+        if (historyError) throw historyError;
+      }
+    }
+
+    // Update all selected orders
+    if (Object.keys(dbUpdates).length > 0) {
+      const { error } = await supabase
+        .from('orders')
+        .update(dbUpdates)
+        .in('id', orderIds);
+      if (error) throw error;
+    }
+
+    await fetchOrders();
+  }, [orders, fetchOrders]);
+
   return (
     <OrdersContext.Provider value={{
       orders,
@@ -435,6 +485,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       getOrderById,
       orderNumberExists,
       refreshOrders: fetchOrders,
+      bulkUpdateOrders,
     }}>
       {children}
     </OrdersContext.Provider>
