@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { ClipboardList, Plus, Settings, BarChart3, Tv, Users, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import eeLogo from '@/assets/ee_logga.png';
 
 interface LayoutProps {
   children: ReactNode;
@@ -39,8 +40,9 @@ export function Layout({ children }: LayoutProps) {
       <header className="bg-sidebar text-sidebar-foreground border-b border-sidebar-border">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-14">
-            <Link to="/" className="font-bold text-lg tracking-tight">
-              Orderhantering
+            <Link to="/" className="flex items-center gap-3">
+              <img src={eeLogo} alt="EE Logo" className="h-8 w-auto" />
+              <span className="font-bold text-lg tracking-tight">Orderhantering</span>
             </Link>
             
             <div className="flex items-center gap-1">

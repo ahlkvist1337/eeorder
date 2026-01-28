@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Loader2 } from 'lucide-react';
+import eeLogo from '@/assets/ee_logga.png';
 
 export default function Login() {
   const { user, isLoading, signIn } = useAuth();
@@ -47,6 +48,9 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
+          <div className="flex justify-center mb-4">
+            <img src={eeLogo} alt="EE Logo" className="h-20 w-auto" />
+          </div>
           <CardTitle className="text-2xl">Orderhantering</CardTitle>
           <CardDescription>Logga in för att fortsätta</CardDescription>
         </CardHeader>
