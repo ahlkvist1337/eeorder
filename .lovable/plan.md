@@ -1,76 +1,88 @@
 
 
-# Plan: Automatisk ändring till "Startad" vid stegpåbörjande
+# Plan: Lägg till kommentarfält vid XML-import + visa kommentar i orderöversikt
 
 ## Bakgrund
 
-Användaren vill att orderstatusen automatiskt ändras till "Startad" när ett behandlingssteg påbörjas (ändras till "in_progress").
+Användaren vill:
+1. Kunna lägga till en kommentar direkt vid XML-import (istället för att behöva gå in på orderdetaljer efteråt)
+2. Se kommentaren i orderöversikten (tabellen på startsidan)
 
-## Analys
+## Lösning
 
-Funktionen `updateOrderStep` i `src/contexts/OrdersContext.tsx` hanterar redan uppdateringar av steg och loggar statusändringar. Det är den naturliga platsen att lägga till denna automatik.
+### Del 1: Kommentarfält vid XML-import
 
-## Logik som ska implementeras
+Lägg till ett textfält för "Kommentar" i XML-import-formuläret, precis som det redan finns i det manuella formuläret.
 
-När ett steg ändras till `in_progress`:
-1. Kontrollera om ordern INTE redan är i status `started`
-2. Om orderstatus är `created`, `planned`, eller `arrived` - ändra till `started`
-3. Logga statusändringen i `status_history` för att upprätthålla spårbarhet
-4. Undvik att ändra status om ordern redan är `started`, `paused`, `completed`, eller `cancelled`
+**Uppdatera `src/pages/CreateOrder.tsx`:**
 
-## Teknisk implementation
-
-### Uppdatera `src/contexts/OrdersContext.tsx`
-
-I funktionen `updateOrderStep`, efter att ha loggat stegstatusen, lägg till:
-
+1. Lägg till state för XML-kommentar:
 ```typescript
-const updateOrderStep = useCallback(async (orderId: string, stepId: string, updates: Partial<OrderStep>) => {
-  const order = orders.find(o => o.id === orderId);
-  const currentStep = order?.steps.find(s => s.id === stepId);
-  
-  // ... befintlig kod för att logga steghistorik ...
-
-  // NY LOGIK: Om ett steg påbörjas, sätt orderstatusen till "started"
-  if (updates.status === 'in_progress' && order) {
-    const statusesThatShouldChangeToStarted: ProductionStatus[] = ['created', 'planned', 'arrived'];
-    
-    if (statusesThatShouldChangeToStarted.includes(order.productionStatus)) {
-      // Logga statusändring
-      await supabase.from('status_history').insert({
-        order_id: orderId,
-        from_status: order.productionStatus,
-        to_status: 'started',
-      });
-      
-      // Uppdatera orderstatus
-      await supabase
-        .from('orders')
-        .update({ production_status: 'started' })
-        .eq('id', orderId);
-    }
-  }
-
-  // ... resten av befintlig kod ...
-}, [orders, fetchOrders]);
+const [xmlComment, setXmlComment] = useState('');
 ```
 
-## Varför detta fungerar
+2. Lägg till kommentarfältet i XML-formuläret (efter behandlingssteg-sektionen):
+```typescript
+<div className="space-y-2">
+  <Label htmlFor="xmlComment">Kommentar</Label>
+  <Textarea
+    id="xmlComment"
+    value={xmlComment}
+    onChange={e => setXmlComment(e.target.value)}
+    placeholder="Eventuell kommentar..."
+    rows={3}
+  />
+</div>
+```
 
-- Stegstatusen `in_progress` indikerar att arbete har påbörjats
-- Endast relevanta orderstatusar (`created`, `planned`, `arrived`) ändras
-- Om ordern redan är `started`, `paused`, `completed` eller `cancelled` sker ingen ändring
-- Statushistorik loggas korrekt för spårbarhet
+3. Inkludera kommentaren i `handleXmlSubmit`:
+```typescript
+const newOrder = {
+  // ... befintliga fält ...
+  comment: xmlComment.trim() || undefined,
+};
+```
 
-## Statusar som påverkas
+4. Återställ kommentar när användaren väljer ny fil:
+```typescript
+onClick={() => {
+  setParsedXml(null);
+  setXmlSelectedSteps([]);
+  setXmlComment('');
+}}
+```
 
-| Nuvarande orderstatus | Steg blir `in_progress` | Ny orderstatus |
-|-----------------------|-------------------------|----------------|
-| Skapad (created)      | Ja                      | Startad        |
-| Planerad (planned)    | Ja                      | Startad        |
-| Ankommen (arrived)    | Ja                      | Startad        |
-| Startad (started)     | Ja                      | Oförändrad     |
-| Pausad (paused)       | Ja                      | Oförändrad     |
-| Avslutad (completed)  | Ja                      | Oförändrad     |
-| Avbruten (cancelled)  | Ja                      | Oförändrad     |
+### Del 2: Visa kommentar i orderöversikten
+
+Lägg till en kolumn för kommentar i ordertabellen.
+
+**Uppdatera `src/components/OrdersTable.tsx`:**
+
+1. Lägg till en ikon-import:
+```typescript
+import { ArrowUpDown, AlertTriangle, MessageSquare } from 'lucide-react';
+```
+
+2. Lägg till kolumnhuvud (efter "Nästa steg"):
+```typescript
+<TableHead className="w-[200px]">Kommentar</TableHead>
+```
+
+3. Lägg till kolumndata i varje rad:
+```typescript
+<TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={order.comment || ''}>
+  {order.comment ? (
+    <span className="flex items-center gap-1">
+      <MessageSquare className="h-3 w-3 flex-shrink-0" />
+      <span className="truncate">{order.comment}</span>
+    </span>
+  ) : '-'}
+</TableCell>
+```
+
+## Resultat
+
+- Användare kan skriva en kommentar direkt när de importerar XML
+- Kommentaren syns i orderöversikten (trunkerad om den är lång, full text visas vid hover)
+- Befintlig kommentarfunktionalitet i orderdetaljer påverkas inte
 
