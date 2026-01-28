@@ -1,12 +1,11 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { ArrowLeft, AlertTriangle, Clock, DollarSign, Package } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Clock, Package, Wrench } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -16,12 +15,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { ProductionStatusBadge, BillingStatusBadge, StepStatusBadge } from '@/components/StatusBadge';
+import { ProductionStatusBadge, BillingStatusBadge } from '@/components/StatusBadge';
 import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
+import { OrderStepsEditor } from '@/components/OrderStepsEditor';
 import { useOrders } from '@/hooks/useOrders';
-import { productionStatusLabels, billingStatusLabels, stepStatusLabels } from '@/types/order';
-import type { ProductionStatus, BillingStatus, StepStatus } from '@/types/order';
+import { productionStatusLabels, billingStatusLabels } from '@/types/order';
+import type { ProductionStatus, BillingStatus, OrderStep } from '@/types/order';
 
 export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
@@ -75,20 +74,11 @@ export default function OrderDetails() {
     }
   };
 
-  const handleStepStatusChange = async (stepId: string, status: string) => {
+  const handleStepsChange = async (newSteps: OrderStep[]) => {
     try {
-      await updateOrderStep(order.id, stepId, { status: status as StepStatus });
+      await updateOrder(order.id, { steps: newSteps });
     } catch (error) {
-      console.error('Error updating step status:', error);
-    }
-  };
-
-  const handleStepPriceChange = async (stepId: string, price: string) => {
-    const numericPrice = parseFloat(price) || 0;
-    try {
-      await updateOrderStep(order.id, stepId, { price: numericPrice });
-    } catch (error) {
-      console.error('Error updating step price:', error);
+      console.error('Error updating steps:', error);
     }
   };
 
@@ -209,54 +199,16 @@ export default function OrderDetails() {
             {/* Treatment steps */}
             <Card>
               <CardHeader>
-                <CardTitle>Behandlingssteg</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Wrench className="h-5 w-5" />
+                  Behandlingssteg
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                {order.steps.length === 0 ? (
-                  <p className="text-muted-foreground">Inga behandlingssteg tillagda.</p>
-                ) : (
-                  <div className="space-y-4">
-                    {order.steps.map((step, index) => (
-                      <div key={step.id}>
-                        {index > 0 && <Separator className="my-4" />}
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="font-medium">{step.name}</span>
-                              <StepStatusBadge status={step.status} />
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <Select 
-                              value={step.status} 
-                              onValueChange={(v) => handleStepStatusChange(step.id, v)}
-                            >
-                              <SelectTrigger className="w-[140px] h-9 bg-background">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent className="bg-popover">
-                                {Object.entries(stepStatusLabels).map(([value, label]) => (
-                                  <SelectItem key={value} value={value}>{label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <div className="flex items-center gap-2">
-                              <DollarSign className="h-4 w-4 text-muted-foreground" />
-                              <Input
-                                type="number"
-                                value={step.price || ''}
-                                onChange={(e) => handleStepPriceChange(step.id, e.target.value)}
-                                placeholder="0"
-                                className="w-24 h-9"
-                              />
-                              <span className="text-sm text-muted-foreground">kr</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <OrderStepsEditor
+                  steps={order.steps}
+                  onStepsChange={handleStepsChange}
+                />
               </CardContent>
             </Card>
 
@@ -349,7 +301,7 @@ export default function OrderDetails() {
                   </Select>
                 </div>
 
-                <Separator />
+                <div className="border-t my-4" />
 
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2">
