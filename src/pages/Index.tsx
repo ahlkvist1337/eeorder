@@ -7,7 +7,7 @@ import { OrderFilters } from '@/components/OrderFilters';
 import { BulkEditToolbar } from '@/components/BulkEditToolbar';
 import { BulkEditConfirmDialog, type BulkEditType } from '@/components/BulkEditConfirmDialog';
 import { Button } from '@/components/ui/button';
-import { useOrders } from '@/hooks/useOrders';
+import { useOrders } from '@/contexts/OrdersContext';
 import { toast } from 'sonner';
 import type { ProductionStatus, BillingStatus } from '@/types/order';
 
