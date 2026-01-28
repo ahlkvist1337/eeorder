@@ -24,7 +24,7 @@ interface OrdersTableProps {
   };
 }
 
-type SortField = 'orderNumber' | 'customer' | 'productionStatus' | 'plannedStart' | 'billingStatus';
+type SortField = 'orderNumber' | 'customer' | 'productionStatus' | 'plannedStart' | 'plannedEnd' | 'billingStatus';
 type SortDirection = 'asc' | 'desc';
 
 export function OrdersTable({ orders, filters }: OrdersTableProps) {
@@ -68,6 +68,10 @@ export function OrdersTable({ orders, filters }: OrdersTableProps) {
         case 'plannedStart':
           aValue = a.plannedStart || '';
           bValue = b.plannedStart || '';
+          break;
+        case 'plannedEnd':
+          aValue = a.plannedEnd || '';
+          bValue = b.plannedEnd || '';
           break;
         case 'billingStatus':
           aValue = a.billingStatus;
@@ -136,10 +140,13 @@ export function OrdersTable({ orders, filters }: OrdersTableProps) {
             <TableHead className="w-[120px]">
               <SortButton field="productionStatus">Status</SortButton>
             </TableHead>
-            <TableHead className="w-[120px]">
-              <SortButton field="plannedStart">Planerat</SortButton>
+            <TableHead className="w-[100px]">
+              <SortButton field="plannedStart">Start</SortButton>
             </TableHead>
-            <TableHead className="w-[180px]">Nästa steg</TableHead>
+            <TableHead className="w-[100px]">
+              <SortButton field="plannedEnd">Klart</SortButton>
+            </TableHead>
+            <TableHead className="w-[160px]">Nästa steg</TableHead>
             <TableHead className="w-[150px]">
               <SortButton field="billingStatus">Fakturering</SortButton>
             </TableHead>
@@ -160,9 +167,14 @@ export function OrdersTable({ orders, filters }: OrdersTableProps) {
               <TableCell>
                 <ProductionStatusBadge status={order.productionStatus} />
               </TableCell>
-              <TableCell>
+              <TableCell className="text-sm">
                 {order.plannedStart 
-                  ? format(new Date(order.plannedStart), 'd MMM yyyy', { locale: sv })
+                  ? format(new Date(order.plannedStart), 'd MMM', { locale: sv })
+                  : '-'}
+              </TableCell>
+              <TableCell className="text-sm">
+                {order.plannedEnd 
+                  ? format(new Date(order.plannedEnd), 'd MMM', { locale: sv })
                   : '-'}
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">

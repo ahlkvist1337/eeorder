@@ -70,15 +70,20 @@ export interface Order {
     partNumbers?: string[];
     orderDate?: string;
     deliveryDate?: string;
-    rows?: Array<{
-      rowNumber: string;
-      partNumber: string;
-      text: string;
-      quantity: number;
-      unit: string;
-      price: number;
-    }>;
   };
+  // Article rows (from XML or manual entry)
+  articleRows?: ArticleRow[];
+}
+
+export interface ArticleRow {
+  id: string;
+  rowNumber: string;
+  partNumber: string;
+  text: string;
+  quantity: number;
+  unit: string;
+  price: number;
+  stepId?: string; // Optional link to treatment step
 }
 
 export interface ParsedXMLOrder {
@@ -89,14 +94,7 @@ export interface ParsedXMLOrder {
   supplier?: string;
   orderDate?: string;
   deliveryDate?: string;
-  rows: Array<{
-    rowNumber: string;
-    partNumber: string;
-    text: string;
-    quantity: number;
-    unit: string;
-    price: number;
-  }>;
+  rows: ArticleRow[];
 }
 
 // Status display helpers

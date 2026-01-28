@@ -50,6 +50,7 @@ export function parseMonitorXML(xmlString: string): ParsedXMLOrder {
     const eachStr = row.querySelector('Each')?.textContent || '0';
 
     rows.push({
+      id: crypto.randomUUID(),
       rowNumber,
       partNumber,
       text,
