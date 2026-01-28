@@ -39,6 +39,7 @@ export default function CreateOrder() {
   const [xmlError, setXmlError] = useState<string | null>(null);
   const [parsedXml, setParsedXml] = useState<ParsedXMLOrder | null>(null);
   const [xmlSelectedSteps, setXmlSelectedSteps] = useState<string[]>([]);
+  const [xmlComment, setXmlComment] = useState('');
   const [isDragging, setIsDragging] = useState(false);
 
   const handleManualSubmit = async (e: React.FormEvent) => {
@@ -167,6 +168,7 @@ export default function CreateOrder() {
       billingStatus: 'not_ready',
       plannedStart: parsedXml.orderDate || undefined,
       plannedEnd: parsedXml.deliveryDate || undefined,
+      comment: xmlComment.trim() || undefined,
       steps,
       hasDeviation: false,
       totalPrice: parsedXml.rows.reduce((sum, row) => sum + row.price * row.quantity, 0),
@@ -459,12 +461,24 @@ export default function CreateOrder() {
                       </div>
                     </div>
 
+                    <div className="space-y-2">
+                      <Label htmlFor="xmlComment">Kommentar</Label>
+                      <Textarea
+                        id="xmlComment"
+                        value={xmlComment}
+                        onChange={e => setXmlComment(e.target.value)}
+                        placeholder="Eventuell kommentar..."
+                        rows={3}
+                      />
+                    </div>
+
                     <div className="flex gap-3 pt-4">
                       <Button 
                         variant="outline" 
                         onClick={() => {
                           setParsedXml(null);
                           setXmlSelectedSteps([]);
+                          setXmlComment('');
                         }}
                       >
                         Välj annan fil

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { ArrowUpDown, AlertTriangle } from 'lucide-react';
+import { ArrowUpDown, AlertTriangle, MessageSquare } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -189,6 +189,7 @@ export function OrdersTable({ orders, filters, selectedOrderIds, onSelectionChan
               <SortButton field="plannedEnd">Klart</SortButton>
             </TableHead>
             <TableHead className="w-[160px]">Nästa steg</TableHead>
+            <TableHead className="w-[200px]">Kommentar</TableHead>
             <TableHead className="w-[150px]">
               <SortButton field="billingStatus">Fakturering</SortButton>
             </TableHead>
@@ -230,6 +231,14 @@ export function OrdersTable({ orders, filters, selectedOrderIds, onSelectionChan
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">
                 {getNextStep(order)}
+              </TableCell>
+              <TableCell className="text-sm text-muted-foreground max-w-[200px]" title={order.comment || ''}>
+                {order.comment ? (
+                  <span className="flex items-center gap-1">
+                    <MessageSquare className="h-3 w-3 flex-shrink-0" />
+                    <span className="truncate">{order.comment}</span>
+                  </span>
+                ) : '-'}
               </TableCell>
               <TableCell>
                 <BillingStatusBadge status={order.billingStatus} />
