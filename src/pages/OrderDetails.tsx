@@ -18,7 +18,9 @@ import {
 import { ProductionStatusBadge, BillingStatusBadge } from '@/components/StatusBadge';
 import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
 import { OrderStepsEditor } from '@/components/OrderStepsEditor';
+import { OrderAttachments } from '@/components/OrderAttachments';
 import { useOrders } from '@/hooks/useOrders';
+import { useOrderAttachments } from '@/hooks/useOrderAttachments';
 import { productionStatusLabels, billingStatusLabels } from '@/types/order';
 import type { ProductionStatus, BillingStatus, OrderStep } from '@/types/order';
 
@@ -36,6 +38,7 @@ export default function OrderDetails() {
   } = useOrders();
 
   const order = getOrderById(id || '');
+  const { attachments, refetch: refetchAttachments } = useOrderAttachments(id || '');
 
   if (isLoading) {
     return (
@@ -325,6 +328,13 @@ export default function OrderDetails() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* File attachments */}
+            <OrderAttachments
+              orderId={order.id}
+              attachments={attachments}
+              onAttachmentsChange={refetchAttachments}
+            />
 
             {/* Metadata */}
             <Card>
