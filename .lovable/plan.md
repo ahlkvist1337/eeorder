@@ -1,101 +1,48 @@
 
 
-## Orderhantering för Ytbehandling - MVP
+## Åtgärda "Order hittades inte" efter att ha skapat order
 
-### Översikt
-Ett internt ordersystem för produktionsledning av ytbehandlingsarbeten. Klassisk affärssystemsstil med fokus på enkelhet och snabbhet.
+### Problemet
 
----
+`useOrders` hooken har ett synkroniseringsfel mellan olika komponenter:
 
-### 1. Orderöversikt (Startsidan)
-**Huvudvyn som visar alla ordrar i en tydlig tabell**
+1. Varje komponent som anropar `useOrders()` skapar sin egen oberoende instans av state
+2. När en order skapas i `CreateOrder` och vi navigerar till `OrderDetails`, har den nya sidan inte tillgång till den uppdaterade datan förrän localStorage laddats
+3. Under initial rendering visar `OrderDetails` "Order hittades inte" eftersom `orders` är tom
 
-- Tabellvy med kolumner: Ordernummer, Kund, Status, Planerat datum, Nästa steg, Faktureringsstatus
-- Färgkodade statusar för snabb överblick (grönt = klar, gult = pågående, rött = avvikelse)
-- Klicka på rad för att öppna orderdetaljer
-- Snabbfilter för status, fakturering, datum och avvikelser
-- Sortering på alla kolumner
+### Lösning
+
+Implementera en delad state-hantering genom att använda **React Context** för att dela ordrar mellan alla komponenter.
 
 ---
 
-### 2. Skapa Order via XML
-**Import från Monitor ERP-system**
+### Teknisk plan
 
-- Drag & drop-zon eller filväljare för XML-uppladdning
-- Automatisk parsing av orderdata: ordernummer, kund, datum, artikelrader
-- Validering: kontroll av dubbletter och obligatoriska fält
-- Tydliga felmeddelanden vid problem
-- Förhandsvisning av importerad data innan bekräftelse
+#### Steg 1: Skapa en OrdersContext
 
----
+Skapa en React Context som wrapprar hela appen och delar ordrar globalt.
 
-### 3. Skapa Order Manuellt
-**Formulär för nya ordrar**
+**Ny fil: `src/contexts/OrdersContext.tsx`**
+- Skapa context med Provider-komponent
+- Flytta all orders-logik från `useOrders` till context
+- Exportera en `useOrders` hook som använder context
 
-- Ordernummer (unikt, valideras direkt)
-- Kunduppgifter
-- Planerat start- och slutdatum
-- Val av behandlingssteg från listan
-- Kommentarsfält
+#### Steg 2: Uppdatera `App.tsx`
 
----
+Wrappa hela applikationen med `OrdersProvider` så att alla sidor delar samma state.
 
-### 4. Hantera Behandlingssteg
-**Flexibelt steg-system**
+#### Steg 3: Hantera laddningstillstånd i `OrderDetails`
 
-- Skapa egna behandlingssteg (t.ex. Sprutzink, Målning, Blästring)
-- Enkel lista för att lägga till/ta bort steg
-- Varje steg kan tilldelas till ordrar med egen status och tidsuppföljning
+Visa en laddningsindikator medan orders laddas från localStorage, istället för direkt "Order hittades inte".
 
 ---
 
-### 5. Orderdetaljer
-**Komplett vy för en enskild order**
+### Förväntade ändringar
 
-- All grunddata på ett ställe
-- Steglista med individuell status per steg
-- Statushistorik/tidslinje (alla ändringar loggas)
-- Priser per steg och totalsumma
-- Avvikelse-checkbox med kommentarsfält
-- Snabbknappar: Ändra status, Markera fakturerad, Avbryt order
-
----
-
-### 6. Statushantering
-**Tydligt statusflöde**
-
-Produktionsstatus: Skapad → Planerad → Startad → Pausad → Ankommen → Avslutad (eller Avbruten)
-
-Faktureringsstatus: Ej klar → Klar för fakturering → Fakturerad
-
-Alla statusändringar tidsstämplas automatiskt.
-
----
-
-### 7. Statistik-Dashboard
-**Enkel översikt med nyckeltal**
-
-- Antal aktiva ordrar
-- Antal avslutade ordrar
-- Antal fakturerade ordrar
-- Totalt värde (klar för fakturering + fakturerat)
-- Jämförelse planerad vs faktisk ledtid
-
----
-
-### 8. Design & Stil
-**Klassiskt affärssystem**
-
-- Grå/blå färgskala med tydliga kontraster
-- Tabellbaserad layout
-- Inga onödiga animationer
-- Stor, läsbar text
-- Tydliga knappar och ikoner
-
----
-
-### Teknisk Lösning
-- **Ingen inloggning** - direkt tillgång för alla
-- **Lokal datalagring** (localStorage) för MVP - data sparas i webbläsaren
-- **Framtida möjlighet** att lägga till backend/databas för permanent lagring
+| Fil | Åtgärd |
+|-----|--------|
+| `src/contexts/OrdersContext.tsx` | Ny fil - Context provider för orders |
+| `src/hooks/useOrders.ts` | Uppdatera till att använda context |
+| `src/App.tsx` | Wrappa med OrdersProvider |
+| `src/pages/OrderDetails.tsx` | Lägg till laddningstillstånd |
 
