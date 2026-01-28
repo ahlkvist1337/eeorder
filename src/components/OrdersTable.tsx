@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ProductionStatusBadge, BillingStatusBadge } from '@/components/StatusBadge';
 import type { Order, ProductionStatus, BillingStatus } from '@/types/order';
 
@@ -22,12 +23,14 @@ interface OrdersTableProps {
     billingStatus: BillingStatus | 'all';
     hasDeviation: boolean | null;
   };
+  selectedOrderIds: Set<string>;
+  onSelectionChange: (selectedIds: Set<string>) => void;
 }
 
 type SortField = 'orderNumber' | 'customer' | 'productionStatus' | 'plannedStart' | 'plannedEnd' | 'billingStatus';
 type SortDirection = 'asc' | 'desc';
 
-export function OrdersTable({ orders, filters }: OrdersTableProps) {
+export function OrdersTable({ orders, filters, selectedOrderIds, onSelectionChange }: OrdersTableProps) {
   const navigate = useNavigate();
   const [sortField, setSortField] = useState<SortField>('orderNumber');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -116,6 +119,33 @@ export function OrdersTable({ orders, filters }: OrdersTableProps) {
     </Button>
   );
 
+  const allVisibleSelected = sortedOrders.length > 0 && sortedOrders.every(order => selectedOrderIds.has(order.id));
+  const someSelected = sortedOrders.some(order => selectedOrderIds.has(order.id));
+
+  const handleSelectAll = () => {
+    if (allVisibleSelected) {
+      // Deselect all visible
+      const newSelection = new Set(selectedOrderIds);
+      sortedOrders.forEach(order => newSelection.delete(order.id));
+      onSelectionChange(newSelection);
+    } else {
+      // Select all visible
+      const newSelection = new Set(selectedOrderIds);
+      sortedOrders.forEach(order => newSelection.add(order.id));
+      onSelectionChange(newSelection);
+    }
+  };
+
+  const handleSelectOrder = (orderId: string, checked: boolean) => {
+    const newSelection = new Set(selectedOrderIds);
+    if (checked) {
+      newSelection.add(orderId);
+    } else {
+      newSelection.delete(orderId);
+    }
+    onSelectionChange(newSelection);
+  };
+
   if (sortedOrders.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground">
@@ -131,6 +161,18 @@ export function OrdersTable({ orders, filters }: OrdersTableProps) {
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/50 hover:bg-muted/50">
+            <TableHead className="w-[50px]">
+              <Checkbox
+                checked={allVisibleSelected}
+                ref={(el) => {
+                  if (el) {
+                    (el as HTMLButtonElement).dataset.state = someSelected && !allVisibleSelected ? 'indeterminate' : allVisibleSelected ? 'checked' : 'unchecked';
+                  }
+                }}
+                onCheckedChange={handleSelectAll}
+                aria-label="Markera alla"
+              />
+            </TableHead>
             <TableHead className="w-[140px]">
               <SortButton field="orderNumber">Ordernr</SortButton>
             </TableHead>
@@ -154,15 +196,24 @@ export function OrdersTable({ orders, filters }: OrdersTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedOrders.map(order => (
-            <TableRow
-              key={order.id}
-              className="cursor-pointer hover:bg-accent/50"
-              onClick={() => navigate(`/order/${order.id}`)}
-            >
-              <TableCell className="font-mono font-semibold">
-                {order.orderNumber}
-              </TableCell>
+          {sortedOrders.map(order => {
+            const isSelected = selectedOrderIds.has(order.id);
+            return (
+              <TableRow
+                key={order.id}
+                className={`cursor-pointer hover:bg-accent/50 ${isSelected ? 'bg-primary/10' : ''}`}
+                onClick={() => navigate(`/order/${order.id}`)}
+              >
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={(checked) => handleSelectOrder(order.id, checked as boolean)}
+                    aria-label={`Markera order ${order.orderNumber}`}
+                  />
+                </TableCell>
+                <TableCell className="font-mono font-semibold">
+                  {order.orderNumber}
+                </TableCell>
               <TableCell>{order.customer || '-'}</TableCell>
               <TableCell>
                 <ProductionStatusBadge status={order.productionStatus} />
@@ -183,13 +234,14 @@ export function OrdersTable({ orders, filters }: OrdersTableProps) {
               <TableCell>
                 <BillingStatusBadge status={order.billingStatus} />
               </TableCell>
-              <TableCell>
-                {order.hasDeviation && (
-                  <AlertTriangle className="h-4 w-4 text-destructive" />
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
+                <TableCell>
+                  {order.hasDeviation && (
+                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>
