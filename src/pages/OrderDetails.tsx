@@ -1,7 +1,8 @@
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { ArrowLeft, AlertTriangle, Clock, Package, Wrench } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Clock, Package, Wrench, Save } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,6 +41,18 @@ export default function OrderDetails() {
 
   const order = getOrderById(id || '');
   const { attachments, refetch: refetchAttachments } = useOrderAttachments(id || '');
+  
+  // Local state for deviation comment to avoid saving on every keystroke
+  const [localDeviationComment, setLocalDeviationComment] = useState(order?.deviationComment || '');
+  const [hasUnsavedDeviationComment, setHasUnsavedDeviationComment] = useState(false);
+
+  // Sync local state when order changes
+  useEffect(() => {
+    if (order) {
+      setLocalDeviationComment(order.deviationComment || '');
+      setHasUnsavedDeviationComment(false);
+    }
+  }, [order?.deviationComment]);
 
   if (isLoading) {
     return (
@@ -94,9 +107,10 @@ export default function OrderDetails() {
     }
   };
 
-  const handleDeviationCommentChange = async (comment: string) => {
+  const handleSaveDeviationComment = async () => {
     try {
-      await updateOrder(order.id, { deviationComment: comment });
+      await updateOrder(order.id, { deviationComment: localDeviationComment });
+      setHasUnsavedDeviationComment(false);
     } catch (error) {
       console.error('Error updating deviation comment:', error);
     }
@@ -345,12 +359,27 @@ export default function OrderDetails() {
                     </Label>
                   </div>
                   {order.hasDeviation && (
-                    <Textarea
-                      value={order.deviationComment || ''}
-                      onChange={(e) => handleDeviationCommentChange(e.target.value)}
-                      placeholder="Beskriv avvikelsen..."
-                      rows={3}
-                    />
+                    <div className="space-y-2">
+                      <Textarea
+                        value={localDeviationComment}
+                        onChange={(e) => {
+                          setLocalDeviationComment(e.target.value);
+                          setHasUnsavedDeviationComment(e.target.value !== (order.deviationComment || ''));
+                        }}
+                        placeholder="Beskriv avvikelsen..."
+                        rows={3}
+                      />
+                      {hasUnsavedDeviationComment && (
+                        <Button 
+                          size="sm" 
+                          onClick={handleSaveDeviationComment}
+                          className="w-full"
+                        >
+                          <Save className="h-4 w-4 mr-2" />
+                          Spara kommentar
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
               </CardContent>
