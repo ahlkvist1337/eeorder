@@ -1,88 +1,86 @@
 
 
-# Plan: Lägg till kommentarfält vid XML-import + visa kommentar i orderöversikt
+# Plan: Fixa automatisk statusändring + Ta bort "Planerad"-status
 
-## Bakgrund
+## Identifierat problem
 
-Användaren vill:
-1. Kunna lägga till en kommentar direkt vid XML-import (istället för att behöva gå in på orderdetaljer efteråt)
-2. Se kommentaren i orderöversikten (tabellen på startsidan)
+Automatiken för att ändra orderstatus till "Startad" fungerar inte på grund av fel kodväg:
+
+1. `OrderStepsEditor` anropar `onStepsChange` med alla uppdaterade steg
+2. `OrderDetails.tsx` tar emot detta via `handleStepsChange` och anropar `updateOrder(order.id, { steps: newSteps })`
+3. `updateOrder` i `OrdersContext` hanterar **INTE** automatisk statusändring - den logiken finns bara i `updateOrderStep`
+
+Resultat: När ett steg ändras till "Pågående" triggas aldrig koden som ska ändra ordern till "Startad".
 
 ## Lösning
 
-### Del 1: Kommentarfält vid XML-import
+### Del 1: Flytta automatisk statuslogik till `updateOrder`
 
-Lägg till ett textfält för "Kommentar" i XML-import-formuläret, precis som det redan finns i det manuella formuläret.
+Uppdatera `updateOrder`-funktionen i `OrdersContext.tsx` så att den också kontrollerar om något steg ändras till `in_progress` och uppdaterar orderstatusen automatiskt.
 
-**Uppdatera `src/pages/CreateOrder.tsx`:**
+**Modifiera `src/contexts/OrdersContext.tsx`:**
 
-1. Lägg till state för XML-kommentar:
+I den del av `updateOrder` som hanterar `updates.steps`, lägg till logik för automatisk statusändring:
+
 ```typescript
-const [xmlComment, setXmlComment] = useState('');
+// Inside updateOrder, after logging step history entries
+if (updates.steps !== undefined) {
+  const currentOrder = orders.find(o => o.id === id);
+  
+  if (currentOrder) {
+    // Check if any step is being changed to 'in_progress'
+    const hasNewInProgress = updates.steps.some(newStep => {
+      const oldStep = currentOrder.steps.find(s => s.id === newStep.id);
+      return oldStep && oldStep.status !== 'in_progress' && newStep.status === 'in_progress';
+    });
+
+    // Auto-change order status to "started" when a step begins
+    if (hasNewInProgress) {
+      const statusesThatShouldChangeToStarted: ProductionStatus[] = ['created', 'arrived'];
+      
+      if (statusesThatShouldChangeToStarted.includes(currentOrder.productionStatus)) {
+        await supabase.from('status_history').insert({
+          order_id: id,
+          from_status: currentOrder.productionStatus,
+          to_status: 'started',
+        });
+        
+        // Add to dbUpdates so it's included in the order update
+        dbUpdates.production_status = 'started';
+      }
+    }
+    
+    // ... existing step history logging code ...
+  }
+}
 ```
 
-2. Lägg till kommentarfältet i XML-formuläret (efter behandlingssteg-sektionen):
-```typescript
-<div className="space-y-2">
-  <Label htmlFor="xmlComment">Kommentar</Label>
-  <Textarea
-    id="xmlComment"
-    value={xmlComment}
-    onChange={e => setXmlComment(e.target.value)}
-    placeholder="Eventuell kommentar..."
-    rows={3}
-  />
-</div>
-```
+### Del 2: Ta bort "Planerad" (planned) produktionsstatus
 
-3. Inkludera kommentaren i `handleXmlSubmit`:
-```typescript
-const newOrder = {
-  // ... befintliga fält ...
-  comment: xmlComment.trim() || undefined,
-};
-```
+Ta bort `planned` som en giltig produktionsstatus i hela applikationen.
 
-4. Återställ kommentar när användaren väljer ny fil:
-```typescript
-onClick={() => {
-  setParsedXml(null);
-  setXmlSelectedSteps([]);
-  setXmlComment('');
-}}
-```
+**Filer som ska uppdateras:**
 
-### Del 2: Visa kommentar i orderöversikten
+1. **`src/types/order.ts`** - Ta bort `'planned'` från `ProductionStatus` typ och `productionStatusLabels`
 
-Lägg till en kolumn för kommentar i ordertabellen.
+2. **`src/components/StatusBadge.tsx`** - Ta bort `planned` från `productionStatusColors`
 
-**Uppdatera `src/components/OrdersTable.tsx`:**
+3. **`src/contexts/OrdersContext.tsx`** - Ta bort `'planned'` från arrayen `statusesThatShouldChangeToStarted`
 
-1. Lägg till en ikon-import:
-```typescript
-import { ArrowUpDown, AlertTriangle, MessageSquare } from 'lucide-react';
-```
+4. **`src/index.css`** - Ta bort CSS-variabeln `--status-planned` (om den finns)
 
-2. Lägg till kolumnhuvud (efter "Nästa steg"):
-```typescript
-<TableHead className="w-[200px]">Kommentar</TableHead>
-```
+5. **Databas** - Behöver INTE ändras för enum-typen, men eventuella existerande ordrar med status `planned` bör migreras till `created` eller `arrived`
 
-3. Lägg till kolumndata i varje rad:
-```typescript
-<TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={order.comment || ''}>
-  {order.comment ? (
-    <span className="flex items-center gap-1">
-      <MessageSquare className="h-3 w-3 flex-shrink-0" />
-      <span className="truncate">{order.comment}</span>
-    </span>
-  ) : '-'}
-</TableCell>
-```
+### Ordning för genomförande
+
+1. Flytta automatisk statuslogik till `updateOrder` (hög prioritet - fixar buggen)
+2. Ta bort `planned` från TypeScript-typer
+3. Ta bort `planned` från UI-komponenter
+4. Uppdatera arrayen för statusar som triggar "started"
 
 ## Resultat
 
-- Användare kan skriva en kommentar direkt när de importerar XML
-- Kommentaren syns i orderöversikten (trunkerad om den är lång, full text visas vid hover)
-- Befintlig kommentarfunktionalitet i orderdetaljer påverkas inte
+- När ett steg ändras till "Pågående" kommer ordern automatiskt att ändras till "Startad" (om den var "Skapad" eller "Ankommen")
+- "Planerad"-statusen finns inte längre i systemet
+- Förenklad statusflöde: Skapad → Ankommen → Startad → Pausad → Avslutad/Avbruten
 
