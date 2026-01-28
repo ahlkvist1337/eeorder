@@ -23,6 +23,7 @@ interface OrdersTableProps {
     billingStatus: BillingStatus | 'all';
     hasDeviation: boolean | null;
   };
+  searchQuery: string;
   selectedOrderIds: Set<string>;
   onSelectionChange: (selectedIds: Set<string>) => void;
 }
@@ -30,13 +31,25 @@ interface OrdersTableProps {
 type SortField = 'orderNumber' | 'customer' | 'productionStatus' | 'plannedStart' | 'plannedEnd' | 'billingStatus';
 type SortDirection = 'asc' | 'desc';
 
-export function OrdersTable({ orders, filters, selectedOrderIds, onSelectionChange }: OrdersTableProps) {
+export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, onSelectionChange }: OrdersTableProps) {
   const navigate = useNavigate();
   const [sortField, setSortField] = useState<SortField>('orderNumber');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
+      // Search filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesSearch = 
+          order.orderNumber.toLowerCase().includes(query) ||
+          order.customer.toLowerCase().includes(query) ||
+          (order.comment && order.comment.toLowerCase().includes(query)) ||
+          (order.customerReference && order.customerReference.toLowerCase().includes(query));
+        if (!matchesSearch) return false;
+      }
+      
+      // Status filters
       if (filters.productionStatus !== 'all' && order.productionStatus !== filters.productionStatus) {
         return false;
       }
@@ -48,7 +61,7 @@ export function OrdersTable({ orders, filters, selectedOrderIds, onSelectionChan
       }
       return true;
     });
-  }, [orders, filters]);
+  }, [orders, filters, searchQuery]);
 
   const sortedOrders = useMemo(() => {
     return [...filteredOrders].sort((a, b) => {

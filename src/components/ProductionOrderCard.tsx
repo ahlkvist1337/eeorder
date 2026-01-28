@@ -1,3 +1,6 @@
+import { format } from 'date-fns';
+import { sv } from 'date-fns/locale';
+import { CalendarClock } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { Order, StepStatus } from '@/types/order';
@@ -75,11 +78,19 @@ export function ProductionOrderCard({ order }: ProductionOrderCardProps) {
           ))}
         </div>
 
-        {/* Customer name */}
-        <div className="mt-4 pt-4 border-t border-border">
+        {/* Customer name and delivery date */}
+        <div className="mt-4 pt-4 border-t border-border space-y-2">
           <p className="text-lg text-muted-foreground truncate">
             {order.customer}
           </p>
+          {order.plannedEnd && (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <CalendarClock className="h-4 w-4" />
+              <span className="text-sm">
+                Leveransredo: {format(new Date(order.plannedEnd), 'd MMM yyyy', { locale: sv })}
+              </span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
