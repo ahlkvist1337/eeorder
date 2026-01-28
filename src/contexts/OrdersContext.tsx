@@ -336,8 +336,31 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           return oldStep && oldStep.status !== 'in_progress' && newStep.status === 'in_progress';
         });
 
-        // Auto-change order status to "started" when a step begins
-        if (hasNewInProgress) {
+        // Check if all steps are now completed
+        const allStepsCompleted = updates.steps.length > 0 && updates.steps.every(step => step.status === 'completed');
+        
+        // Check if this is a new completion (at least one step wasn't completed before)
+        const wasNotAllCompleted = oldSteps.some(step => step.status !== 'completed');
+        
+        // Auto-change order status to "completed" when all steps are done
+        if (allStepsCompleted && wasNotAllCompleted) {
+          const statusesThatShouldChangeToCompleted: ProductionStatus[] = ['created', 'arrived', 'started', 'paused'];
+          
+          if (statusesThatShouldChangeToCompleted.includes(currentOrder.productionStatus)) {
+            await supabase.from('status_history').insert({
+              order_id: id,
+              from_status: currentOrder.productionStatus,
+              to_status: 'completed',
+            });
+            
+            await supabase
+              .from('orders')
+              .update({ production_status: 'completed' })
+              .eq('id', id);
+          }
+        }
+        // Auto-change order status to "started" when a step begins (only if not completing all)
+        else if (hasNewInProgress) {
           const statusesThatShouldChangeToStarted: ProductionStatus[] = ['created', 'arrived'];
           
           if (statusesThatShouldChangeToStarted.includes(currentOrder.productionStatus)) {
