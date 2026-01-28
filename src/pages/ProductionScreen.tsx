@@ -3,6 +3,7 @@ import { useOrders } from '@/contexts/OrdersContext';
 import { ProductionOrderCard } from '@/components/ProductionOrderCard';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
+import { Pause } from 'lucide-react';
 import eeLogo from '@/assets/ee_logga.png';
 
 export default function ProductionScreen() {
@@ -13,6 +14,9 @@ export default function ProductionScreen() {
   const activeOrders = orders.filter(
     (o) => o.productionStatus === 'arrived' || o.productionStatus === 'started'
   );
+
+  // Filter paused orders
+  const pausedOrders = orders.filter((o) => o.productionStatus === 'paused');
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -45,6 +49,10 @@ export default function ProductionScreen() {
           <span className="inline-block px-2 py-0.5 rounded-sm bg-[hsl(var(--status-started))] text-black text-xs font-medium">
             Startad
           </span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm bg-[hsl(var(--status-paused))] text-white text-xs font-medium">
+            <Pause className="h-3 w-3" />
+            Pausad
+          </span>
           <span className="text-muted-foreground ml-2">Steg:</span>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-full ring-1 ring-muted-foreground bg-transparent" />
@@ -67,6 +75,28 @@ export default function ProductionScreen() {
           </span>
         </div>
       </header>
+
+      {/* Paused orders section */}
+      {pausedOrders.length > 0 && (
+        <section className="mb-6">
+          <h2 className="text-lg font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+            <Pause className="h-4 w-4" />
+            Pausade ordrar
+          </h2>
+          <div className="flex flex-wrap gap-3">
+            {pausedOrders.map((order) => (
+              <div
+                key={order.id}
+                className="flex items-center gap-3 px-4 py-2 rounded-md bg-[hsl(var(--status-paused))] text-white"
+              >
+                <Pause className="h-4 w-4" />
+                <span className="font-mono font-bold">{order.orderNumber}</span>
+                <span className="text-sm opacity-90">{order.customer}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Orders grid */}
       {isLoading && activeOrders.length === 0 ? (
