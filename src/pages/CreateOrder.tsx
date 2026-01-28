@@ -41,7 +41,7 @@ export default function CreateOrder() {
   const [xmlSelectedSteps, setXmlSelectedSteps] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
-  const handleManualSubmit = (e: React.FormEvent) => {
+  const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setManualError(null);
 
@@ -82,8 +82,13 @@ export default function CreateOrder() {
       articleRows: manualArticleRows.length > 0 ? manualArticleRows : undefined,
     };
 
-    const created = addOrder(newOrder);
-    navigate(`/order/${created.id}`);
+    try {
+      const created = await addOrder(newOrder);
+      navigate(`/order/${created.id}`);
+    } catch (error) {
+      console.error('Error creating order:', error);
+      setManualError('Kunde inte skapa ordern. Försök igen.');
+    }
   };
 
   const handleFileUpload = useCallback((file: File) => {
@@ -139,7 +144,7 @@ export default function CreateOrder() {
     if (file) handleFileUpload(file);
   }, [handleFileUpload]);
 
-  const handleXmlSubmit = () => {
+  const handleXmlSubmit = async () => {
     if (!parsedXml) return;
 
     const steps: OrderStep[] = xmlSelectedSteps.map(templateId => {
@@ -172,8 +177,13 @@ export default function CreateOrder() {
       articleRows: parsedXml.rows,
     };
 
-    const created = addOrder(newOrder);
-    navigate(`/order/${created.id}`);
+    try {
+      const created = await addOrder(newOrder);
+      navigate(`/order/${created.id}`);
+    } catch (error) {
+      console.error('Error creating order:', error);
+      setXmlError('Kunde inte skapa ordern. Försök igen.');
+    }
   };
 
   const toggleStep = (stepId: string, isXml: boolean) => {

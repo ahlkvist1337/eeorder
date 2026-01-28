@@ -59,43 +59,75 @@ export default function OrderDetails() {
     );
   }
 
-  const handleProductionStatusChange = (status: string) => {
-    updateProductionStatus(order.id, status as ProductionStatus);
+  const handleProductionStatusChange = async (status: string) => {
+    try {
+      await updateProductionStatus(order.id, status as ProductionStatus);
+    } catch (error) {
+      console.error('Error updating production status:', error);
+    }
   };
 
-  const handleBillingStatusChange = (status: string) => {
-    updateBillingStatus(order.id, status as BillingStatus);
+  const handleBillingStatusChange = async (status: string) => {
+    try {
+      await updateBillingStatus(order.id, status as BillingStatus);
+    } catch (error) {
+      console.error('Error updating billing status:', error);
+    }
   };
 
-  const handleStepStatusChange = (stepId: string, status: string) => {
-    updateOrderStep(order.id, stepId, { status: status as StepStatus });
+  const handleStepStatusChange = async (stepId: string, status: string) => {
+    try {
+      await updateOrderStep(order.id, stepId, { status: status as StepStatus });
+    } catch (error) {
+      console.error('Error updating step status:', error);
+    }
   };
 
-  const handleStepPriceChange = (stepId: string, price: string) => {
+  const handleStepPriceChange = async (stepId: string, price: string) => {
     const numericPrice = parseFloat(price) || 0;
-    updateOrderStep(order.id, stepId, { price: numericPrice });
+    try {
+      await updateOrderStep(order.id, stepId, { price: numericPrice });
+    } catch (error) {
+      console.error('Error updating step price:', error);
+    }
   };
 
-  const handleDeviationChange = (hasDeviation: boolean) => {
-    updateOrder(order.id, { hasDeviation });
+  const handleDeviationChange = async (hasDeviation: boolean) => {
+    try {
+      await updateOrder(order.id, { hasDeviation });
+    } catch (error) {
+      console.error('Error updating deviation:', error);
+    }
   };
 
-  const handleDeviationCommentChange = (comment: string) => {
-    updateOrder(order.id, { deviationComment: comment });
+  const handleDeviationCommentChange = async (comment: string) => {
+    try {
+      await updateOrder(order.id, { deviationComment: comment });
+    } catch (error) {
+      console.error('Error updating deviation comment:', error);
+    }
   };
 
-  const handleArticleRowsChange = (rows: import('@/types/order').ArticleRow[]) => {
+  const handleArticleRowsChange = async (rows: import('@/types/order').ArticleRow[]) => {
     const newTotal = rows.reduce((sum, row) => sum + row.price * row.quantity, 0);
-    updateOrder(order.id, { 
-      articleRows: rows,
-      totalPrice: newTotal
-    });
+    try {
+      await updateOrder(order.id, { 
+        articleRows: rows,
+        totalPrice: newTotal
+      });
+    } catch (error) {
+      console.error('Error updating article rows:', error);
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (confirm('Är du säker på att du vill ta bort denna order?')) {
-      deleteOrder(order.id);
-      navigate('/');
+      try {
+        await deleteOrder(order.id);
+        navigate('/');
+      } catch (error) {
+        console.error('Error deleting order:', error);
+      }
     }
   };
 
