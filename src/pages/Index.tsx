@@ -8,11 +8,13 @@ import { BulkEditToolbar } from '@/components/BulkEditToolbar';
 import { BulkEditConfirmDialog, type BulkEditType } from '@/components/BulkEditConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { useOrders } from '@/contexts/OrdersContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { ProductionStatus, BillingStatus } from '@/types/order';
 
 const Index = () => {
   const { orders, isLoading, bulkUpdateOrders } = useOrders();
+  const { canEdit } = useAuth();
   const [filters, setFilters] = useState<{
     productionStatus: ProductionStatus | 'all';
     billingStatus: BillingStatus | 'all';
@@ -98,27 +100,29 @@ const Index = () => {
               {orders.length} {orders.length === 1 ? 'order' : 'ordrar'} totalt
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button asChild variant="outline">
-              <Link to="/create?mode=xml">
-                <Upload className="h-4 w-4 mr-2" />
-                Importera XML
-              </Link>
-            </Button>
-            <Button asChild>
-              <Link to="/create">
-                <Plus className="h-4 w-4 mr-2" />
-                Ny order
-              </Link>
-            </Button>
-          </div>
+          {canEdit && (
+            <div className="flex gap-2">
+              <Button asChild variant="outline">
+                <Link to="/create?mode=xml">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Importera XML
+                </Link>
+              </Button>
+              <Button asChild>
+                <Link to="/create">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Ny order
+                </Link>
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Filters */}
         <OrderFilters filters={filters} onFiltersChange={setFilters} />
 
-        {/* Bulk edit toolbar */}
-        {selectedOrderIds.size > 0 && (
+        {/* Bulk edit toolbar - only for editors */}
+        {canEdit && selectedOrderIds.size > 0 && (
           <BulkEditToolbar
             selectedCount={selectedOrderIds.size}
             onProductionStatusChange={handleProductionStatusChange}
@@ -132,8 +136,8 @@ const Index = () => {
         <OrdersTable
           orders={orders}
           filters={filters}
-          selectedOrderIds={selectedOrderIds}
-          onSelectionChange={setSelectedOrderIds}
+          selectedOrderIds={canEdit ? selectedOrderIds : new Set()}
+          onSelectionChange={canEdit ? setSelectedOrderIds : () => {}}
         />
       </div>
 
