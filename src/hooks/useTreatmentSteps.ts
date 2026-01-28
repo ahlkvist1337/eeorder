@@ -1,59 +1,85 @@
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import type { TreatmentStepTemplate } from '@/types/order';
 
-const STEPS_STORAGE_KEY = 'order-management-treatment-steps';
-
-const DEFAULT_STEPS: TreatmentStepTemplate[] = [
-  { id: 'default-1', name: 'Blästring', createdAt: new Date().toISOString() },
-  { id: 'default-2', name: 'Sprutzink', createdAt: new Date().toISOString() },
-  { id: 'default-3', name: 'Målning', createdAt: new Date().toISOString() },
-];
+interface DbTreatmentStepTemplate {
+  id: string;
+  name: string;
+  created_at: string;
+}
 
 export function useTreatmentSteps() {
   const [steps, setSteps] = useState<TreatmentStepTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load steps from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem(STEPS_STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setSteps(parsed.length > 0 ? parsed : DEFAULT_STEPS);
-      } catch (e) {
-        console.error('Failed to parse treatment steps from localStorage', e);
-        setSteps(DEFAULT_STEPS);
-      }
-    } else {
-      setSteps(DEFAULT_STEPS);
+  const fetchSteps = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('treatment_step_templates')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const mappedSteps: TreatmentStepTemplate[] = (data || []).map((s: DbTreatmentStepTemplate) => ({
+        id: s.id,
+        name: s.name,
+        createdAt: s.created_at,
+      }));
+
+      setSteps(mappedSteps);
+    } catch (error) {
+      console.error('Error fetching treatment steps:', error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
-  // Save steps to localStorage whenever they change
   useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem(STEPS_STORAGE_KEY, JSON.stringify(steps));
-    }
-  }, [steps, isLoading]);
+    fetchSteps();
+  }, [fetchSteps]);
 
-  const addStep = useCallback((name: string) => {
+  const addStep = useCallback(async (name: string) => {
+    const { data, error } = await supabase
+      .from('treatment_step_templates')
+      .insert({ name: name.trim() })
+      .select()
+      .single();
+
+    if (error) throw error;
+
     const newStep: TreatmentStepTemplate = {
-      id: crypto.randomUUID(),
-      name: name.trim(),
-      createdAt: new Date().toISOString(),
+      id: data.id,
+      name: data.name,
+      createdAt: data.created_at,
     };
+
     setSteps(prev => [...prev, newStep]);
     return newStep;
   }, []);
 
-  const updateStep = useCallback((id: string, name: string) => {
+  const updateStep = useCallback(async (id: string, name: string) => {
+    const { error } = await supabase
+      .from('treatment_step_templates')
+      .update({ name: name.trim() })
+      .eq('id', id);
+
+    if (error) throw error;
+
     setSteps(prev => prev.map(step => 
       step.id === id ? { ...step, name: name.trim() } : step
     ));
   }, []);
 
-  const deleteStep = useCallback((id: string) => {
+  const deleteStep = useCallback(async (id: string) => {
+    const { error } = await supabase
+      .from('treatment_step_templates')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
     setSteps(prev => prev.filter(step => step.id !== id));
   }, []);
 
@@ -68,5 +94,6 @@ export function useTreatmentSteps() {
     updateStep,
     deleteStep,
     getStepById,
+    refreshSteps: fetchSteps,
   };
 }

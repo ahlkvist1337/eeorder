@@ -12,10 +12,14 @@ export default function TreatmentSteps() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
 
-  const handleAddStep = () => {
+  const handleAddStep = async () => {
     if (newStepName.trim()) {
-      addStep(newStepName.trim());
-      setNewStepName('');
+      try {
+        await addStep(newStepName.trim());
+        setNewStepName('');
+      } catch (error) {
+        console.error('Error adding step:', error);
+      }
     }
   };
 
@@ -35,9 +39,13 @@ export default function TreatmentSteps() {
     setEditingName('');
   };
 
-  const saveEditing = () => {
+  const saveEditing = async () => {
     if (editingId && editingName.trim()) {
-      updateStep(editingId, editingName.trim());
+      try {
+        await updateStep(editingId, editingName.trim());
+      } catch (error) {
+        console.error('Error updating step:', error);
+      }
     }
     cancelEditing();
   };
@@ -50,9 +58,13 @@ export default function TreatmentSteps() {
     }
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (confirm(`Vill du ta bort behandlingssteget "${name}"?`)) {
-      deleteStep(id);
+      try {
+        await deleteStep(id);
+      } catch (error) {
+        console.error('Error deleting step:', error);
+      }
     }
   };
 

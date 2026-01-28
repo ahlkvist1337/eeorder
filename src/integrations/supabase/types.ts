@@ -14,7 +14,210 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      article_rows: {
+        Row: {
+          id: string
+          order_id: string
+          part_number: string
+          price: number
+          quantity: number
+          row_number: string
+          step_id: string | null
+          text: string
+          unit: string
+        }
+        Insert: {
+          id?: string
+          order_id: string
+          part_number: string
+          price?: number
+          quantity?: number
+          row_number: string
+          step_id?: string | null
+          text: string
+          unit?: string
+        }
+        Update: {
+          id?: string
+          order_id?: string
+          part_number?: string
+          price?: number
+          quantity?: number
+          row_number?: string
+          step_id?: string | null
+          text?: string
+          unit?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_rows_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_steps: {
+        Row: {
+          actual_end: string | null
+          actual_start: string | null
+          id: string
+          name: string
+          order_id: string
+          planned_end: string | null
+          planned_start: string | null
+          price: number | null
+          status: Database["public"]["Enums"]["step_status"]
+          template_id: string
+        }
+        Insert: {
+          actual_end?: string | null
+          actual_start?: string | null
+          id?: string
+          name: string
+          order_id: string
+          planned_end?: string | null
+          planned_start?: string | null
+          price?: number | null
+          status?: Database["public"]["Enums"]["step_status"]
+          template_id: string
+        }
+        Update: {
+          actual_end?: string | null
+          actual_start?: string | null
+          id?: string
+          name?: string
+          order_id?: string
+          planned_end?: string | null
+          planned_start?: string | null
+          price?: number | null
+          status?: Database["public"]["Enums"]["step_status"]
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_steps_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          actual_end: string | null
+          actual_start: string | null
+          billing_status: Database["public"]["Enums"]["billing_status"]
+          comment: string | null
+          created_at: string
+          customer: string
+          customer_reference: string | null
+          delivery_address: string | null
+          deviation_comment: string | null
+          has_deviation: boolean
+          id: string
+          order_number: string
+          planned_end: string | null
+          planned_start: string | null
+          production_status: Database["public"]["Enums"]["production_status"]
+          total_price: number
+          updated_at: string
+          xml_data: Json | null
+        }
+        Insert: {
+          actual_end?: string | null
+          actual_start?: string | null
+          billing_status?: Database["public"]["Enums"]["billing_status"]
+          comment?: string | null
+          created_at?: string
+          customer: string
+          customer_reference?: string | null
+          delivery_address?: string | null
+          deviation_comment?: string | null
+          has_deviation?: boolean
+          id?: string
+          order_number: string
+          planned_end?: string | null
+          planned_start?: string | null
+          production_status?: Database["public"]["Enums"]["production_status"]
+          total_price?: number
+          updated_at?: string
+          xml_data?: Json | null
+        }
+        Update: {
+          actual_end?: string | null
+          actual_start?: string | null
+          billing_status?: Database["public"]["Enums"]["billing_status"]
+          comment?: string | null
+          created_at?: string
+          customer?: string
+          customer_reference?: string | null
+          delivery_address?: string | null
+          deviation_comment?: string | null
+          has_deviation?: boolean
+          id?: string
+          order_number?: string
+          planned_end?: string | null
+          planned_start?: string | null
+          production_status?: Database["public"]["Enums"]["production_status"]
+          total_price?: number
+          updated_at?: string
+          xml_data?: Json | null
+        }
+        Relationships: []
+      }
+      status_history: {
+        Row: {
+          from_status: Database["public"]["Enums"]["production_status"]
+          id: string
+          order_id: string
+          timestamp: string
+          to_status: Database["public"]["Enums"]["production_status"]
+        }
+        Insert: {
+          from_status: Database["public"]["Enums"]["production_status"]
+          id?: string
+          order_id: string
+          timestamp?: string
+          to_status: Database["public"]["Enums"]["production_status"]
+        }
+        Update: {
+          from_status?: Database["public"]["Enums"]["production_status"]
+          id?: string
+          order_id?: string
+          timestamp?: string
+          to_status?: Database["public"]["Enums"]["production_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "status_history_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      treatment_step_templates: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +226,16 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      billing_status: "not_ready" | "ready_for_billing" | "billed"
+      production_status:
+        | "created"
+        | "planned"
+        | "started"
+        | "paused"
+        | "arrived"
+        | "completed"
+        | "cancelled"
+      step_status: "pending" | "in_progress" | "completed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +362,18 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      billing_status: ["not_ready", "ready_for_billing", "billed"],
+      production_status: [
+        "created",
+        "planned",
+        "started",
+        "paused",
+        "arrived",
+        "completed",
+        "cancelled",
+      ],
+      step_status: ["pending", "in_progress", "completed"],
+    },
   },
 } as const
