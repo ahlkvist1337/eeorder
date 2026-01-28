@@ -60,9 +60,9 @@ export function OrderFilters({ filters, onFiltersChange, searchQuery, onSearchCh
     searchQuery.length > 0;
 
   return (
-    <div className="flex flex-wrap gap-3 items-center">
+    <div className="flex flex-wrap gap-3 items-center justify-between">
       {/* Search field */}
-      <div className="relative w-[320px]">
+      <div className="relative w-[360px]">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder="Sök på ordernummer, kund eller kommentar..."
@@ -79,6 +79,9 @@ export function OrderFilters({ filters, onFiltersChange, searchQuery, onSearchCh
           </button>
         )}
       </div>
+
+      {/* Filters - pushed to the right */}
+      <div className="flex flex-wrap gap-3 items-center">
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-muted-foreground">Produktionsstatus:</span>
         <Select value={filters.productionStatus} onValueChange={handleProductionStatusChange}>
@@ -131,6 +134,7 @@ export function OrderFilters({ filters, onFiltersChange, searchQuery, onSearchCh
           Rensa filter
         </Button>
       )}
+      </div>
     </div>
   );
 }
