@@ -80,6 +80,7 @@ export default function CreateOrder() {
       hasDeviation: false,
       totalPrice,
       articleRows: manualArticleRows.length > 0 ? manualArticleRows : undefined,
+      stepStatusHistory: [],
     };
 
     try {
@@ -175,6 +176,7 @@ export default function CreateOrder() {
         deliveryDate: parsedXml.deliveryDate,
       },
       articleRows: parsedXml.rows,
+      stepStatusHistory: [],
     };
 
     try {

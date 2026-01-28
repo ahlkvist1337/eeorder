@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow } from '@/types/order';
+import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus } from '@/types/order';
 
 // Database types (manual since types.ts may not be updated yet)
 interface DbOrder {
@@ -57,6 +57,16 @@ interface DbStatusHistory {
   timestamp: string;
 }
 
+interface DbStepStatusHistory {
+  id: string;
+  order_id: string;
+  step_id: string;
+  step_name: string;
+  from_status: StepStatus;
+  to_status: StepStatus;
+  timestamp: string;
+}
+
 interface BulkOrderUpdates {
   productionStatus?: ProductionStatus;
   billingStatus?: BillingStatus;
@@ -85,7 +95,8 @@ function mapDbOrderToOrder(
   dbOrder: DbOrder,
   steps: DbOrderStep[],
   articleRows: DbArticleRow[],
-  statusHistory: DbStatusHistory[]
+  statusHistory: DbStatusHistory[],
+  stepStatusHistory: DbStepStatusHistory[]
 ): Order {
   return {
     id: dbOrder.id,
@@ -133,6 +144,14 @@ function mapDbOrderToOrder(
       fromStatus: h.from_status,
       toStatus: h.to_status,
     })),
+    stepStatusHistory: stepStatusHistory.map(h => ({
+      id: h.id,
+      timestamp: h.timestamp,
+      stepId: h.step_id,
+      stepName: h.step_name,
+      fromStatus: h.from_status,
+      toStatus: h.to_status,
+    })),
   };
 }
 
@@ -159,22 +178,25 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       const orderIds = ordersData.map(o => o.id);
 
       // Fetch related data in parallel
-      const [stepsResult, articleRowsResult, historyResult] = await Promise.all([
+      const [stepsResult, articleRowsResult, historyResult, stepHistoryResult] = await Promise.all([
         supabase.from('order_steps').select('*').in('order_id', orderIds),
         supabase.from('article_rows').select('*').in('order_id', orderIds),
         supabase.from('status_history').select('*').in('order_id', orderIds),
+        supabase.from('step_status_history').select('*').in('order_id', orderIds),
       ]);
 
       if (stepsResult.error) throw stepsResult.error;
       if (articleRowsResult.error) throw articleRowsResult.error;
       if (historyResult.error) throw historyResult.error;
+      if (stepHistoryResult.error) throw stepHistoryResult.error;
 
       const mappedOrders = ordersData.map(dbOrder => 
         mapDbOrderToOrder(
           dbOrder as DbOrder,
           (stepsResult.data || []).filter(s => s.order_id === dbOrder.id) as DbOrderStep[],
           (articleRowsResult.data || []).filter(r => r.order_id === dbOrder.id) as DbArticleRow[],
-          (historyResult.data || []).filter(h => h.order_id === dbOrder.id) as DbStatusHistory[]
+          (historyResult.data || []).filter(h => h.order_id === dbOrder.id) as DbStatusHistory[],
+          (stepHistoryResult.data || []).filter(h => h.order_id === dbOrder.id) as DbStepStatusHistory[]
         )
       );
 
@@ -295,6 +317,31 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
     // Update steps if provided
     if (updates.steps !== undefined) {
+      const currentOrder = orders.find(o => o.id === id);
+      
+      // Log step status changes
+      if (currentOrder) {
+        const stepHistoryEntries = updates.steps
+          .map(newStep => {
+            const oldStep = currentOrder.steps.find(s => s.id === newStep.id);
+            if (oldStep && oldStep.status !== newStep.status) {
+              return {
+                order_id: id,
+                step_id: newStep.id,
+                step_name: newStep.name,
+                from_status: oldStep.status,
+                to_status: newStep.status,
+              };
+            }
+            return null;
+          })
+          .filter(Boolean);
+
+        if (stepHistoryEntries.length > 0) {
+          await supabase.from('step_status_history').insert(stepHistoryEntries);
+        }
+      }
+
       // Delete existing steps and insert new ones
       await supabase.from('order_steps').delete().eq('order_id', id);
       if (updates.steps.length > 0) {
@@ -371,6 +418,20 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   }, [fetchOrders]);
 
   const updateOrderStep = useCallback(async (orderId: string, stepId: string, updates: Partial<OrderStep>) => {
+    // Check if status is being changed and log it
+    const order = orders.find(o => o.id === orderId);
+    const currentStep = order?.steps.find(s => s.id === stepId);
+    
+    if (updates.status !== undefined && currentStep && currentStep.status !== updates.status) {
+      await supabase.from('step_status_history').insert({
+        order_id: orderId,
+        step_id: stepId,
+        step_name: currentStep.name,
+        from_status: currentStep.status,
+        to_status: updates.status,
+      });
+    }
+
     const dbUpdates: Record<string, unknown> = {};
     
     if (updates.name !== undefined) dbUpdates.name = updates.name;
@@ -390,7 +451,6 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     }
 
     // Update total price on the order
-    const order = orders.find(o => o.id === orderId);
     if (order) {
       const newTotalPrice = order.steps.reduce((sum, step) => {
         if (step.id === stepId) {

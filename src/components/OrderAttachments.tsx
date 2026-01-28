@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Upload, X, FileIcon, Download, Loader2 } from 'lucide-react';
+import { Upload, X, FileIcon, Download, Loader2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
@@ -155,6 +155,7 @@ export function OrderAttachments({ orderId, attachments, onAttachmentsChange }: 
   };
 
   const isImage = (mimeType: string) => mimeType.startsWith('image/');
+  const isPdf = (mimeType: string) => mimeType === 'application/pdf';
 
   return (
     <Card>
@@ -217,6 +218,16 @@ export function OrderAttachments({ orderId, attachments, onAttachmentsChange }: 
                     alt={attachment.file_name}
                     className="h-12 w-12 object-cover rounded"
                   />
+                ) : isPdf(attachment.mime_type) ? (
+                  <a
+                    href={getDownloadUrl(attachment.file_path)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-12 w-12 flex flex-col items-center justify-center bg-destructive/10 rounded hover:bg-destructive/20 transition-colors"
+                  >
+                    <FileText className="h-6 w-6 text-destructive" />
+                    <span className="text-[9px] text-destructive font-medium">PDF</span>
+                  </a>
                 ) : (
                   <div className="h-12 w-12 flex items-center justify-center bg-muted rounded">
                     <FileIcon className="h-6 w-6 text-muted-foreground" />

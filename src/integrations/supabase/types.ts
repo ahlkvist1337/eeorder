@@ -238,6 +238,44 @@ export type Database = {
           },
         ]
       }
+      step_status_history: {
+        Row: {
+          from_status: Database["public"]["Enums"]["step_status"]
+          id: string
+          order_id: string
+          step_id: string
+          step_name: string
+          timestamp: string
+          to_status: Database["public"]["Enums"]["step_status"]
+        }
+        Insert: {
+          from_status: Database["public"]["Enums"]["step_status"]
+          id?: string
+          order_id: string
+          step_id: string
+          step_name: string
+          timestamp?: string
+          to_status: Database["public"]["Enums"]["step_status"]
+        }
+        Update: {
+          from_status?: Database["public"]["Enums"]["step_status"]
+          id?: string
+          order_id?: string
+          step_id?: string
+          step_name?: string
+          timestamp?: string
+          to_status?: Database["public"]["Enums"]["step_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "step_status_history_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       treatment_step_templates: {
         Row: {
           created_at: string
