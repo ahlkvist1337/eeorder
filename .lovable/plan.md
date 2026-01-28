@@ -1,64 +1,76 @@
 
 
-# Plan: Fixa orderhämtning efter inloggning
+# Plan: Automatisk ändring till "Startad" vid stegpåbörjande
 
-## Problem
+## Bakgrund
 
-OrdersContext hämtar ordrar vid mount, men vid den tidpunkten är användaren inte ännu autentiserad. När RLS är aktiverat returneras inga ordrar till oautentiserade användare. Efter inloggning uppdateras inte OrdersContext automatiskt.
+Användaren vill att orderstatusen automatiskt ändras till "Startad" när ett behandlingssteg påbörjas (ändras till "in_progress").
 
-## Lösning
+## Analys
 
-Uppdatera OrdersContext att lyssna på autentiseringsstatus och hämta ordrar endast när en autentiserad användare finns.
+Funktionen `updateOrderStep` i `src/contexts/OrdersContext.tsx` hanterar redan uppdateringar av steg och loggar statusändringar. Det är den naturliga platsen att lägga till denna automatik.
+
+## Logik som ska implementeras
+
+När ett steg ändras till `in_progress`:
+1. Kontrollera om ordern INTE redan är i status `started`
+2. Om orderstatus är `created`, `planned`, eller `arrived` - ändra till `started`
+3. Logga statusändringen i `status_history` för att upprätthålla spårbarhet
+4. Undvik att ändra status om ordern redan är `started`, `paused`, `completed`, eller `cancelled`
 
 ## Teknisk implementation
 
 ### Uppdatera `src/contexts/OrdersContext.tsx`
 
-1. Importera `useAuth` från AuthContext
-2. Lägg till beroende på `user` från auth
-3. Hämta ordrar endast när användare är inloggad
-4. Rensa ordrar när användare loggar ut
+I funktionen `updateOrderStep`, efter att ha loggat stegstatusen, lägg till:
 
 ```typescript
-// Lägg till import
-import { useAuth } from '@/contexts/AuthContext';
-
-// I OrdersProvider-komponenten
-export function OrdersProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // ... fetchOrders förblir oförändrad ...
-
-  useEffect(() => {
-    if (user) {
-      // Användare inloggad - hämta ordrar
-      fetchOrders();
-    } else {
-      // Ingen användare - rensa ordrar
-      setOrders([]);
-      setIsLoading(false);
-    }
-  }, [user, fetchOrders]);
+const updateOrderStep = useCallback(async (orderId: string, stepId: string, updates: Partial<OrderStep>) => {
+  const order = orders.find(o => o.id === orderId);
+  const currentStep = order?.steps.find(s => s.id === stepId);
   
-  // ... resten av koden ...
-}
+  // ... befintlig kod för att logga steghistorik ...
+
+  // NY LOGIK: Om ett steg påbörjas, sätt orderstatusen till "started"
+  if (updates.status === 'in_progress' && order) {
+    const statusesThatShouldChangeToStarted: ProductionStatus[] = ['created', 'planned', 'arrived'];
+    
+    if (statusesThatShouldChangeToStarted.includes(order.productionStatus)) {
+      // Logga statusändring
+      await supabase.from('status_history').insert({
+        order_id: orderId,
+        from_status: order.productionStatus,
+        to_status: 'started',
+      });
+      
+      // Uppdatera orderstatus
+      await supabase
+        .from('orders')
+        .update({ production_status: 'started' })
+        .eq('id', orderId);
+    }
+  }
+
+  // ... resten av befintlig kod ...
+}, [orders, fetchOrders]);
 ```
 
 ## Varför detta fungerar
 
-- OrdersContext reagerar nu på förändringar i autentiseringsstatus
-- När användaren loggar in triggas `fetchOrders()` automatiskt
-- RLS tillåter nu hämtningen eftersom användaren är autentiserad
-- Vid utloggning rensas orderdata för säkerhets skull
+- Stegstatusen `in_progress` indikerar att arbete har påbörjats
+- Endast relevanta orderstatusar (`created`, `planned`, `arrived`) ändras
+- Om ordern redan är `started`, `paused`, `completed` eller `cancelled` sker ingen ändring
+- Statushistorik loggas korrekt för spårbarhet
 
-## Bonus: Tilldela admin-roll
+## Statusar som påverkas
 
-Jag behöver också köra INSERT för att ge order.ee@outlook.com admin-rättigheter:
-
-```sql
-INSERT INTO public.user_roles (user_id, role)
-VALUES ('724860f9-c850-44f9-9dfd-6de1f58a8820', 'admin');
-```
+| Nuvarande orderstatus | Steg blir `in_progress` | Ny orderstatus |
+|-----------------------|-------------------------|----------------|
+| Skapad (created)      | Ja                      | Startad        |
+| Planerad (planned)    | Ja                      | Startad        |
+| Ankommen (arrived)    | Ja                      | Startad        |
+| Startad (started)     | Ja                      | Oförändrad     |
+| Pausad (paused)       | Ja                      | Oförändrad     |
+| Avslutad (completed)  | Ja                      | Oförändrad     |
+| Avbruten (cancelled)  | Ja                      | Oförändrad     |
 
