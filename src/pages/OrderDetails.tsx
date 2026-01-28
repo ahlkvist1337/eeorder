@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { ArrowLeft, AlertTriangle, Clock, DollarSign } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Clock, DollarSign, Package } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -225,6 +225,46 @@ export default function OrderDetails() {
                 )}
               </CardContent>
             </Card>
+
+            {/* XML Article rows */}
+            {order.xmlData?.rows && order.xmlData.rows.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Package className="h-5 w-5" />
+                    Artikelrader (från XML)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Rad</th>
+                          <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Artikelnr</th>
+                          <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Beskrivning</th>
+                          <th className="text-right py-2 pr-4 font-medium text-muted-foreground">Antal</th>
+                          <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Enhet</th>
+                          <th className="text-right py-2 font-medium text-muted-foreground">Pris</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {order.xmlData.rows.map((row, index) => (
+                          <tr key={index} className="border-b last:border-0">
+                            <td className="py-2 pr-4 font-mono">{row.rowNumber}</td>
+                            <td className="py-2 pr-4 font-mono">{row.partNumber}</td>
+                            <td className="py-2 pr-4">{row.text}</td>
+                            <td className="py-2 pr-4 text-right">{row.quantity}</td>
+                            <td className="py-2 pr-4">{row.unit}</td>
+                            <td className="py-2 text-right">{row.price.toLocaleString('sv-SE')} kr</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Status history */}
             <Card>
