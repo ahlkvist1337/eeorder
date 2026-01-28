@@ -78,7 +78,7 @@ interface OrdersContextType {
   orders: Order[];
   isLoading: boolean;
   addOrder: (order: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>) => Promise<Order>;
-  updateOrder: (id: string, updates: Partial<Order>) => Promise<void>;
+  updateOrder: (id: string, updates: Partial<Order>, previousSteps?: OrderStep[]) => Promise<void>;
   updateProductionStatus: (id: string, newStatus: ProductionStatus) => Promise<void>;
   updateBillingStatus: (id: string, newStatus: BillingStatus) => Promise<void>;
   updateOrderStep: (orderId: string, stepId: string, updates: Partial<OrderStep>) => Promise<void>;
@@ -295,7 +295,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     return newOrder;
   }, [fetchOrders, orders]);
 
-  const updateOrder = useCallback(async (id: string, updates: Partial<Order>) => {
+  const updateOrder = useCallback(async (id: string, updates: Partial<Order>, previousSteps?: OrderStep[]) => {
     const dbUpdates: Record<string, unknown> = {};
     
     if (updates.orderNumber !== undefined) dbUpdates.order_number = updates.orderNumber;
@@ -327,9 +327,12 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       const currentOrder = orders.find(o => o.id === id);
       
       if (currentOrder) {
+        // Use previousSteps if provided, otherwise fallback to currentOrder.steps
+        const oldSteps = previousSteps || currentOrder.steps;
+        
         // Check if any step is being changed to 'in_progress'
         const hasNewInProgress = updates.steps.some(newStep => {
-          const oldStep = currentOrder.steps.find(s => s.id === newStep.id);
+          const oldStep = oldSteps.find(s => s.id === newStep.id);
           return oldStep && oldStep.status !== 'in_progress' && newStep.status === 'in_progress';
         });
 
@@ -355,7 +358,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         // Log step status changes
         const stepHistoryEntries = updates.steps
           .map(newStep => {
-            const oldStep = currentOrder.steps.find(s => s.id === newStep.id);
+            const oldStep = oldSteps.find(s => s.id === newStep.id);
             if (oldStep && oldStep.status !== newStep.status) {
               return {
                 order_id: id,
@@ -418,7 +421,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     }
 
     await fetchOrders();
-  }, [fetchOrders]);
+  }, [fetchOrders, orders]);
 
   const updateProductionStatus = useCallback(async (id: string, newStatus: ProductionStatus) => {
     const order = orders.find(o => o.id === id);

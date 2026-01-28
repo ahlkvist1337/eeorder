@@ -30,7 +30,7 @@ export default function ProductionScreen() {
       {/* Header */}
       <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
         <div className="flex items-center gap-4">
-          <img src={eeLogo} alt="EE Logo" className="h-12 w-auto" />
+          <img src={eeLogo} alt="EE Logo" className="h-20 w-auto" />
           <h1 className="text-3xl lg:text-4xl font-bold text-foreground">
             Produktionsvy
           </h1>
