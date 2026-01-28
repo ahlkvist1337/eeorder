@@ -44,6 +44,15 @@ export interface StatusChange {
   toStatus: ProductionStatus;
 }
 
+export interface StepStatusChange {
+  id: string;
+  timestamp: string;
+  stepId: string;
+  stepName: string;
+  fromStatus: StepStatus;
+  toStatus: StepStatus;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -58,6 +67,7 @@ export interface Order {
   actualEnd?: string;
   steps: OrderStep[];
   statusHistory: StatusChange[];
+  stepStatusHistory: StepStatusChange[];
   hasDeviation: boolean;
   deviationComment?: string;
   comment?: string;

@@ -21,8 +21,9 @@ import { OrderStepsEditor } from '@/components/OrderStepsEditor';
 import { OrderAttachments } from '@/components/OrderAttachments';
 import { useOrders } from '@/hooks/useOrders';
 import { useOrderAttachments } from '@/hooks/useOrderAttachments';
-import { productionStatusLabels, billingStatusLabels } from '@/types/order';
+import { productionStatusLabels, billingStatusLabels, stepStatusLabels } from '@/types/order';
 import type { ProductionStatus, BillingStatus, OrderStep } from '@/types/order';
+import { StepStatusBadge } from '@/components/StatusBadge';
 
 export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
@@ -241,22 +242,48 @@ export default function OrderDetails() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {order.statusHistory.length === 0 ? (
-                  <p className="text-muted-foreground">Ingen statushistorik ännu.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {[...order.statusHistory].reverse().map(change => (
-                      <div key={change.id} className="flex items-center gap-3 text-sm">
-                        <span className="text-muted-foreground min-w-[140px]">
-                          {format(new Date(change.timestamp), 'd MMM yyyy HH:mm', { locale: sv })}
-                        </span>
-                        <ProductionStatusBadge status={change.fromStatus} className="text-xs" />
-                        <span className="text-muted-foreground">→</span>
-                        <ProductionStatusBadge status={change.toStatus} className="text-xs" />
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Order status history - left column */}
+                  <div>
+                    <h4 className="font-medium text-sm text-muted-foreground mb-3">Orderstatus</h4>
+                    {order.statusHistory.length === 0 ? (
+                      <p className="text-muted-foreground text-sm">Ingen historik ännu.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {[...order.statusHistory].reverse().map(change => (
+                          <div key={change.id} className="flex items-center gap-2 text-sm">
+                            <span className="text-muted-foreground text-xs min-w-[100px]">
+                              {format(new Date(change.timestamp), 'd MMM HH:mm', { locale: sv })}
+                            </span>
+                            <ProductionStatusBadge status={change.fromStatus} className="text-xs" />
+                            <span className="text-muted-foreground">→</span>
+                            <ProductionStatusBadge status={change.toStatus} className="text-xs" />
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
+
+                  {/* Step status history - right column */}
+                  <div>
+                    <h4 className="font-medium text-sm text-muted-foreground mb-3">Steghistorik</h4>
+                    {order.stepStatusHistory.length === 0 ? (
+                      <p className="text-muted-foreground text-sm">Ingen historik ännu.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {[...order.stepStatusHistory].reverse().map(change => (
+                          <div key={change.id} className="flex items-center gap-2 text-sm">
+                            <span className="text-muted-foreground text-xs min-w-[100px]">
+                              {format(new Date(change.timestamp), 'd MMM HH:mm', { locale: sv })}
+                            </span>
+                            <span className="font-medium text-xs">{change.stepName}:</span>
+                            <StepStatusBadge status={change.toStatus} className="text-xs" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
