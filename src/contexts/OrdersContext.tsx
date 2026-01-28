@@ -392,6 +392,9 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     const order = orders.find(o => o.id === id);
     if (!order) return;
 
+    // Skip if status is the same (no actual change)
+    if (order.productionStatus === newStatus) return;
+
     // Insert status history
     await supabase.from('status_history').insert({
       order_id: id,
@@ -503,6 +506,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         .map(orderId => {
           const order = orders.find(o => o.id === orderId);
           if (!order) return null;
+          // Skip if status is the same (no actual change)
+          if (order.productionStatus === updates.productionStatus) return null;
           return {
             order_id: orderId,
             from_status: order.productionStatus,
