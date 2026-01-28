@@ -13,7 +13,8 @@ import { useOrders } from '@/hooks/useOrders';
 import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
 import { parseMonitorXML } from '@/lib/xmlParser';
 import { Upload, FileText, AlertCircle, CheckCircle2 } from 'lucide-react';
-import type { Order, OrderStep, ParsedXMLOrder } from '@/types/order';
+import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
+import type { Order, OrderStep, ParsedXMLOrder, ArticleRow } from '@/types/order';
 
 export default function CreateOrder() {
   const navigate = useNavigate();
@@ -31,6 +32,7 @@ export default function CreateOrder() {
   const [plannedEnd, setPlannedEnd] = useState('');
   const [comment, setComment] = useState('');
   const [selectedSteps, setSelectedSteps] = useState<string[]>([]);
+  const [manualArticleRows, setManualArticleRows] = useState<ArticleRow[]>([]);
   const [manualError, setManualError] = useState<string | null>(null);
 
   // XML import state
@@ -63,6 +65,8 @@ export default function CreateOrder() {
       };
     });
 
+    const totalPrice = manualArticleRows.reduce((sum, row) => sum + row.price * row.quantity, 0);
+
     const newOrder: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'> = {
       orderNumber: orderNumber.trim(),
       customer: customer.trim(),
@@ -74,7 +78,8 @@ export default function CreateOrder() {
       comment: comment.trim() || undefined,
       steps,
       hasDeviation: false,
-      totalPrice: 0,
+      totalPrice,
+      articleRows: manualArticleRows.length > 0 ? manualArticleRows : undefined,
     };
 
     const created = addOrder(newOrder);
@@ -158,13 +163,13 @@ export default function CreateOrder() {
       plannedEnd: parsedXml.deliveryDate || undefined,
       steps,
       hasDeviation: false,
-      totalPrice: 0,
+      totalPrice: parsedXml.rows.reduce((sum, row) => sum + row.price * row.quantity, 0),
       xmlData: {
         supplier: parsedXml.supplier,
         orderDate: parsedXml.orderDate,
         deliveryDate: parsedXml.deliveryDate,
-        rows: parsedXml.rows,
       },
+      articleRows: parsedXml.rows,
     };
 
     const created = addOrder(newOrder);
@@ -288,6 +293,17 @@ export default function CreateOrder() {
                         Inga behandlingssteg finns. Skapa steg under "Behandlingssteg".
                       </p>
                     )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Artikelrader</Label>
+                    <div className="border rounded-md p-4">
+                      <ArticleRowsEditor
+                        rows={manualArticleRows}
+                        onRowsChange={setManualArticleRows}
+                        showTotal={true}
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-2">

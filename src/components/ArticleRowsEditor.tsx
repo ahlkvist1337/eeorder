@@ -1,0 +1,370 @@
+import { useState } from 'react';
+import { Plus, Trash2, Edit2, Check, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import type { ArticleRow, OrderStep } from '@/types/order';
+
+interface ArticleRowsEditorProps {
+  rows: ArticleRow[];
+  steps?: OrderStep[];
+  onRowsChange: (rows: ArticleRow[]) => void;
+  showTotal?: boolean;
+  readOnly?: boolean;
+}
+
+export function ArticleRowsEditor({ 
+  rows, 
+  steps = [], 
+  onRowsChange, 
+  showTotal = true,
+  readOnly = false 
+}: ArticleRowsEditorProps) {
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Partial<ArticleRow>>({});
+  const [isAdding, setIsAdding] = useState(false);
+  const [newRow, setNewRow] = useState<Partial<ArticleRow>>({
+    rowNumber: '',
+    partNumber: '',
+    text: '',
+    quantity: 1,
+    unit: 'st.',
+    price: 0,
+  });
+
+  const handleAddRow = () => {
+    if (!newRow.text?.trim()) return;
+    
+    const row: ArticleRow = {
+      id: crypto.randomUUID(),
+      rowNumber: newRow.rowNumber || String(rows.length + 1),
+      partNumber: newRow.partNumber || '',
+      text: newRow.text || '',
+      quantity: newRow.quantity || 1,
+      unit: newRow.unit || 'st.',
+      price: newRow.price || 0,
+      stepId: newRow.stepId,
+    };
+    
+    onRowsChange([...rows, row]);
+    setNewRow({
+      rowNumber: '',
+      partNumber: '',
+      text: '',
+      quantity: 1,
+      unit: 'st.',
+      price: 0,
+    });
+    setIsAdding(false);
+  };
+
+  const handleDeleteRow = (rowId: string) => {
+    onRowsChange(rows.filter(r => r.id !== rowId));
+  };
+
+  const handleStartEdit = (row: ArticleRow) => {
+    setEditingRowId(row.id);
+    setEditForm({ ...row });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingRowId) return;
+    onRowsChange(rows.map(r => 
+      r.id === editingRowId ? { ...r, ...editForm } as ArticleRow : r
+    ));
+    setEditingRowId(null);
+    setEditForm({});
+  };
+
+  const handleCancelEdit = () => {
+    setEditingRowId(null);
+    setEditForm({});
+  };
+
+  const handleStepChange = (rowId: string, stepId: string) => {
+    onRowsChange(rows.map(r => 
+      r.id === rowId ? { ...r, stepId: stepId === 'none' ? undefined : stepId } : r
+    ));
+  };
+
+  const total = rows.reduce((sum, row) => sum + (row.price * row.quantity), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left py-2 pr-2 font-medium text-muted-foreground w-16">Rad</th>
+              <th className="text-left py-2 pr-2 font-medium text-muted-foreground w-24">Artikelnr</th>
+              <th className="text-left py-2 pr-2 font-medium text-muted-foreground">Beskrivning</th>
+              <th className="text-right py-2 pr-2 font-medium text-muted-foreground w-16">Antal</th>
+              <th className="text-left py-2 pr-2 font-medium text-muted-foreground w-16">Enhet</th>
+              <th className="text-right py-2 pr-2 font-medium text-muted-foreground w-24">Pris</th>
+              <th className="text-right py-2 pr-2 font-medium text-muted-foreground w-24">Summa</th>
+              {steps.length > 0 && (
+                <th className="text-left py-2 pr-2 font-medium text-muted-foreground w-32">Steg</th>
+              )}
+              {!readOnly && <th className="w-20"></th>}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} className="border-b last:border-0 group">
+                {editingRowId === row.id ? (
+                  <>
+                    <td className="py-2 pr-2">
+                      <Input
+                        value={editForm.rowNumber || ''}
+                        onChange={(e) => setEditForm({ ...editForm, rowNumber: e.target.value })}
+                        className="h-8 w-full"
+                      />
+                    </td>
+                    <td className="py-2 pr-2">
+                      <Input
+                        value={editForm.partNumber || ''}
+                        onChange={(e) => setEditForm({ ...editForm, partNumber: e.target.value })}
+                        className="h-8 w-full"
+                      />
+                    </td>
+                    <td className="py-2 pr-2">
+                      <Input
+                        value={editForm.text || ''}
+                        onChange={(e) => setEditForm({ ...editForm, text: e.target.value })}
+                        className="h-8 w-full"
+                      />
+                    </td>
+                    <td className="py-2 pr-2">
+                      <Input
+                        type="number"
+                        value={editForm.quantity || ''}
+                        onChange={(e) => setEditForm({ ...editForm, quantity: parseFloat(e.target.value) || 0 })}
+                        className="h-8 w-full text-right"
+                      />
+                    </td>
+                    <td className="py-2 pr-2">
+                      <Input
+                        value={editForm.unit || ''}
+                        onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
+                        className="h-8 w-full"
+                      />
+                    </td>
+                    <td className="py-2 pr-2">
+                      <Input
+                        type="number"
+                        value={editForm.price || ''}
+                        onChange={(e) => setEditForm({ ...editForm, price: parseFloat(e.target.value) || 0 })}
+                        className="h-8 w-full text-right"
+                      />
+                    </td>
+                    <td className="py-2 pr-2 text-right font-medium">
+                      {((editForm.price || 0) * (editForm.quantity || 0)).toLocaleString('sv-SE')} kr
+                    </td>
+                    {steps.length > 0 && (
+                      <td className="py-2 pr-2">
+                        <Select 
+                          value={editForm.stepId || 'none'} 
+                          onValueChange={(v) => setEditForm({ ...editForm, stepId: v === 'none' ? undefined : v })}
+                        >
+                          <SelectTrigger className="h-8 w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Ingen</SelectItem>
+                            {steps.map(step => (
+                              <SelectItem key={step.id} value={step.id}>{step.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                    )}
+                    <td className="py-2">
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSaveEdit}>
+                          <Check className="h-4 w-4 text-primary" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCancelEdit}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="py-2 pr-2 font-mono">{row.rowNumber}</td>
+                    <td className="py-2 pr-2 font-mono">{row.partNumber}</td>
+                    <td className="py-2 pr-2">{row.text}</td>
+                    <td className="py-2 pr-2 text-right">{row.quantity}</td>
+                    <td className="py-2 pr-2">{row.unit}</td>
+                    <td className="py-2 pr-2 text-right">{row.price.toLocaleString('sv-SE')} kr</td>
+                    <td className="py-2 pr-2 text-right font-medium">
+                      {(row.price * row.quantity).toLocaleString('sv-SE')} kr
+                    </td>
+                    {steps.length > 0 && (
+                      <td className="py-2 pr-2">
+                        {!readOnly ? (
+                          <Select 
+                            value={row.stepId || 'none'} 
+                            onValueChange={(v) => handleStepChange(row.id, v)}
+                          >
+                            <SelectTrigger className="h-8 w-full">
+                              <SelectValue placeholder="Välj steg" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Ingen</SelectItem>
+                              {steps.map(step => (
+                                <SelectItem key={step.id} value={step.id}>{step.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            {steps.find(s => s.id === row.stepId)?.name || '-'}
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {!readOnly && (
+                      <td className="py-2">
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8"
+                            onClick={() => handleStartEdit(row)}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => handleDeleteRow(row.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    )}
+                  </>
+                )}
+              </tr>
+            ))}
+            
+            {/* Add new row form */}
+            {isAdding && (
+              <tr className="border-b bg-muted/30">
+                <td className="py-2 pr-2">
+                  <Input
+                    value={newRow.rowNumber || ''}
+                    onChange={(e) => setNewRow({ ...newRow, rowNumber: e.target.value })}
+                    placeholder={String(rows.length + 1)}
+                    className="h-8 w-full"
+                  />
+                </td>
+                <td className="py-2 pr-2">
+                  <Input
+                    value={newRow.partNumber || ''}
+                    onChange={(e) => setNewRow({ ...newRow, partNumber: e.target.value })}
+                    placeholder="Artikelnr"
+                    className="h-8 w-full"
+                  />
+                </td>
+                <td className="py-2 pr-2">
+                  <Input
+                    value={newRow.text || ''}
+                    onChange={(e) => setNewRow({ ...newRow, text: e.target.value })}
+                    placeholder="Beskrivning"
+                    className="h-8 w-full"
+                  />
+                </td>
+                <td className="py-2 pr-2">
+                  <Input
+                    type="number"
+                    value={newRow.quantity || ''}
+                    onChange={(e) => setNewRow({ ...newRow, quantity: parseFloat(e.target.value) || 0 })}
+                    className="h-8 w-full text-right"
+                  />
+                </td>
+                <td className="py-2 pr-2">
+                  <Input
+                    value={newRow.unit || ''}
+                    onChange={(e) => setNewRow({ ...newRow, unit: e.target.value })}
+                    className="h-8 w-full"
+                  />
+                </td>
+                <td className="py-2 pr-2">
+                  <Input
+                    type="number"
+                    value={newRow.price || ''}
+                    onChange={(e) => setNewRow({ ...newRow, price: parseFloat(e.target.value) || 0 })}
+                    className="h-8 w-full text-right"
+                  />
+                </td>
+                <td className="py-2 pr-2 text-right font-medium">
+                  {((newRow.price || 0) * (newRow.quantity || 0)).toLocaleString('sv-SE')} kr
+                </td>
+                {steps.length > 0 && (
+                  <td className="py-2 pr-2">
+                    <Select 
+                      value={newRow.stepId || 'none'} 
+                      onValueChange={(v) => setNewRow({ ...newRow, stepId: v === 'none' ? undefined : v })}
+                    >
+                      <SelectTrigger className="h-8 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Ingen</SelectItem>
+                        {steps.map(step => (
+                          <SelectItem key={step.id} value={step.id}>{step.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                )}
+                <td className="py-2">
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleAddRow}>
+                      <Check className="h-4 w-4 text-primary" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsAdding(false)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {!readOnly && !isAdding && (
+        <Button variant="outline" size="sm" onClick={() => setIsAdding(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Lägg till artikelrad
+        </Button>
+      )}
+
+      {showTotal && rows.length > 0 && (
+        <>
+          <Separator />
+          <div className="flex justify-end items-center gap-2">
+            <span className="font-medium">Totalt:</span>
+            <span className="text-lg font-bold">
+              {total.toLocaleString('sv-SE')} kr
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

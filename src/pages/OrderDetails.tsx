@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { ProductionStatusBadge, BillingStatusBadge, StepStatusBadge } from '@/components/StatusBadge';
+import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
 import { useOrders } from '@/hooks/useOrders';
 import { productionStatusLabels, billingStatusLabels, stepStatusLabels } from '@/types/order';
 import type { ProductionStatus, BillingStatus, StepStatus } from '@/types/order';
@@ -81,6 +82,14 @@ export default function OrderDetails() {
 
   const handleDeviationCommentChange = (comment: string) => {
     updateOrder(order.id, { deviationComment: comment });
+  };
+
+  const handleArticleRowsChange = (rows: import('@/types/order').ArticleRow[]) => {
+    const newTotal = rows.reduce((sum, row) => sum + row.price * row.quantity, 0);
+    updateOrder(order.id, { 
+      articleRows: rows,
+      totalPrice: newTotal
+    });
   };
 
   const handleDelete = () => {
@@ -214,57 +223,28 @@ export default function OrderDetails() {
                         </div>
                       </div>
                     ))}
-                    <Separator className="my-4" />
-                    <div className="flex justify-end items-center gap-2">
-                      <span className="font-medium">Totalt:</span>
-                      <span className="text-lg font-bold">
-                        {order.totalPrice.toLocaleString('sv-SE')} kr
-                      </span>
-                    </div>
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            {/* XML Article rows */}
-            {order.xmlData?.rows && order.xmlData.rows.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Package className="h-5 w-5" />
-                    Artikelrader (från XML)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Rad</th>
-                          <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Artikelnr</th>
-                          <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Beskrivning</th>
-                          <th className="text-right py-2 pr-4 font-medium text-muted-foreground">Antal</th>
-                          <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Enhet</th>
-                          <th className="text-right py-2 font-medium text-muted-foreground">Pris</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {order.xmlData.rows.map((row, index) => (
-                          <tr key={index} className="border-b last:border-0">
-                            <td className="py-2 pr-4 font-mono">{row.rowNumber}</td>
-                            <td className="py-2 pr-4 font-mono">{row.partNumber}</td>
-                            <td className="py-2 pr-4">{row.text}</td>
-                            <td className="py-2 pr-4 text-right">{row.quantity}</td>
-                            <td className="py-2 pr-4">{row.unit}</td>
-                            <td className="py-2 text-right">{row.price.toLocaleString('sv-SE')} kr</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {/* Article rows */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Package className="h-5 w-5" />
+                  Artikelrader
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ArticleRowsEditor
+                  rows={order.articleRows || []}
+                  steps={order.steps}
+                  onRowsChange={handleArticleRowsChange}
+                  showTotal={true}
+                />
+              </CardContent>
+            </Card>
 
             {/* Status history */}
             <Card>
