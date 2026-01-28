@@ -10,6 +10,7 @@ import CreateOrder from "./pages/CreateOrder";
 import OrderDetails from "./pages/OrderDetails";
 import TreatmentSteps from "./pages/TreatmentSteps";
 import Statistics from "./pages/Statistics";
+import ProductionScreen from "./pages/ProductionScreen";
 import NotFound from "./pages/NotFound";
 
 const App = () => {
@@ -28,6 +29,7 @@ const App = () => {
               <Route path="/order/:id" element={<OrderDetails />} />
               <Route path="/steps" element={<TreatmentSteps />} />
               <Route path="/statistics" element={<Statistics />} />
+              <Route path="/production" element={<ProductionScreen />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

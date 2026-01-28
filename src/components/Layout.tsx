@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { ClipboardList, Plus, Settings, BarChart3 } from 'lucide-react';
+import { ClipboardList, Plus, Settings, BarChart3, Tv } from 'lucide-react';
 
 interface LayoutProps {
   children: ReactNode;
@@ -12,6 +12,7 @@ const navItems = [
   { to: '/create', label: 'Ny order', icon: Plus },
   { to: '/steps', label: 'Behandlingssteg', icon: Settings },
   { to: '/statistics', label: 'Statistik', icon: BarChart3 },
+  { to: '/production', label: 'Produktion', icon: Tv },
 ];
 
 export function Layout({ children }: LayoutProps) {
