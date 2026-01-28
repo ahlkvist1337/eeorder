@@ -1,129 +1,174 @@
 
 
-# Plan: Bulkandring i orderversikten (MVP)
+# Plan: PDF-forhandsvisning och stegstatushistorik
 
 ## Oversikt
 
-Implementera en funktion for att markera flera ordrar i orderoversikten och utfora massandringar pa tre enkla falt: produktionsstatus, faktureringsstatus och avvikelse (Ja/Nej).
+Implementera tva funktioner:
+1. PDF-forhandsvisning i filbilagor - visa PDF-filer direkt i en inbaddad visare
+2. Statushistorik for behandlingssteg - spara och visa nar steg byter status
 
-## Anvandargranssnitt
+## Del 1: PDF-forhandsvisning
 
-### Selektionssystem i tabellen
+### Anvandargranssnitt
 
-1. **Ny kolumn for kryssrutor**
-   - Lagg till en kryssrutekolumn langst till vanster i tabellen
-   - Rubrikrad far en "markera alla"-kryssruta som valjer/avvaljer alla synliga (filtrerade) ordrar
-   - Varje orderrad far en egen kryssruta
-   - Klick pa kryssrutan ska INTE navigera till orderdetaljer (stoppa eventpropagering)
-
-2. **Visuell indikering**
-   - Markerade rader far en tydlig bakgrundsmarkering
-   - Antal markerade ordrar visas tydligt i sidans header
-
-### Bulkandringspanel
-
-En verktygsfalt som visas NOR minst en order ar markerad:
+PDF-filer visas med en inbaddad forhandsvisning istallet for en generisk filikon:
 
 ```text
-+------------------------------------------------------------------+
-| [3 ordrar markerade]  [Produktionsstatus v] [Fakturering v]      |
-|                       [Avvikelse: Ja/Nej]   [Rensa markering]    |
-+------------------------------------------------------------------+
++---------------------------+
+|  [PDF Forhandsvisning]    |
+|  +---------+              |
+|  |  PDF    |  filnamn.pdf |
+|  |  ikon   |  150 KB      |
+|  +---------+  [Ladda ner] [Ta bort]
++---------------------------+
 ```
 
-Panelen innehaller:
-- Text som visar antal markerade ordrar
-- Dropdown for produktionsstatus
-- Dropdown for faktureringsstatus  
-- Ja/Nej-knappar for avvikelse
-- Knapp for att rensa markeringar
+Nar anvandaren klickar pa PDF-forhandsvisningen oppnas PDF:en i fullskarm eller i en modal.
 
-### Bekraftelsdialog
+### Tekniska andringar
 
-Nar anvandaren valjer ett nytt varde i nagon dropdown visas en bekraftelsedialog:
+**Uppdatera `OrderAttachments.tsx`:**
+- Lagg till en `isPdf(mimeType)` hjalpfunktion
+- For PDF-filer: visa en miniatyr med PDF-ikon och mojlighet att oppna i ny flik
+- Alternativt: lagg till en "Forhandsvisa"-knapp som oppnar PDF i en iframe/modal
+
+## Del 2: Statushistorik for behandlingssteg
+
+### Databasschema
+
+Skapa en ny tabell for att spara stegstatusandringar:
+
+```sql
+CREATE TABLE public.step_status_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+  step_id UUID NOT NULL,
+  step_name TEXT NOT NULL,
+  from_status step_status NOT NULL,
+  to_status step_status NOT NULL,
+  timestamp TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
+);
+```
+
+### Anvandargranssnitt
+
+Visa stegstatushistorik pa hoger sida av orderstatushistoriken i ett kompakt format:
 
 ```text
-+-----------------------------------------------+
-|  Andra produktionsstatus                      |
-|                                               |
-|  Du ar pa vag att andra produktionsstatus     |
-|  till "Startad" for 3 ordrar.                 |
-|                                               |
-|  [Avbryt]                [Genomfor andring]   |
-+-----------------------------------------------+
++---------------------------------------------------------------+
+| Statushistorik                                                |
+|                                         Steghistorik          |
+| 28 jan 2026 15:11  [Skapad] -> [Startad]   Blastring: Klar   |
+| 28 jan 2026 14:51  [Planerad] -> [Startad] Malning: Pagaende  |
++---------------------------------------------------------------+
 ```
 
-## Tekniska andringar
+Formatet blir kompakt med stegnamn + ny status pa samma rad, utan pilar for stegen.
 
-### 1. Skapa ny komponent: `BulkEditToolbar.tsx`
+### Tekniska andringar
 
-Ny komponent som visar:
-- Antal markerade ordrar
-- Dropdowns for produktionsstatus och faktureringsstatus
-- Knappar for avvikelse Ja/Nej
-- Knapp for att rensa markering
+**1. Skapa databasmigrering**
+- Ny tabell `step_status_history` med RLS-policy
 
-### 2. Skapa ny komponent: `BulkEditConfirmDialog.tsx`
+**2. Uppdatera types (`src/types/order.ts`)**
+- Lagg till `StepStatusChange` interface
+- Utoka `Order` med `stepStatusHistory: StepStatusChange[]`
 
-Bekraftelsedialog som visar:
-- Vilken andring som ska goras
-- Hur manga ordrar som paverkas
-- Bekrafta/Avbryt-knappar
+**3. Uppdatera `OrdersContext.tsx`**
+- Hamta `step_status_history` tillsammans med annan orderdata
+- Nar ett steg byter status via `updateOrderStep` eller `updateOrder` (steps), logga andringen
 
-### 3. Uppdatera `OrdersContext.tsx`
+**4. Uppdatera `OrderDetails.tsx`**
+- Visa stegstatushistorik pa hoger sida av befintlig statushistorik
+- Anvand tvaspalt-layout inom statushistorik-kortet
+- Kompakt visning: `{stepName}: {newStatus}`
 
-Lagg till en ny funktion for bulkuppdatering:
-
-```typescript
-bulkUpdateOrders: (
-  orderIds: string[], 
-  updates: {
-    productionStatus?: ProductionStatus;
-    billingStatus?: BillingStatus;
-    hasDeviation?: boolean;
-  }
-) => Promise<void>
-```
-
-Denna funktion:
-- Uppdaterar alla valda ordrar i en batch
-- For produktionsstatus: skapar statushistorik for varje order
-- Anropar `refreshOrders()` efter andringen
-
-### 4. Uppdatera `OrdersTable.tsx`
-
-Andringar:
-- Lagg till state for `selectedOrderIds: Set<string>`
-- Lagg till kryssrutekolumn i tabellhuvud och rader
-- Stoppa navigation vid klick pa kryssruta
-- Skicka `selectedOrderIds` och `onSelectionChange` som props till foraldern
-
-### 5. Uppdatera `Index.tsx`
-
-Andringar:
-- Hantera state for markerade ordrar
-- Visa `BulkEditToolbar` nar minst en order ar markerad
-- Hantera bekraftelsedialog
-- Anropa `bulkUpdateOrders` vid bekraftad andring
+**5. Skapa `StepStatusBadge` (redan finns)**
+- Ateranvand befintlig komponent for att visa stegstatus
 
 ## Filstruktur
 
 ```text
+supabase/
+  migrations/
+    XXXXX_step_status_history.sql  (NY)
+
 src/
-  components/
-    BulkEditToolbar.tsx      (NY)
-    BulkEditConfirmDialog.tsx (NY)
-    OrdersTable.tsx          (UPPDATERA)
+  types/
+    order.ts                       (UPPDATERA)
   contexts/
-    OrdersContext.tsx        (UPPDATERA)
+    OrdersContext.tsx              (UPPDATERA)
+  components/
+    OrderAttachments.tsx           (UPPDATERA)
   pages/
-    Index.tsx                (UPPDATERA)
+    OrderDetails.tsx               (UPPDATERA)
 ```
 
-## Ej inkluderat (enligt MVP-specifikation)
+## Teknisk detaljplan
 
-- Andring av stegstatus per steg
-- Andring av datum/tider per steg
-- Andring av priser eller ekonomiska varden
-- Andring av avvikelsekommentarer eller annan fritext
+### Steg 1: Databasmigrering
+```sql
+-- Skapa tabell for stegstatushistorik
+CREATE TABLE public.step_status_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL,
+  step_id UUID NOT NULL,
+  step_name TEXT NOT NULL,
+  from_status step_status NOT NULL,
+  to_status step_status NOT NULL,
+  timestamp TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
+);
+
+-- Aktivera RLS
+ALTER TABLE public.step_status_history ENABLE ROW LEVEL SECURITY;
+
+-- Policy for alla operationer (ingen auth)
+CREATE POLICY "Allow all operations on step_status_history"
+ON public.step_status_history FOR ALL USING (true) WITH CHECK (true);
+```
+
+### Steg 2: Typdefinitioner
+```typescript
+// Ny typ i types/order.ts
+interface StepStatusChange {
+  id: string;
+  timestamp: string;
+  stepId: string;
+  stepName: string;
+  fromStatus: StepStatus;
+  toStatus: StepStatus;
+}
+
+// Utoka Order interface
+interface Order {
+  // ...befintliga falt
+  stepStatusHistory: StepStatusChange[];
+}
+```
+
+### Steg 3: Context-uppdateringar
+- Hamta `step_status_history` i `fetchOrders()`
+- I `updateOrderStep()`: om status andras, lagg till i historiktabellen
+- I `updateOrder()` (nar steps uppdateras): jamfor gamla och nya steg, logga statusandringar
+
+### Steg 4: PDF-forhandsvisning
+```typescript
+const isPdf = (mimeType: string) => mimeType === 'application/pdf';
+
+// I renderingen:
+{isPdf(attachment.mime_type) ? (
+  <a href={url} target="_blank" className="...">
+    <FileText className="h-6 w-6 text-red-600" />
+    <span className="text-xs">PDF</span>
+  </a>
+) : isImage(attachment.mime_type) ? (
+  // befintlig bildforhandsvisning
+) : (
+  // generisk filikon
+)}
+```
+
+### Steg 5: UI for steghistorik
+Visa steghistorik i en separat sektion till hoger om orderhistoriken, alternativt som en egen lista under orderhistoriken med kompakt formatering.
 
