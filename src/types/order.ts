@@ -2,7 +2,6 @@
 
 export type ProductionStatus = 
   | 'created'      // Skapad
-  | 'planned'      // Planerad
   | 'started'      // Startad
   | 'paused'       // Pausad
   | 'arrived'      // Ankommen
@@ -110,7 +109,6 @@ export interface ParsedXMLOrder {
 // Status display helpers - in chronological order
 export const productionStatusLabels: Record<ProductionStatus, string> = {
   created: 'Skapad',
-  planned: 'Planerad',
   arrived: 'Ankommen',
   started: 'Startad',
   paused: 'Pausad',

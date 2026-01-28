@@ -326,8 +326,33 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     if (updates.steps !== undefined) {
       const currentOrder = orders.find(o => o.id === id);
       
-      // Log step status changes
       if (currentOrder) {
+        // Check if any step is being changed to 'in_progress'
+        const hasNewInProgress = updates.steps.some(newStep => {
+          const oldStep = currentOrder.steps.find(s => s.id === newStep.id);
+          return oldStep && oldStep.status !== 'in_progress' && newStep.status === 'in_progress';
+        });
+
+        // Auto-change order status to "started" when a step begins
+        if (hasNewInProgress) {
+          const statusesThatShouldChangeToStarted: ProductionStatus[] = ['created', 'arrived'];
+          
+          if (statusesThatShouldChangeToStarted.includes(currentOrder.productionStatus)) {
+            await supabase.from('status_history').insert({
+              order_id: id,
+              from_status: currentOrder.productionStatus,
+              to_status: 'started',
+            });
+            
+            // Update the order status immediately
+            await supabase
+              .from('orders')
+              .update({ production_status: 'started' })
+              .eq('id', id);
+          }
+        }
+
+        // Log step status changes
         const stepHistoryEntries = updates.steps
           .map(newStep => {
             const oldStep = currentOrder.steps.find(s => s.id === newStep.id);
@@ -443,7 +468,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
       // Auto-change order status to "started" when a step begins
       if (updates.status === 'in_progress' && order) {
-        const statusesThatShouldChangeToStarted: ProductionStatus[] = ['created', 'planned', 'arrived'];
+        const statusesThatShouldChangeToStarted: ProductionStatus[] = ['created', 'arrived'];
         
         if (statusesThatShouldChangeToStarted.includes(order.productionStatus)) {
           await supabase.from('status_history').insert({
