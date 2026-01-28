@@ -43,6 +43,19 @@ export default function Statistics() {
       );
     }
 
+    // Calculate planned average lead time (from plannedStart to plannedEnd)
+    let avgPlannedLeadTimeDays = 0;
+    const ordersWithPlannedDates = completedOrders.filter(o => o.plannedStart && o.plannedEnd);
+    if (ordersWithPlannedDates.length > 0) {
+      const totalPlannedDays = ordersWithPlannedDates.reduce((sum, o) => {
+        const start = new Date(o.plannedStart!);
+        const end = new Date(o.plannedEnd!);
+        const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+        return sum + days;
+      }, 0);
+      avgPlannedLeadTimeDays = Math.round(totalPlannedDays / ordersWithPlannedDates.length);
+    }
+
     return {
       total: orders.length,
       active: activeOrders.length,
@@ -54,6 +67,7 @@ export default function Statistics() {
       billedValue,
       readyValue,
       avgLeadTimeDays,
+      avgPlannedLeadTimeDays,
     };
   }, [orders]);
 
@@ -157,23 +171,42 @@ export default function Statistics() {
           </Card>
         </div>
 
-        {/* Lead time */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Genomsnittlig ledtid
-            </CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">
-              {stats.avgLeadTimeDays > 0 ? `${stats.avgLeadTimeDays} dagar` : '-'}
-            </div>
-            <p className="text-sm text-muted-foreground mt-1">
-              Baserat på verklig tid från Ankommen till Avslutad
-            </p>
-          </CardContent>
-        </Card>
+        {/* Lead time comparison */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Verklig ledtid (snitt)
+              </CardTitle>
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">
+                {stats.avgLeadTimeDays > 0 ? `${stats.avgLeadTimeDays} dagar` : '-'}
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                Från Ankommen till Avslutad
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Planerad ledtid (snitt)
+              </CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">
+                {stats.avgPlannedLeadTimeDays > 0 ? `${stats.avgPlannedLeadTimeDays} dagar` : '-'}
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                Baserat på planerade datum
+              </p>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Summary */}
         <Card>
