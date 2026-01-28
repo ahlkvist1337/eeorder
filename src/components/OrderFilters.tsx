@@ -1,4 +1,6 @@
+import { Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -16,9 +18,11 @@ interface OrderFiltersProps {
     hasDeviation: boolean | null;
   };
   onFiltersChange: (filters: OrderFiltersProps['filters']) => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
 }
 
-export function OrderFilters({ filters, onFiltersChange }: OrderFiltersProps) {
+export function OrderFilters({ filters, onFiltersChange, searchQuery, onSearchChange }: OrderFiltersProps) {
   const handleProductionStatusChange = (value: string) => {
     onFiltersChange({
       ...filters,
@@ -46,15 +50,38 @@ export function OrderFilters({ filters, onFiltersChange }: OrderFiltersProps) {
       billingStatus: 'all',
       hasDeviation: null,
     });
+    onSearchChange('');
   };
 
   const hasActiveFilters = 
     filters.productionStatus !== 'all' || 
     filters.billingStatus !== 'all' || 
-    filters.hasDeviation !== null;
+    filters.hasDeviation !== null ||
+    searchQuery.length > 0;
 
   return (
-    <div className="flex flex-wrap gap-3 items-center">
+    <div className="space-y-3">
+      {/* Search field */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Sök på ordernummer, kund eller kommentar..."
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="pl-9 pr-9"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => onSearchChange('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 items-center">
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-muted-foreground">Produktionsstatus:</span>
         <Select value={filters.productionStatus} onValueChange={handleProductionStatusChange}>
@@ -107,6 +134,7 @@ export function OrderFilters({ filters, onFiltersChange }: OrderFiltersProps) {
           Rensa filter
         </Button>
       )}
+      </div>
     </div>
   );
 }

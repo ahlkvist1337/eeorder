@@ -15,6 +15,7 @@ import type { ProductionStatus, BillingStatus } from '@/types/order';
 const Index = () => {
   const { orders, isLoading, bulkUpdateOrders } = useOrders();
   const { canEdit } = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<{
     productionStatus: ProductionStatus | 'all';
     billingStatus: BillingStatus | 'all';
@@ -118,8 +119,13 @@ const Index = () => {
           )}
         </div>
 
-        {/* Filters */}
-        <OrderFilters filters={filters} onFiltersChange={setFilters} />
+        {/* Search and Filters */}
+        <OrderFilters 
+          filters={filters} 
+          onFiltersChange={setFilters} 
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+        />
 
         {/* Bulk edit toolbar - only for editors */}
         {canEdit && selectedOrderIds.size > 0 && (
@@ -136,6 +142,7 @@ const Index = () => {
         <OrdersTable
           orders={orders}
           filters={filters}
+          searchQuery={searchQuery}
           selectedOrderIds={canEdit ? selectedOrderIds : new Set()}
           onSelectionChange={canEdit ? setSelectedOrderIds : () => {}}
         />
