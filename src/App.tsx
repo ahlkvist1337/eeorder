@@ -4,13 +4,17 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { OrdersProvider } from "@/contexts/OrdersContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import CreateOrder from "./pages/CreateOrder";
 import OrderDetails from "./pages/OrderDetails";
 import TreatmentSteps from "./pages/TreatmentSteps";
 import Statistics from "./pages/Statistics";
 import ProductionScreen from "./pages/ProductionScreen";
+import Login from "./pages/Login";
+import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 
 const App = () => {
@@ -19,22 +23,26 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <OrdersProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/create" element={<CreateOrder />} />
-              <Route path="/order/:id" element={<OrderDetails />} />
-              <Route path="/steps" element={<TreatmentSteps />} />
-              <Route path="/statistics" element={<Statistics />} />
-              <Route path="/production" element={<ProductionScreen />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </OrdersProvider>
+        <AuthProvider>
+          <OrdersProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+                <Route path="/create" element={<ProtectedRoute><CreateOrder /></ProtectedRoute>} />
+                <Route path="/order/:id" element={<ProtectedRoute><OrderDetails /></ProtectedRoute>} />
+                <Route path="/steps" element={<ProtectedRoute><TreatmentSteps /></ProtectedRoute>} />
+                <Route path="/statistics" element={<ProtectedRoute><Statistics /></ProtectedRoute>} />
+                <Route path="/production" element={<ProtectedRoute><ProductionScreen /></ProtectedRoute>} />
+                <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AdminPanel /></ProtectedRoute>} />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </OrdersProvider>
+        </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

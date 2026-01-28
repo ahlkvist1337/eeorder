@@ -1,7 +1,9 @@
 import { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { ClipboardList, Plus, Settings, BarChart3, Tv } from 'lucide-react';
+import { ClipboardList, Plus, Settings, BarChart3, Tv, Users, LogOut } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
 
 interface LayoutProps {
   children: ReactNode;
@@ -9,7 +11,7 @@ interface LayoutProps {
 
 const navItems = [
   { to: '/', label: 'Ordrar', icon: ClipboardList },
-  { to: '/create', label: 'Ny order', icon: Plus },
+  { to: '/create', label: 'Ny order', icon: Plus, requiresEdit: true },
   { to: '/steps', label: 'Behandlingssteg', icon: Settings },
   { to: '/statistics', label: 'Statistik', icon: BarChart3 },
   { to: '/production', label: 'Produktion', icon: Tv },
@@ -17,6 +19,19 @@ const navItems = [
 
 export function Layout({ children }: LayoutProps) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { profile, isAdmin, canEdit, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
+
+  // Filter nav items based on role
+  const visibleNavItems = navItems.filter(item => {
+    if (item.requiresEdit && !canEdit) return false;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -27,27 +42,65 @@ export function Layout({ children }: LayoutProps) {
             <Link to="/" className="font-bold text-lg tracking-tight">
               Orderhantering
             </Link>
-            <nav className="flex items-center gap-1">
-              {navItems.map(item => {
-                const Icon = item.icon;
-                const isActive = location.pathname === item.to;
-                return (
+            
+            <div className="flex items-center gap-1">
+              {/* Navigation */}
+              <nav className="flex items-center gap-1">
+                {visibleNavItems.map(item => {
+                  const Icon = item.icon;
+                  const isActive = location.pathname === item.to;
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-2 rounded-sm text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                          : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+                
+                {/* Admin link - only for admins */}
+                {isAdmin && (
                   <Link
-                    key={item.to}
-                    to={item.to}
+                    to="/admin"
                     className={cn(
                       'flex items-center gap-2 px-3 py-2 rounded-sm text-sm font-medium transition-colors',
-                      isActive
+                      location.pathname === '/admin'
                         ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                         : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
                     )}
                   >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
+                    <Users className="h-4 w-4" />
+                    Admin
                   </Link>
-                );
-              })}
-            </nav>
+                )}
+              </nav>
+
+              {/* Divider */}
+              <div className="w-px h-6 bg-sidebar-border mx-2" />
+
+              {/* User info and logout */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-sidebar-foreground/70">
+                  {profile?.full_name || profile?.email}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSignOut}
+                  className="text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                >
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </header>
