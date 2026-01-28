@@ -10,7 +10,6 @@ interface ProductionStatusBadgeProps {
 
 const productionStatusColors: Record<ProductionStatus, string> = {
   created: 'bg-[hsl(var(--status-created))] text-white',
-  planned: 'bg-[hsl(var(--status-planned))] text-white',
   started: 'bg-[hsl(var(--status-started))] text-black',
   paused: 'bg-[hsl(var(--status-paused))] text-black',
   arrived: 'bg-[hsl(var(--status-arrived))] text-white',

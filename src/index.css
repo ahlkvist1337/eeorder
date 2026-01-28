@@ -38,7 +38,6 @@
 
     /* Status colors */
     --status-created: 210 15% 60%;
-    --status-planned: 200 70% 45%;
     --status-started: 45 85% 50%;
     --status-paused: 30 80% 55%;
     --status-arrived: 170 60% 40%;
