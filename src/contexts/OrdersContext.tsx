@@ -157,6 +157,7 @@ function mapDbOrderToOrder(
 }
 
 export function OrdersProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -210,8 +211,13 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+    if (user) {
+      fetchOrders();
+    } else {
+      setOrders([]);
+      setIsLoading(false);
+    }
+  }, [user, fetchOrders]);
 
   const addOrder = useCallback(async (order: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>): Promise<Order> => {
     // Insert order
