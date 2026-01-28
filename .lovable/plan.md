@@ -1,78 +1,129 @@
 
 
-## Flytta datalagring till molnet (Supabase)
+# Plan: Bulkandring i orderversikten (MVP)
 
-### Bakgrund
+## Oversikt
 
-Applikationen sparar nu all data lokalt i webbläsaren (`localStorage`). Detta innebär att:
-- Varje dator/webbläsare har sin egen data
-- Data kan försvinna om webbläsarhistoriken rensas
-- Användare kan inte dela ordrar mellan enheter
+Implementera en funktion for att markera flera ordrar i orderoversikten och utfora massandringar pa tre enkla falt: produktionsstatus, faktureringsstatus och avvikelse (Ja/Nej).
 
-### Lösning
+## Anvandargranssnitt
 
-Aktivera **Lovable Cloud** med Supabase-databas för permanent molnlagring.
+### Selektionssystem i tabellen
 
----
+1. **Ny kolumn for kryssrutor**
+   - Lagg till en kryssrutekolumn langst till vanster i tabellen
+   - Rubrikrad far en "markera alla"-kryssruta som valjer/avvaljer alla synliga (filtrerade) ordrar
+   - Varje orderrad far en egen kryssruta
+   - Klick pa kryssrutan ska INTE navigera till orderdetaljer (stoppa eventpropagering)
 
-### Vad som kommer att ske
+2. **Visuell indikering**
+   - Markerade rader far en tydlig bakgrundsmarkering
+   - Antal markerade ordrar visas tydligt i sidans header
+
+### Bulkandringspanel
+
+En verktygsfalt som visas NOR minst en order ar markerad:
 
 ```text
-+------------------+        +------------------+
-|  Webbläsare A    |        |  Webbläsare B    |
-|  (localStorage)  |        |  (localStorage)  |
-+--------+---------+        +--------+---------+
-         |                           |
-         v                           v
-+------------------------------------------------+
-|              Supabase Databas                  |
-|                  (molnet)                      |
-|  +------------+  +------------------------+   |
-|  |   orders   |  |   treatment_steps      |   |
-|  +------------+  +------------------------+   |
-+------------------------------------------------+
++------------------------------------------------------------------+
+| [3 ordrar markerade]  [Produktionsstatus v] [Fakturering v]      |
+|                       [Avvikelse: Ja/Nej]   [Rensa markering]    |
++------------------------------------------------------------------+
 ```
 
----
+Panelen innehaller:
+- Text som visar antal markerade ordrar
+- Dropdown for produktionsstatus
+- Dropdown for faktureringsstatus  
+- Ja/Nej-knappar for avvikelse
+- Knapp for att rensa markeringar
 
-### Steg 1: Aktivera Lovable Cloud
+### Bekraftelsdialog
 
-Jag kommer att sätta upp Supabase-integration via Lovable Cloud (inget externt konto behövs).
+Nar anvandaren valjer ett nytt varde i nagon dropdown visas en bekraftelsedialog:
 
-### Steg 2: Skapa databastabeller
+```text
++-----------------------------------------------+
+|  Andra produktionsstatus                      |
+|                                               |
+|  Du ar pa vag att andra produktionsstatus     |
+|  till "Startad" for 3 ordrar.                 |
+|                                               |
+|  [Avbryt]                [Genomfor andring]   |
++-----------------------------------------------+
+```
 
-| Tabell | Kolumner |
-|--------|----------|
-| `orders` | id, order_number, customer, customer_reference, delivery_address, production_status, billing_status, planned_start, planned_end, actual_start, actual_end, has_deviation, deviation_comment, comment, total_price, xml_data, created_at, updated_at |
-| `order_steps` | id, order_id (FK), template_id, name, status, planned_start, planned_end, actual_start, actual_end, price |
-| `article_rows` | id, order_id (FK), row_number, part_number, text, quantity, unit, price, step_id |
-| `status_history` | id, order_id (FK), from_status, to_status, timestamp |
-| `treatment_step_templates` | id, name, created_at |
+## Tekniska andringar
 
-### Steg 3: Uppdatera applikationskoden
+### 1. Skapa ny komponent: `BulkEditToolbar.tsx`
 
-- Ersätta localStorage-logik med Supabase-anrop
-- Lägga till realtidssynkronisering (valfritt)
-- Behålla befintlig TypeScript-struktur
+Ny komponent som visar:
+- Antal markerade ordrar
+- Dropdowns for produktionsstatus och faktureringsstatus
+- Knappar for avvikelse Ja/Nej
+- Knapp for att rensa markering
 
----
+### 2. Skapa ny komponent: `BulkEditConfirmDialog.tsx`
 
-### Förväntade ändringar
+Bekraftelsedialog som visar:
+- Vilken andring som ska goras
+- Hur manga ordrar som paverkas
+- Bekrafta/Avbryt-knappar
 
-| Fil | Åtgärd |
-|-----|--------|
-| Supabase-tabeller | Skapa 5 nya tabeller med relationer |
-| `src/integrations/supabase/` | Auto-genererade typer för tabellerna |
-| `src/contexts/OrdersContext.tsx` | Byta från localStorage till Supabase |
-| `src/hooks/useTreatmentSteps.ts` | Byta från localStorage till Supabase |
+### 3. Uppdatera `OrdersContext.tsx`
 
----
+Lagg till en ny funktion for bulkuppdatering:
 
-### Innan jag börjar
+```typescript
+bulkUpdateOrders: (
+  orderIds: string[], 
+  updates: {
+    productionStatus?: ProductionStatus;
+    billingStatus?: BillingStatus;
+    hasDeviation?: boolean;
+  }
+) => Promise<void>
+```
 
-Jag behöver aktivera Lovable Cloud för ditt projekt. När du godkänner planen kommer jag att:
+Denna funktion:
+- Uppdaterar alla valda ordrar i en batch
+- For produktionsstatus: skapar statushistorik for varje order
+- Anropar `refreshOrders()` efter andringen
 
-1. Aktivera Cloud-integrationen
-2. Skapa databastabellerna
-3. Uppdatera koden för molnlagring
+### 4. Uppdatera `OrdersTable.tsx`
+
+Andringar:
+- Lagg till state for `selectedOrderIds: Set<string>`
+- Lagg till kryssrutekolumn i tabellhuvud och rader
+- Stoppa navigation vid klick pa kryssruta
+- Skicka `selectedOrderIds` och `onSelectionChange` som props till foraldern
+
+### 5. Uppdatera `Index.tsx`
+
+Andringar:
+- Hantera state for markerade ordrar
+- Visa `BulkEditToolbar` nar minst en order ar markerad
+- Hantera bekraftelsedialog
+- Anropa `bulkUpdateOrders` vid bekraftad andring
+
+## Filstruktur
+
+```text
+src/
+  components/
+    BulkEditToolbar.tsx      (NY)
+    BulkEditConfirmDialog.tsx (NY)
+    OrdersTable.tsx          (UPPDATERA)
+  contexts/
+    OrdersContext.tsx        (UPPDATERA)
+  pages/
+    Index.tsx                (UPPDATERA)
+```
+
+## Ej inkluderat (enligt MVP-specifikation)
+
+- Andring av stegstatus per steg
+- Andring av datum/tider per steg
+- Andring av priser eller ekonomiska varden
+- Andring av avvikelsekommentarer eller annan fritext
 
