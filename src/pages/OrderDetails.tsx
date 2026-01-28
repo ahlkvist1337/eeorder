@@ -31,10 +31,21 @@ export default function OrderDetails() {
     updateProductionStatus, 
     updateBillingStatus,
     updateOrderStep,
-    deleteOrder 
+    deleteOrder,
+    isLoading 
   } = useOrders();
 
   const order = getOrderById(id || '');
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">Laddar order...</p>
+        </div>
+      </Layout>
+    );
+  }
 
   if (!order) {
     return (

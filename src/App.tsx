@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { OrdersProvider } from "@/contexts/OrdersContext";
 import Index from "./pages/Index";
 import CreateOrder from "./pages/CreateOrder";
 import OrderDetails from "./pages/OrderDetails";
@@ -15,19 +16,21 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/create" element={<CreateOrder />} />
-          <Route path="/order/:id" element={<OrderDetails />} />
-          <Route path="/steps" element={<TreatmentSteps />} />
-          <Route path="/statistics" element={<Statistics />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <OrdersProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/create" element={<CreateOrder />} />
+            <Route path="/order/:id" element={<OrderDetails />} />
+            <Route path="/steps" element={<TreatmentSteps />} />
+            <Route path="/statistics" element={<Statistics />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </OrdersProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
