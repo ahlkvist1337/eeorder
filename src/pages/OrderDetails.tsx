@@ -223,7 +223,6 @@ export default function OrderDetails() {
               <CardContent>
                 <ArticleRowsEditor
                   rows={order.articleRows || []}
-                  steps={order.steps}
                   onRowsChange={handleArticleRowsChange}
                   showTotal={true}
                 />
