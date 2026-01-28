@@ -97,13 +97,13 @@ export interface ParsedXMLOrder {
   rows: ArticleRow[];
 }
 
-// Status display helpers
+// Status display helpers - in chronological order
 export const productionStatusLabels: Record<ProductionStatus, string> = {
   created: 'Skapad',
   planned: 'Planerad',
+  arrived: 'Ankommen',
   started: 'Startad',
   paused: 'Pausad',
-  arrived: 'Ankommen',
   completed: 'Avslutad',
   cancelled: 'Avbruten',
 };

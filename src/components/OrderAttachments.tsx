@@ -35,13 +35,24 @@ export function OrderAttachments({ orderId, attachments, onAttachmentsChange }: 
     setIsDragging(false);
   }, []);
 
+  const sanitizeFileName = (name: string) => {
+    // Replace Swedish and special characters, keep only safe chars
+    return name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
+      .replace(/[åäÅÄ]/g, 'a')
+      .replace(/[öÖ]/g, 'o')
+      .replace(/[^a-zA-Z0-9.-]/g, '_'); // Replace other special chars with underscore
+  };
+
   const uploadFiles = async (files: FileList | File[]) => {
     setIsUploading(true);
     const fileArray = Array.from(files);
     
     try {
       for (const file of fileArray) {
-        const filePath = `${orderId}/${Date.now()}-${file.name}`;
+        const safeFileName = sanitizeFileName(file.name);
+        const filePath = `${orderId}/${Date.now()}-${safeFileName}`;
         
         // Upload to storage
         const { error: uploadError } = await supabase.storage
