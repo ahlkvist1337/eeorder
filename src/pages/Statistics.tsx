@@ -19,17 +19,28 @@ export default function Statistics() {
     const billedValue = billedOrders.reduce((sum, o) => sum + o.totalPrice, 0);
     const readyValue = readyForBilling.reduce((sum, o) => sum + o.totalPrice, 0);
 
-    // Calculate average lead time for completed orders
+    // Calculate average lead time from actual status history (Arrived → Completed)
     let avgLeadTimeDays = 0;
-    const ordersWithDates = completedOrders.filter(o => o.plannedStart && o.plannedEnd);
-    if (ordersWithDates.length > 0) {
-      const totalDays = ordersWithDates.reduce((sum, o) => {
-        const start = new Date(o.plannedStart!);
-        const end = new Date(o.plannedEnd!);
-        const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-        return sum + days;
-      }, 0);
-      avgLeadTimeDays = Math.round(totalDays / ordersWithDates.length);
+    const ordersWithLeadTime: number[] = [];
+
+    completedOrders.forEach(order => {
+      const arrivedEntry = order.statusHistory.find(h => h.toStatus === 'arrived');
+      const completedEntry = order.statusHistory.find(h => h.toStatus === 'completed');
+      
+      if (arrivedEntry && completedEntry) {
+        const arrivedDate = new Date(arrivedEntry.timestamp);
+        const completedDate = new Date(completedEntry.timestamp);
+        const days = Math.ceil((completedDate.getTime() - arrivedDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (days >= 0) {
+          ordersWithLeadTime.push(days);
+        }
+      }
+    });
+
+    if (ordersWithLeadTime.length > 0) {
+      avgLeadTimeDays = Math.round(
+        ordersWithLeadTime.reduce((sum, d) => sum + d, 0) / ordersWithLeadTime.length
+      );
     }
 
     return {
@@ -159,7 +170,7 @@ export default function Statistics() {
               {stats.avgLeadTimeDays > 0 ? `${stats.avgLeadTimeDays} dagar` : '-'}
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              Baserat på planerade datum för avslutade ordrar
+              Baserat på verklig tid från Ankommen till Avslutad
             </p>
           </CardContent>
         </Card>
