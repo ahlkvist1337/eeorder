@@ -1,177 +1,358 @@
 
-# Plan: Produktionsskarm / TV-vy (MVP)
 
-## Oversikt
+# Plan: Inloggning och Användarhantering (MVP)
 
-Skapa en dedikerad read-only vy for stora skarmar i produktionen som visar aktiva ordrar (Ankommen/Startad) med automatisk uppdatering.
+## Översikt
 
-## Anvandargranssnitt
+Implementera ett komplett autentiseringssystem med tre roller (Admin/Redigera/Läsa) som skyddar hela applikationen och möjliggör användarhantering via en adminpanel.
 
-### Layout
+## Databasschema
 
-```text
-+----------------------------------------------------------------+
-| PRODUKTIONSVY                           Senast uppdaterad 15:42 |
-+----------------------------------------------------------------+
-|                                                                 |
-|  +-------------------+  +-------------------+  +--------------+ |
-|  |     20740         |  |     20741         |  |    20742    |  |
-|  |    [STARTAD]      |  |   [ANKOMMEN]      |  |  [STARTAD]  |  |
-|  |                   |  |                   |  |             |  |
-|  | O Blastring       |  | O Blastring       |  | * Malning   |  |
-|  | * Malning         |  | O Sprutzink       |  | O Lackning  |  |
-|  | O Lackning        |  | O Malning         |  |             |  |
-|  |                   |  |                   |  |             |  |
-|  | Kund: Sparepartner|  | Kund: ABB         |  | Kund: Volvo |  |
-|  +-------------------+  +-------------------+  +--------------+ |
-|                                                                 |
-+----------------------------------------------------------------+
-```
-
-### Orderkort
-
-Varje orderkort visar:
-- **Ordernummer** - Stor text (2xl-3xl)
-- **Produktionsstatus** - Fargkodad badge (stor)
-- **Behandlingssteg** - Lista med visuella markeringar:
-  - Gron cirkel (fylld) = Klart
-  - Gul cirkel (fylld) = Pagaende (aktuellt steg)
-  - Gra cirkel (tom) = Ej startat
-- **Kundnamn** - Under stegen, mindre text
-
-### Fargkodning for steg
+### Nya tabeller och typer
 
 ```text
-[*] Gron fylld cirkel = Klart (completed)
-[O] Gul fylld cirkel  = Pagaende (in_progress)
-[ ] Gra tom cirkel    = Vantar (pending)
++------------------+          +------------------+          +------------------+
+|   auth.users     |          |    profiles      |          |   user_roles     |
+| (Supabase Auth)  |          |                  |          |                  |
++------------------+          +------------------+          +------------------+
+| id (uuid) PK     |<-------->| id (uuid) PK/FK  |<-------->| id (uuid) PK     |
+| email            |          | email            |          | user_id (uuid)FK |
+| ...              |          | full_name        |          | role (app_role)  |
++------------------+          | is_active        |          +------------------+
+                              | created_at       |
+                              +------------------+
 ```
 
-## Tekniska andringar
+### SQL-migrering
 
-### 1. Skapa ny sida: `src/pages/ProductionScreen.tsx`
+**1. Skapa rolltyp:**
+```sql
+CREATE TYPE public.app_role AS ENUM ('admin', 'redigera', 'lasa');
+```
 
-Huvudkomponent som:
-- Filterar ordrar (endast `arrived` och `started`)
-- Visar orderkort i ett responsivt grid
-- Hanterar automatisk uppdatering var 30 sekund
-- Visar senaste uppdateringstid
-- Anvandar stor typografi och hog kontrast
+**2. Skapa profiles-tabell:**
+```sql
+CREATE TABLE public.profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  full_name TEXT,
+  is_active BOOLEAN DEFAULT true NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
+);
+```
 
-```typescript
-// Pseudokod
-const ProductionScreen = () => {
-  const { orders, refreshOrders } = useOrders();
-  
-  // Filtrera aktiva ordrar
-  const activeOrders = orders.filter(o => 
-    o.productionStatus === 'arrived' || o.productionStatus === 'started'
+**3. Skapa user_roles-tabell:**
+```sql
+CREATE TABLE public.user_roles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  role app_role NOT NULL,
+  UNIQUE (user_id, role)
+);
+```
+
+**4. Skapa security definer-funktion:**
+```sql
+CREATE OR REPLACE FUNCTION public.has_role(_user_id UUID, _role app_role)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role = _role
+  )
+$$;
+```
+
+**5. Skapa trigger för automatisk profilskapande:**
+```sql
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name)
+  VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name');
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+```
+
+**6. RLS-policies för profiles:**
+```sql
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- Användare kan se sin egen profil
+CREATE POLICY "Users can view own profile"
+  ON public.profiles FOR SELECT
+  USING (auth.uid() = id);
+
+-- Admins kan se alla profiler
+CREATE POLICY "Admins can view all profiles"
+  ON public.profiles FOR SELECT
+  USING (public.has_role(auth.uid(), 'admin'));
+
+-- Admins kan uppdatera profiler
+CREATE POLICY "Admins can update profiles"
+  ON public.profiles FOR UPDATE
+  USING (public.has_role(auth.uid(), 'admin'));
+```
+
+**7. RLS-policies för user_roles:**
+```sql
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+
+-- Användare kan se sina egna roller
+CREATE POLICY "Users can view own roles"
+  ON public.user_roles FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- Admins kan hantera alla roller
+CREATE POLICY "Admins can manage all roles"
+  ON public.user_roles FOR ALL
+  USING (public.has_role(auth.uid(), 'admin'));
+```
+
+**8. Uppdatera befintliga tabellers RLS:**
+
+För tabeller som `orders`, `order_steps`, `article_rows`, etc:
+```sql
+-- Alla inloggade kan läsa
+CREATE POLICY "Authenticated users can read orders"
+  ON public.orders FOR SELECT
+  TO authenticated
+  USING (true);
+
+-- Endast admin och redigera kan skapa/uppdatera
+CREATE POLICY "Editors can modify orders"
+  ON public.orders FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    public.has_role(auth.uid(), 'admin') OR 
+    public.has_role(auth.uid(), 'redigera')
   );
-  
-  // Auto-refresh var 30 sekund
-  useEffect(() => {
-    const interval = setInterval(refreshOrders, 30000);
-    return () => clearInterval(interval);
-  }, []);
-  
-  return (
-    <div className="min-h-screen bg-background p-8">
-      {/* Header */}
-      {/* Grid med orderkort */}
-    </div>
+
+CREATE POLICY "Editors can update orders"
+  ON public.orders FOR UPDATE
+  TO authenticated
+  USING (
+    public.has_role(auth.uid(), 'admin') OR 
+    public.has_role(auth.uid(), 'redigera')
   );
-};
+
+-- Endast admin kan ta bort
+CREATE POLICY "Admins can delete orders"
+  ON public.orders FOR DELETE
+  TO authenticated
+  USING (public.has_role(auth.uid(), 'admin'));
 ```
 
-### 2. Skapa ny komponent: `src/components/ProductionOrderCard.tsx`
+## Nya komponenter
 
-Komponent for orderkort med:
-- Stor ordernummertext
-- Produktionsstatusbadge (stor variant)
-- Steglista med visuella statusmarkeringar
-- Kompakt kundinfo
-
-```typescript
-interface ProductionOrderCardProps {
-  order: Order;
-}
-
-const ProductionOrderCard = ({ order }: ProductionOrderCardProps) => {
-  // Hitta aktuellt steg (forsta in_progress, eller forsta pending om inget pagaende)
-  const currentStep = order.steps.find(s => s.status === 'in_progress') 
-    || order.steps.find(s => s.status === 'pending');
-  
-  return (
-    <Card className="p-6">
-      {/* Ordernummer */}
-      {/* Status badge */}
-      {/* Steglista */}
-      {/* Kundnamn */}
-    </Card>
-  );
-};
-```
-
-### 3. Uppdatera `src/App.tsx`
-
-Lagg till ny route:
-
-```typescript
-<Route path="/production" element={<ProductionScreen />} />
-```
-
-### 4. Uppdatera navigationen (valfritt)
-
-Eventuellt lagga till lank i Layout.tsx (kan ocksa nas direkt via URL).
-
-## Filstruktur
+### Filstruktur
 
 ```text
 src/
+  contexts/
+    AuthContext.tsx           (NY)
+  hooks/
+    useAuth.ts                (NY)
   pages/
-    ProductionScreen.tsx      (NY)
+    Login.tsx                 (NY)
+    AdminPanel.tsx            (NY)
   components/
-    ProductionOrderCard.tsx   (NY)
-  App.tsx                     (UPPDATERA - ny route)
-  components/
-    Layout.tsx                (UPPDATERA - valfri navlank)
+    ProtectedRoute.tsx        (NY)
+    UserRoleBadge.tsx         (NY)
+  types/
+    auth.ts                   (NY)
 ```
 
-## Designdetaljer
+### AuthContext (`src/contexts/AuthContext.tsx`)
 
-### Typografi
-- Ordernummer: `text-3xl font-bold`
-- Statusbadge: `text-lg px-4 py-2`
-- Stegnamn: `text-xl`
-- Kundnamn: `text-lg text-muted-foreground`
+Hanterar autentiseringstillstånd och rollinformation:
 
-### Farger (ateranvand befintliga CSS-variabler)
-- Startad: `--status-started` (gul)
-- Ankommen: `--status-arrived` (cyan/turkos)
-- Steg klart: `--status-completed` (gron)
-- Steg pagaende: `--status-started` (gul)
-- Steg vantar: `--muted` (gra)
+```typescript
+interface AuthContextType {
+  user: User | null;
+  profile: Profile | null;
+  roles: AppRole[];
+  isLoading: boolean;
+  isAdmin: boolean;
+  canEdit: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+}
+```
 
-### Grid-layout
-- Responsivt: 1 kolumn pa smal skarm, 2-3-4 kolumner pa storre
-- `grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`
-- Gap: `gap-6`
+Funktionalitet:
+- Lyssnar på `onAuthStateChange` för att uppdatera användartillstånd
+- Hämtar profil och roller vid inloggning
+- Tillhandahåller bekväma flaggor (`isAdmin`, `canEdit`)
 
-### Auto-refresh
-- Intervall: 30 sekunder
-- Visar "Senast uppdaterad: HH:MM:SS" i headern
-- Ingen manuell uppdateringsknapp (read-only)
+### Login-sida (`src/pages/Login.tsx`)
 
-## Atkomst
+Enkel inloggningsformulär:
+- Email och lösenord
+- Felmeddelanden vid misslyckad inloggning
+- Ingen registrering (användare skapas av admin)
+- Automatisk omdirigering efter inloggning
 
-Produktionsskarmen nas via: `/production`
+### ProtectedRoute (`src/components/ProtectedRoute.tsx`)
 
-Ingen autentisering kravs (enligt projektets MVP-princip med direkt atkomst).
+Wrapper-komponent som:
+- Visar laddningsindikator medan auth kontrolleras
+- Omdirigerar till `/login` om ej inloggad
+- Kontrollerar om användare är aktiv (`is_active`)
+- Kan kräva specifik roll (valfritt)
 
-## Ej inkluderat (utanfor MVP)
+### AdminPanel (`src/pages/AdminPanel.tsx`)
 
-- Manuell sortering av ordrar
-- Filtrering utover status
-- Fullskarmsknapp
-- Ljud-/visuell notifikation vid forandringar
-- Historik eller tidslinjer
+Enkel adminpanel med:
+- Lista över alla användare med roll och status
+- Skapa ny användare (email, namn, roll)
+- Ändra användarroll
+- Aktivera/inaktivera användare
+- Endast tillgänglig för admin-användare
+
+```text
++--------------------------------------------------+
+| ANVÄNDARHANTERING                                |
++--------------------------------------------------+
+| [+ Skapa användare]                              |
+|                                                  |
+| Namn           | Email          | Roll   | Aktiv |
+| -------------- | -------------- | ------ | ----- |
+| Anna Andersson | anna@firma.se  | Admin  |  ✓    |
+| Bengt Bengtsson| bengt@firma.se | Redige.|  ✓    |
+| Carl Carlsson  | carl@firma.se  | Läsa   |  ✗    |
+|                                                  |
++--------------------------------------------------+
+```
+
+## Uppdateringar i befintliga filer
+
+### `src/App.tsx`
+
+- Wrap hela appen med `AuthProvider`
+- Lägg till `/login` och `/admin` routes
+- Wrap alla befintliga routes med `ProtectedRoute`
+
+```typescript
+<AuthProvider>
+  <Routes>
+    <Route path="/login" element={<Login />} />
+    <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+    <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AdminPanel /></ProtectedRoute>} />
+    {/* ... övriga routes */}
+  </Routes>
+</AuthProvider>
+```
+
+### `src/components/Layout.tsx`
+
+- Lägg till adminlänk (endast synlig för admins)
+- Lägg till utloggningsknapp
+- Visa inloggad användares namn/email
+
+```text
++-------------------------------------------------------+
+| Orderhantering    | Ordrar | Ny order | ... | Admin | [Anna] [Logga ut] |
++-------------------------------------------------------+
+```
+
+### `src/contexts/OrdersContext.tsx`
+
+- Inget behöver ändras i context-logiken
+- RLS-policies i databasen hanterar behörighetskontroll
+
+### UI-anpassningar baserat på roll
+
+**För "Läsa"-användare:**
+- Dölja "Ny order"-knapp
+- Dölja redigeringsikoner i orderlistan
+- Skrivskydda formulärfält i orderdetaljer
+- Dölja bulk-redigeringsverktygsfältet
+
+**Implementation:**
+```typescript
+// I komponenter som behöver rollkontroll
+const { canEdit } = useAuth();
+
+{canEdit && (
+  <Button>Ny order</Button>
+)}
+```
+
+## Autentiseringskonfiguration
+
+Aktivera auto-bekräftelse av e-post (inget bekräftelsemail behövs):
+
+```toml
+# supabase/config.toml
+[auth]
+enable_signup = false  # Endast admin skapar användare
+
+[auth.email]
+enable_confirmations = false
+```
+
+## Teknisk detaljplan
+
+### Steg 1: Databasmigrering
+1. Skapa `app_role` enum
+2. Skapa `profiles` tabell med RLS
+3. Skapa `user_roles` tabell med RLS
+4. Skapa `has_role` security definer-funktion
+5. Skapa trigger för automatisk profilskapande
+6. Uppdatera RLS på befintliga tabeller (`orders`, `order_steps`, etc.)
+
+### Steg 2: Skapa auth-infrastruktur
+1. Skapa `src/types/auth.ts` med typdefinitioner
+2. Skapa `src/contexts/AuthContext.tsx`
+3. Skapa `src/hooks/useAuth.ts`
+4. Skapa `src/components/ProtectedRoute.tsx`
+
+### Steg 3: Skapa sidor
+1. Skapa `src/pages/Login.tsx`
+2. Skapa `src/pages/AdminPanel.tsx`
+
+### Steg 4: Integrera i app
+1. Uppdatera `src/App.tsx` med AuthProvider och routes
+2. Uppdatera `src/components/Layout.tsx` med admin-länk och utloggning
+3. Uppdatera relevanta komponenter för rollbaserad visning
+
+### Steg 5: Skapa första admin-användare
+1. Dokumentera hur man skapar första admin via SQL
+2. Alternativt: edge function för initial setup
+
+## Rollbaserade behörigheter (sammanfattning)
+
+| Funktion | Admin | Redigera | Läsa |
+|----------|-------|----------|------|
+| Se ordrar | ✓ | ✓ | ✓ |
+| Skapa order | ✓ | ✓ | ✗ |
+| Redigera order | ✓ | ✓ | ✗ |
+| Ändra status | ✓ | ✓ | ✗ |
+| Ta bort order | ✓ | ✗ | ✗ |
+| Produktionsvy | ✓ | ✓ | ✓ |
+| Adminpanel | ✓ | ✗ | ✗ |
+| Hantera användare | ✓ | ✗ | ✗ |
+
+## Framtida utbyggnad (ej MVP)
+
+Strukturen stödjer framtida utbyggnad:
+- **Kundinloggning**: Lägg till `customer_id` i profiles, skapa RLS-policy som begränsar till egna ordrar
+- **Per-kund-begränsning**: Utöka has_role med kundkoppling
+- **External read-only**: Ny roll `extern` med begränsad läsbehörighet
+
