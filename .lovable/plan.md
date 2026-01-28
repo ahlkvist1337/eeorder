@@ -1,86 +1,66 @@
 
 
-# Plan: Fixa automatisk statusändring + Ta bort "Planerad"-status
+# Plan: Beräkna ledtid baserat på verklig historikdata
 
-## Identifierat problem
+## Bakgrund
+Idag beräknas "Genomsnittlig ledtid" baserat på **planerade datum** (`plannedStart` och `plannedEnd`), vilket inte visar den faktiska produktionstiden.
 
-Automatiken för att ändra orderstatus till "Startad" fungerar inte på grund av fel kodväg:
-
-1. `OrderStepsEditor` anropar `onStepsChange` med alla uppdaterade steg
-2. `OrderDetails.tsx` tar emot detta via `handleStepsChange` och anropar `updateOrder(order.id, { steps: newSteps })`
-3. `updateOrder` i `OrdersContext` hanterar **INTE** automatisk statusändring - den logiken finns bara i `updateOrderStep`
-
-Resultat: När ett steg ändras till "Pågående" triggas aldrig koden som ska ändra ordern till "Startad".
+Du vill istället att ledtiden ska beräknas från **verklig historikdata** - specifikt tiden från när en order får status "Ankommen" tills den blir "Avslutad".
 
 ## Lösning
 
-### Del 1: Flytta automatisk statuslogik till `updateOrder`
+### Ändring i `src/pages/Statistics.tsx`
 
-Uppdatera `updateOrder`-funktionen i `OrdersContext.tsx` så att den också kontrollerar om något steg ändras till `in_progress` och uppdaterar orderstatusen automatiskt.
+Uppdatera beräkningslogiken för `avgLeadTimeDays`:
 
-**Modifiera `src/contexts/OrdersContext.tsx`:**
+1. **Filtrera avslutade ordrar** som har statushistorik
+2. **För varje order**, hitta:
+   - Första tidsstämpeln där `toStatus === 'arrived'` (ankomstdatum)
+   - Första tidsstämpeln där `toStatus === 'completed'` (avslutningsdatum)
+3. **Beräkna skillnaden** i dagar mellan dessa två tidpunkter
+4. **Visa genomsnitt** av alla ordrar som har båda datapunkterna
 
-I den del av `updateOrder` som hanterar `updates.steps`, lägg till logik för automatisk statusändring:
+### Kodexempel (konceptuellt)
 
 ```typescript
-// Inside updateOrder, after logging step history entries
-if (updates.steps !== undefined) {
-  const currentOrder = orders.find(o => o.id === id);
-  
-  if (currentOrder) {
-    // Check if any step is being changed to 'in_progress'
-    const hasNewInProgress = updates.steps.some(newStep => {
-      const oldStep = currentOrder.steps.find(s => s.id === newStep.id);
-      return oldStep && oldStep.status !== 'in_progress' && newStep.status === 'in_progress';
-    });
+// Beräkna verklig ledtid från statushistorik
+let avgLeadTimeDays = 0;
+const ordersWithLeadTime: number[] = [];
 
-    // Auto-change order status to "started" when a step begins
-    if (hasNewInProgress) {
-      const statusesThatShouldChangeToStarted: ProductionStatus[] = ['created', 'arrived'];
-      
-      if (statusesThatShouldChangeToStarted.includes(currentOrder.productionStatus)) {
-        await supabase.from('status_history').insert({
-          order_id: id,
-          from_status: currentOrder.productionStatus,
-          to_status: 'started',
-        });
-        
-        // Add to dbUpdates so it's included in the order update
-        dbUpdates.production_status = 'started';
-      }
+completedOrders.forEach(order => {
+  const arrivedEntry = order.statusHistory.find(h => h.toStatus === 'arrived');
+  const completedEntry = order.statusHistory.find(h => h.toStatus === 'completed');
+  
+  if (arrivedEntry && completedEntry) {
+    const arrivedDate = new Date(arrivedEntry.timestamp);
+    const completedDate = new Date(completedEntry.timestamp);
+    const days = Math.ceil((completedDate.getTime() - arrivedDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (days >= 0) {
+      ordersWithLeadTime.push(days);
     }
-    
-    // ... existing step history logging code ...
   }
+});
+
+if (ordersWithLeadTime.length > 0) {
+  avgLeadTimeDays = Math.round(
+    ordersWithLeadTime.reduce((sum, d) => sum + d, 0) / ordersWithLeadTime.length
+  );
 }
 ```
 
-### Del 2: Ta bort "Planerad" (planned) produktionsstatus
+### Uppdatera förklaringstexten
 
-Ta bort `planned` som en giltig produktionsstatus i hela applikationen.
+Ändra undertexten från:
+> "Baserat på planerade datum för avslutade ordrar"
 
-**Filer som ska uppdateras:**
+Till:
+> "Baserat på verklig tid från Ankommen till Avslutad"
 
-1. **`src/types/order.ts`** - Ta bort `'planned'` från `ProductionStatus` typ och `productionStatusLabels`
+## Fördel
 
-2. **`src/components/StatusBadge.tsx`** - Ta bort `planned` från `productionStatusColors`
+Denna förändring ger en **realistisk bild** av hur lång tid det faktiskt tar att behandla en order, baserat på verklig data istället för planer.
 
-3. **`src/contexts/OrdersContext.tsx`** - Ta bort `'planned'` från arrayen `statusesThatShouldChangeToStarted`
+---
 
-4. **`src/index.css`** - Ta bort CSS-variabeln `--status-planned` (om den finns)
-
-5. **Databas** - Behöver INTE ändras för enum-typen, men eventuella existerande ordrar med status `planned` bör migreras till `created` eller `arrived`
-
-### Ordning för genomförande
-
-1. Flytta automatisk statuslogik till `updateOrder` (hög prioritet - fixar buggen)
-2. Ta bort `planned` från TypeScript-typer
-3. Ta bort `planned` från UI-komponenter
-4. Uppdatera arrayen för statusar som triggar "started"
-
-## Resultat
-
-- När ett steg ändras till "Pågående" kommer ordern automatiskt att ändras till "Startad" (om den var "Skapad" eller "Ankommen")
-- "Planerad"-statusen finns inte längre i systemet
-- Förenklad statusflöde: Skapad → Ankommen → Startad → Pausad → Avslutad/Avbruten
+**Teknisk detalj**: Eftersom `statusHistory` redan hämtas och finns tillgänglig på varje order i `OrdersContext`, behövs inga databasändringar - endast en uppdatering av beräkningslogiken i Statistics-komponenten.
 
