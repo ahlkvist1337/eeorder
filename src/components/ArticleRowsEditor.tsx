@@ -2,21 +2,11 @@ import { useState } from 'react';
 import { Plus, Trash2, Edit2, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import type { ArticleRow, OrderStep } from '@/types/order';
+import type { ArticleRow } from '@/types/order';
 
 interface ArticleRowsEditorProps {
   rows: ArticleRow[];
-  steps?: OrderStep[];
   onRowsChange: (rows: ArticleRow[]) => void;
   showTotal?: boolean;
   readOnly?: boolean;
@@ -24,7 +14,6 @@ interface ArticleRowsEditorProps {
 
 export function ArticleRowsEditor({ 
   rows, 
-  steps = [], 
   onRowsChange, 
   showTotal = true,
   readOnly = false 
@@ -52,7 +41,6 @@ export function ArticleRowsEditor({
       quantity: newRow.quantity || 1,
       unit: newRow.unit || 'st.',
       price: newRow.price || 0,
-      stepId: newRow.stepId,
     };
     
     onRowsChange([...rows, row]);
@@ -90,12 +78,6 @@ export function ArticleRowsEditor({
     setEditForm({});
   };
 
-  const handleStepChange = (rowId: string, stepId: string) => {
-    onRowsChange(rows.map(r => 
-      r.id === rowId ? { ...r, stepId: stepId === 'none' ? undefined : stepId } : r
-    ));
-  };
-
   const total = rows.reduce((sum, row) => sum + (row.price * row.quantity), 0);
 
   return (
@@ -111,9 +93,6 @@ export function ArticleRowsEditor({
               <th className="text-left py-2 pr-2 font-medium text-muted-foreground w-16">Enhet</th>
               <th className="text-right py-2 pr-2 font-medium text-muted-foreground w-24">Pris</th>
               <th className="text-right py-2 pr-2 font-medium text-muted-foreground w-24">Summa</th>
-              {steps.length > 0 && (
-                <th className="text-left py-2 pr-2 font-medium text-muted-foreground w-32">Steg</th>
-              )}
               {!readOnly && <th className="w-20"></th>}
             </tr>
           </thead>
@@ -169,24 +148,6 @@ export function ArticleRowsEditor({
                     <td className="py-2 pr-2 text-right font-medium">
                       {((editForm.price || 0) * (editForm.quantity || 0)).toLocaleString('sv-SE')} kr
                     </td>
-                    {steps.length > 0 && (
-                      <td className="py-2 pr-2">
-                        <Select 
-                          value={editForm.stepId || 'none'} 
-                          onValueChange={(v) => setEditForm({ ...editForm, stepId: v === 'none' ? undefined : v })}
-                        >
-                          <SelectTrigger className="h-8 w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Ingen</SelectItem>
-                            {steps.map(step => (
-                              <SelectItem key={step.id} value={step.id}>{step.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                    )}
                     <td className="py-2">
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSaveEdit}>
@@ -209,30 +170,6 @@ export function ArticleRowsEditor({
                     <td className="py-2 pr-2 text-right font-medium">
                       {(row.price * row.quantity).toLocaleString('sv-SE')} kr
                     </td>
-                    {steps.length > 0 && (
-                      <td className="py-2 pr-2">
-                        {!readOnly ? (
-                          <Select 
-                            value={row.stepId || 'none'} 
-                            onValueChange={(v) => handleStepChange(row.id, v)}
-                          >
-                            <SelectTrigger className="h-8 w-full">
-                              <SelectValue placeholder="Välj steg" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">Ingen</SelectItem>
-                              {steps.map(step => (
-                                <SelectItem key={step.id} value={step.id}>{step.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <span className="text-muted-foreground">
-                            {steps.find(s => s.id === row.stepId)?.name || '-'}
-                          </span>
-                        )}
-                      </td>
-                    )}
                     {!readOnly && (
                       <td className="py-2">
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100">
@@ -313,24 +250,6 @@ export function ArticleRowsEditor({
                 <td className="py-2 pr-2 text-right font-medium">
                   {((newRow.price || 0) * (newRow.quantity || 0)).toLocaleString('sv-SE')} kr
                 </td>
-                {steps.length > 0 && (
-                  <td className="py-2 pr-2">
-                    <Select 
-                      value={newRow.stepId || 'none'} 
-                      onValueChange={(v) => setNewRow({ ...newRow, stepId: v === 'none' ? undefined : v })}
-                    >
-                      <SelectTrigger className="h-8 w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Ingen</SelectItem>
-                        {steps.map(step => (
-                          <SelectItem key={step.id} value={step.id}>{step.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </td>
-                )}
                 <td className="py-2">
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleAddRow}>
