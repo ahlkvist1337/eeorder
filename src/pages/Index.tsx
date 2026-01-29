@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Upload } from 'lucide-react';
+import { Plus, Upload, Search, X } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { OrdersTable } from '@/components/OrdersTable';
 import { OrderFilters } from '@/components/OrderFilters';
 import { BulkEditToolbar } from '@/components/BulkEditToolbar';
 import { BulkEditConfirmDialog, type BulkEditType } from '@/components/BulkEditConfirmDialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useOrders } from '@/contexts/OrdersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -16,6 +18,7 @@ const Index = () => {
   const { orders, isLoading, bulkUpdateOrders } = useOrders();
   const { canEdit } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [archiveSearchQuery, setArchiveSearchQuery] = useState('');
   const [filters, setFilters] = useState<{
     productionStatus: ProductionStatus | 'all';
     billingStatus: BillingStatus | 'all';
@@ -25,6 +28,19 @@ const Index = () => {
     billingStatus: 'all',
     hasDeviation: null,
   });
+
+  // Separate orders into active and archived
+  const activeOrders = useMemo(() => 
+    orders.filter(o => 
+      !(o.productionStatus === 'completed' && o.billingStatus === 'billed')
+    ), [orders]
+  );
+
+  const archivedOrders = useMemo(() => 
+    orders.filter(o => 
+      o.productionStatus === 'completed' && o.billingStatus === 'billed'
+    ), [orders]
+  );
 
   // Bulk edit state
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
@@ -80,6 +96,13 @@ const Index = () => {
     setSelectedOrderIds(new Set());
   };
 
+  // No filters for archived orders - just pass 'all' values
+  const noFilters = {
+    productionStatus: 'all' as const,
+    billingStatus: 'all' as const,
+    hasDeviation: null,
+  };
+
   if (isLoading) {
     return (
       <Layout>
@@ -119,33 +142,79 @@ const Index = () => {
           )}
         </div>
 
-        {/* Search and Filters */}
-        <OrderFilters 
-          filters={filters} 
-          onFiltersChange={setFilters} 
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-        />
+        {/* Tabs for active/archived orders */}
+        <Tabs defaultValue="active" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="active">
+              Aktuella ordrar ({activeOrders.length})
+            </TabsTrigger>
+            <TabsTrigger value="archive">
+              Orderhistorik ({archivedOrders.length})
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Bulk edit toolbar - only for editors */}
-        {canEdit && selectedOrderIds.size > 0 && (
-          <BulkEditToolbar
-            selectedCount={selectedOrderIds.size}
-            onProductionStatusChange={handleProductionStatusChange}
-            onBillingStatusChange={handleBillingStatusChange}
-            onDeviationChange={handleDeviationChange}
-            onClearSelection={handleClearSelection}
-          />
-        )}
+          {/* Active orders tab */}
+          <TabsContent value="active" className="space-y-4">
+            {/* Search and Filters */}
+            <OrderFilters 
+              filters={filters} 
+              onFiltersChange={setFilters} 
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+            />
 
-        {/* Orders table */}
-        <OrdersTable
-          orders={orders}
-          filters={filters}
-          searchQuery={searchQuery}
-          selectedOrderIds={canEdit ? selectedOrderIds : new Set()}
-          onSelectionChange={canEdit ? setSelectedOrderIds : () => {}}
-        />
+            {/* Bulk edit toolbar - only for editors */}
+            {canEdit && selectedOrderIds.size > 0 && (
+              <BulkEditToolbar
+                selectedCount={selectedOrderIds.size}
+                onProductionStatusChange={handleProductionStatusChange}
+                onBillingStatusChange={handleBillingStatusChange}
+                onDeviationChange={handleDeviationChange}
+                onClearSelection={handleClearSelection}
+              />
+            )}
+
+            {/* Orders table */}
+            <OrdersTable
+              orders={activeOrders}
+              filters={filters}
+              searchQuery={searchQuery}
+              selectedOrderIds={canEdit ? selectedOrderIds : new Set()}
+              onSelectionChange={canEdit ? setSelectedOrderIds : () => {}}
+            />
+          </TabsContent>
+
+          {/* Archived orders tab */}
+          <TabsContent value="archive" className="space-y-4">
+            {/* Simple search field only */}
+            <div className="relative w-full md:w-[360px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Sök på ordernummer, kund eller kommentar..."
+                value={archiveSearchQuery}
+                onChange={(e) => setArchiveSearchQuery(e.target.value)}
+                className="pl-9 pr-9 h-9"
+              />
+              {archiveSearchQuery && (
+                <button
+                  onClick={() => setArchiveSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Archived orders table - no selection, no filters */}
+            <OrdersTable
+              orders={archivedOrders}
+              filters={noFilters}
+              searchQuery={archiveSearchQuery}
+              selectedOrderIds={new Set()}
+              onSelectionChange={() => {}}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Confirmation dialog */}
