@@ -157,73 +157,73 @@ export default function OrderDetails() {
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6 overflow-x-hidden">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
+        <div className="flex flex-col gap-3 sm:gap-4">
+          <div className="flex items-start gap-2 sm:gap-4">
+            <Button variant="ghost" size="icon" className="shrink-0 -ml-2 sm:ml-0" onClick={() => navigate('/')}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div className="flex-1">
-              <div className="flex items-center gap-3">
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight font-mono">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <h1 className="text-lg sm:text-2xl font-bold tracking-tight font-mono truncate">
                   {order.orderNumber}
                 </h1>
                 {order.hasDeviation && (
-                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-destructive shrink-0" />
                 )}
               </div>
-              <p className="text-muted-foreground">{order.customer || 'Ingen kund angiven'}</p>
+              <p className="text-sm sm:text-base text-muted-foreground truncate">{order.customer || 'Ingen kund angiven'}</p>
             </div>
           </div>
-          <div className="flex gap-2 ml-12 sm:ml-0">
+          <div className="flex flex-wrap gap-2">
             <ProductionStatusBadge status={order.productionStatus} />
             <BillingStatusBadge status={order.billingStatus} />
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
           {/* Main content - 2 columns */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
             {/* Basic info */}
             <Card>
-              <CardHeader>
-                <CardTitle>Grunduppgifter</CardTitle>
+              <CardHeader className="pb-3 sm:pb-6">
+                <CardTitle className="text-base sm:text-lg">Grunduppgifter</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 sm:grid-cols-2">
+              <CardContent className="pt-0 sm:pt-0">
+                <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
                   <div>
-                    <Label className="text-muted-foreground">Kund</Label>
-                    <p className="font-medium">{order.customer || '-'}</p>
+                    <Label className="text-xs sm:text-sm text-muted-foreground">Kund</Label>
+                    <p className="font-medium text-sm sm:text-base break-words">{order.customer || '-'}</p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">Kundreferens</Label>
-                    <p className="font-medium">{order.customerReference || '-'}</p>
+                    <Label className="text-xs sm:text-sm text-muted-foreground">Kundreferens</Label>
+                    <p className="font-medium text-sm sm:text-base break-words">{order.customerReference || '-'}</p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">Planerat start</Label>
-                    <p className="font-medium">
+                    <Label className="text-xs sm:text-sm text-muted-foreground">Planerat start</Label>
+                    <p className="font-medium text-sm sm:text-base">
                       {order.plannedStart 
-                        ? format(new Date(order.plannedStart), 'd MMMM yyyy', { locale: sv })
+                        ? format(new Date(order.plannedStart), 'd MMM yyyy', { locale: sv })
                         : '-'}
                     </p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">Planerat slut</Label>
-                    <p className="font-medium">
+                    <Label className="text-xs sm:text-sm text-muted-foreground">Planerat slut</Label>
+                    <p className="font-medium text-sm sm:text-base">
                       {order.plannedEnd 
-                        ? format(new Date(order.plannedEnd), 'd MMMM yyyy', { locale: sv })
+                        ? format(new Date(order.plannedEnd), 'd MMM yyyy', { locale: sv })
                         : '-'}
                     </p>
                   </div>
                   {order.deliveryAddress && (
                     <div className="sm:col-span-2">
-                      <Label className="text-muted-foreground">Leveransadress</Label>
-                      <p className="font-medium">{order.deliveryAddress}</p>
+                      <Label className="text-xs sm:text-sm text-muted-foreground">Leveransadress</Label>
+                      <p className="font-medium text-sm sm:text-base break-words">{order.deliveryAddress}</p>
                     </div>
                   )}
                   <div className="sm:col-span-2 space-y-2">
-                    <Label className="text-muted-foreground">Kommentar</Label>
+                    <Label className="text-xs sm:text-sm text-muted-foreground">Kommentar</Label>
                     <Textarea
                       value={localComment}
                       onChange={(e) => {
@@ -232,6 +232,7 @@ export default function OrderDetails() {
                       }}
                       placeholder="Skriv en kommentar..."
                       rows={3}
+                      className="text-sm"
                     />
                     {hasUnsavedComment && (
                       <Button 
@@ -239,7 +240,7 @@ export default function OrderDetails() {
                         onClick={handleSaveComment}
                       >
                         <Save className="h-4 w-4 mr-2" />
-                        Spara kommentar
+                        Spara
                       </Button>
                     )}
                   </div>
@@ -249,13 +250,13 @@ export default function OrderDetails() {
 
             {/* Treatment steps */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Wrench className="h-5 w-5" />
+              <CardHeader className="pb-3 sm:pb-6">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <Wrench className="h-4 w-4 sm:h-5 sm:w-5" />
                   Behandlingssteg
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-0 sm:pt-0">
                 <OrderStepsEditor
                   steps={order.steps}
                   onStepsChange={handleStepsChange}
@@ -265,13 +266,13 @@ export default function OrderDetails() {
 
             {/* Article rows */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Package className="h-5 w-5" />
+              <CardHeader className="pb-3 sm:pb-6">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <Package className="h-4 w-4 sm:h-5 sm:w-5" />
                   Artikelrader
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-0 sm:pt-0">
                 <ArticleRowsEditor
                   rows={order.articleRows || []}
                   onRowsChange={handleArticleRowsChange}
@@ -282,24 +283,24 @@ export default function OrderDetails() {
 
             {/* Status history */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
+              <CardHeader className="pb-3 sm:pb-6">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
                   Statushistorik
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="grid gap-6 md:grid-cols-2">
+              <CardContent className="pt-0 sm:pt-0">
+                <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
                   {/* Order status history - left column */}
                   <div>
-                    <h4 className="font-medium text-sm text-muted-foreground mb-3">Orderstatus</h4>
+                    <h4 className="font-medium text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">Orderstatus</h4>
                     {order.statusHistory.length === 0 ? (
-                      <p className="text-muted-foreground text-sm">Ingen historik ännu.</p>
+                      <p className="text-muted-foreground text-xs sm:text-sm">Ingen historik ännu.</p>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="space-y-1.5 sm:space-y-2">
                         {[...order.statusHistory].reverse().map(change => (
-                          <div key={change.id} className="flex items-center gap-2 text-sm">
-                            <span className="text-muted-foreground text-xs min-w-[100px]">
+                          <div key={change.id} className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm">
+                            <span className="text-muted-foreground min-w-[70px] sm:min-w-[100px]">
                               {format(new Date(change.timestamp), 'd MMM HH:mm', { locale: sv })}
                             </span>
                             <ProductionStatusBadge status={change.fromStatus} className="text-xs" />
@@ -313,17 +314,17 @@ export default function OrderDetails() {
 
                   {/* Step status history - right column */}
                   <div>
-                    <h4 className="font-medium text-sm text-muted-foreground mb-3">Steghistorik</h4>
+                    <h4 className="font-medium text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">Steghistorik</h4>
                     {order.stepStatusHistory.length === 0 ? (
-                      <p className="text-muted-foreground text-sm">Ingen historik ännu.</p>
+                      <p className="text-muted-foreground text-xs sm:text-sm">Ingen historik ännu.</p>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="space-y-1.5 sm:space-y-2">
                         {[...order.stepStatusHistory].reverse().map(change => (
-                          <div key={change.id} className="flex items-center gap-2 text-sm">
-                            <span className="text-muted-foreground text-xs min-w-[100px]">
+                          <div key={change.id} className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm">
+                            <span className="text-muted-foreground min-w-[70px] sm:min-w-[100px]">
                               {format(new Date(change.timestamp), 'd MMM HH:mm', { locale: sv })}
                             </span>
-                            <span className="font-medium text-xs">{change.stepName}:</span>
+                            <span className="font-medium">{change.stepName}:</span>
                             <StepStatusBadge status={change.toStatus} className="text-xs" />
                           </div>
                         ))}
@@ -336,20 +337,20 @@ export default function OrderDetails() {
           </div>
 
           {/* Sidebar - 1 column */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Quick actions */}
             <Card>
-              <CardHeader>
-                <CardTitle>Åtgärder</CardTitle>
+              <CardHeader className="pb-3 sm:pb-6">
+                <CardTitle className="text-base sm:text-lg">Åtgärder</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Produktionsstatus</Label>
+              <CardContent className="space-y-3 sm:space-y-4 pt-0 sm:pt-0">
+                <div className="space-y-1.5 sm:space-y-2">
+                  <Label className="text-xs sm:text-sm">Produktionsstatus</Label>
                   <Select 
                     value={order.productionStatus} 
                     onValueChange={handleProductionStatusChange}
                   >
-                    <SelectTrigger className="bg-background">
+                    <SelectTrigger className="bg-background text-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-popover">
@@ -360,13 +361,13 @@ export default function OrderDetails() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Faktureringsstatus</Label>
+                <div className="space-y-1.5 sm:space-y-2">
+                  <Label className="text-xs sm:text-sm">Faktureringsstatus</Label>
                   <Select 
                     value={order.billingStatus} 
                     onValueChange={handleBillingStatusChange}
                   >
-                    <SelectTrigger className="bg-background">
+                    <SelectTrigger className="bg-background text-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-popover">
@@ -386,7 +387,7 @@ export default function OrderDetails() {
                       checked={order.hasDeviation}
                       onCheckedChange={(checked) => handleDeviationChange(!!checked)}
                     />
-                    <Label htmlFor="deviation" className="font-medium cursor-pointer flex items-center gap-2">
+                    <Label htmlFor="deviation" className="font-medium cursor-pointer flex items-center gap-2 text-sm">
                       <AlertTriangle className="h-4 w-4 text-destructive" />
                       Avvikelse
                     </Label>
@@ -401,6 +402,7 @@ export default function OrderDetails() {
                         }}
                         placeholder="Beskriv avvikelsen..."
                         rows={3}
+                        className="text-sm"
                       />
                       {hasUnsavedDeviationComment && (
                         <Button 
@@ -409,7 +411,7 @@ export default function OrderDetails() {
                           className="w-full"
                         >
                           <Save className="h-4 w-4 mr-2" />
-                          Spara kommentar
+                          Spara
                         </Button>
                       )}
                     </div>
@@ -427,30 +429,30 @@ export default function OrderDetails() {
 
             {/* Metadata */}
             <Card>
-              <CardHeader>
-                <CardTitle>Information</CardTitle>
+              <CardHeader className="pb-3 sm:pb-6">
+                <CardTitle className="text-base sm:text-lg">Information</CardTitle>
               </CardHeader>
-              <CardContent className="text-sm space-y-2">
+              <CardContent className="text-xs sm:text-sm space-y-1.5 sm:space-y-2 pt-0 sm:pt-0">
                 <div>
                   <span className="text-muted-foreground">Skapad:</span>{' '}
-                  {format(new Date(order.createdAt), 'd MMMM yyyy HH:mm', { locale: sv })}
+                  {format(new Date(order.createdAt), 'd MMM yyyy HH:mm', { locale: sv })}
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Senast uppdaterad:</span>{' '}
-                  {format(new Date(order.updatedAt), 'd MMMM yyyy HH:mm', { locale: sv })}
+                  <span className="text-muted-foreground">Uppdaterad:</span>{' '}
+                  {format(new Date(order.updatedAt), 'd MMM yyyy HH:mm', { locale: sv })}
                 </div>
               </CardContent>
             </Card>
 
             {/* Danger zone */}
             <Card className="border-destructive/50">
-              <CardHeader>
-                <CardTitle className="text-destructive">Farozon</CardTitle>
+              <CardHeader className="pb-3 sm:pb-6">
+                <CardTitle className="text-destructive text-base sm:text-lg">Farozon</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-0 sm:pt-0">
                 <Button 
                   variant="destructive" 
-                  className="w-full"
+                  className="w-full text-sm"
                   onClick={handleDelete}
                 >
                   Ta bort order
