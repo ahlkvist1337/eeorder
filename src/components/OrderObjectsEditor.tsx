@@ -43,7 +43,7 @@ export function OrderObjectsEditor({
   const [useCustomObjectName, setUseCustomObjectName] = useState(false);
   
   // Step add state per object
-  const [selectedTemplates, setSelectedTemplates] = useState<Record<string, string | undefined>>({});
+  const [selectedTemplates, setSelectedTemplates] = useState<Record<string, string>>({});
 
   // Get steps for a specific object
   const getStepsForObject = (objectId: string) => {
@@ -346,9 +346,9 @@ export function OrderObjectsEditor({
                       {/* Add step to object */}
                       <div className="flex gap-2 pt-2 border-t mt-3">
                         <Select 
-                          value={selectedTemplates[obj.id] ?? undefined} 
+                          value={selectedTemplates[obj.id] || ''} 
                           onValueChange={(v) => {
-                            if (v && v !== '_none') {
+                            if (v && v !== '_none' && v !== '') {
                               setSelectedTemplates(prev => ({ ...prev, [obj.id]: v }));
                             }
                           }}
@@ -371,9 +371,10 @@ export function OrderObjectsEditor({
                           </SelectContent>
                         </Select>
                         <Button 
+                          type="button"
                           size="sm"
                           onClick={() => handleAddStep(obj.id)} 
-                          disabled={!selectedTemplates[obj.id] || selectedTemplates[obj.id] === ''}
+                          disabled={!selectedTemplates[obj.id]}
                         >
                           <Plus className="h-4 w-4 mr-1" />
                           Lägg till
