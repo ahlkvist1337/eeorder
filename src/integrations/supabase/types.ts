@@ -96,12 +96,45 @@ export type Database = {
           },
         ]
       }
+      order_objects: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          order_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          order_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_objects_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_steps: {
         Row: {
           actual_end: string | null
           actual_start: string | null
           id: string
           name: string
+          object_id: string | null
           order_id: string
           planned_end: string | null
           planned_start: string | null
@@ -114,6 +147,7 @@ export type Database = {
           actual_start?: string | null
           id?: string
           name: string
+          object_id?: string | null
           order_id: string
           planned_end?: string | null
           planned_start?: string | null
@@ -126,6 +160,7 @@ export type Database = {
           actual_start?: string | null
           id?: string
           name?: string
+          object_id?: string | null
           order_id?: string
           planned_end?: string | null
           planned_start?: string | null
@@ -134,6 +169,13 @@ export type Database = {
           template_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "order_steps_object_id_fkey"
+            columns: ["object_id"]
+            isOneToOne: false
+            referencedRelation: "order_objects"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "order_steps_order_id_fkey"
             columns: ["order_id"]

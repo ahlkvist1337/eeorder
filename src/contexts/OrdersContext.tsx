@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus } from '@/types/order';
+import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject } from '@/types/order';
 
 // Database types (manual since types.ts may not be updated yet)
 interface DbOrder {
@@ -36,6 +36,15 @@ interface DbOrderStep {
   actual_start: string | null;
   actual_end: string | null;
   price: number | null;
+  object_id: string | null;
+}
+
+interface DbOrderObject {
+  id: string;
+  order_id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
 }
 
 interface DbArticleRow {
@@ -94,6 +103,7 @@ const OrdersContext = createContext<OrdersContextType | null>(null);
 
 function mapDbOrderToOrder(
   dbOrder: DbOrder,
+  objects: DbOrderObject[],
   steps: DbOrderStep[],
   articleRows: DbArticleRow[],
   statusHistory: DbStatusHistory[],
@@ -118,11 +128,18 @@ function mapDbOrderToOrder(
     xmlData: dbOrder.xml_data as Order['xmlData'],
     createdAt: dbOrder.created_at,
     updatedAt: dbOrder.updated_at,
+    objects: objects.map(o => ({
+      id: o.id,
+      name: o.name,
+      description: o.description || undefined,
+      createdAt: o.created_at,
+    })),
     steps: steps.map(s => ({
       id: s.id,
       templateId: s.template_id,
       name: s.name,
       status: s.status,
+      objectId: s.object_id || undefined,
       plannedStart: s.planned_start || undefined,
       plannedEnd: s.planned_end || undefined,
       actualStart: s.actual_start || undefined,
@@ -179,14 +196,16 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
       const orderIds = ordersData.map(o => o.id);
 
-      // Fetch related data in parallel
-      const [stepsResult, articleRowsResult, historyResult, stepHistoryResult] = await Promise.all([
+      // Fetch related data in parallel (including order_objects)
+      const [objectsResult, stepsResult, articleRowsResult, historyResult, stepHistoryResult] = await Promise.all([
+        supabase.from('order_objects').select('*').in('order_id', orderIds),
         supabase.from('order_steps').select('*').in('order_id', orderIds),
         supabase.from('article_rows').select('*').in('order_id', orderIds),
         supabase.from('status_history').select('*').in('order_id', orderIds),
         supabase.from('step_status_history').select('*').in('order_id', orderIds),
       ]);
 
+      if (objectsResult.error) throw objectsResult.error;
       if (stepsResult.error) throw stepsResult.error;
       if (articleRowsResult.error) throw articleRowsResult.error;
       if (historyResult.error) throw historyResult.error;
@@ -195,6 +214,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       const mappedOrders = ordersData.map(dbOrder => 
         mapDbOrderToOrder(
           dbOrder as DbOrder,
+          (objectsResult.data || []).filter(o => o.order_id === dbOrder.id) as DbOrderObject[],
           (stepsResult.data || []).filter(s => s.order_id === dbOrder.id) as DbOrderStep[],
           (articleRowsResult.data || []).filter(r => r.order_id === dbOrder.id) as DbArticleRow[],
           (historyResult.data || []).filter(h => h.order_id === dbOrder.id) as DbStatusHistory[],
@@ -247,6 +267,25 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
     const orderId = newOrderData.id;
 
+    // Insert objects if any (before steps, as steps reference objects)
+    let objectIdMap: Record<string, string> = {};
+    if (order.objects && order.objects.length > 0) {
+      const objectsToInsert = order.objects.map(obj => ({
+        id: obj.id,
+        order_id: orderId,
+        name: obj.name,
+        description: obj.description || null,
+      }));
+      
+      const { error: objectsError } = await supabase.from('order_objects').insert(objectsToInsert);
+      if (objectsError) throw objectsError;
+      
+      // Map old object IDs to new ones (in case they're the same, just keep track)
+      order.objects.forEach(obj => {
+        objectIdMap[obj.id] = obj.id;
+      });
+    }
+
     // Insert steps if any
     if (order.steps && order.steps.length > 0) {
       const { error: stepsError } = await supabase.from('order_steps').insert(
@@ -255,6 +294,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           template_id: step.templateId,
           name: step.name,
           status: step.status,
+          object_id: step.objectId || null,
           planned_start: step.plannedStart || null,
           planned_end: step.plannedEnd || null,
           actual_start: step.actualStart || null,
@@ -410,11 +450,29 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
             template_id: step.templateId,
             name: step.name,
             status: step.status,
+            object_id: step.objectId || null,
             planned_start: step.plannedStart || null,
             planned_end: step.plannedEnd || null,
             actual_start: step.actualStart || null,
             actual_end: step.actualEnd || null,
             price: step.price ?? null,
+          }))
+        );
+        if (error) throw error;
+      }
+    }
+
+    // Update objects if provided
+    if (updates.objects !== undefined) {
+      // Delete existing objects (steps will be deleted via cascade or already handled above)
+      await supabase.from('order_objects').delete().eq('order_id', id);
+      if (updates.objects.length > 0) {
+        const { error } = await supabase.from('order_objects').insert(
+          updates.objects.map(obj => ({
+            id: obj.id,
+            order_id: id,
+            name: obj.name,
+            description: obj.description || null,
           }))
         );
         if (error) throw error;

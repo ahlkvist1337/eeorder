@@ -20,13 +20,13 @@ import {
 } from '@/components/ui/select';
 import { ProductionStatusBadge, BillingStatusBadge } from '@/components/StatusBadge';
 import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
-import { OrderStepsEditor } from '@/components/OrderStepsEditor';
+import { OrderObjectsEditor } from '@/components/OrderObjectsEditor';
 import { OrderAttachments } from '@/components/OrderAttachments';
 import { useOrders } from '@/hooks/useOrders';
 import { useOrderAttachments } from '@/hooks/useOrderAttachments';
 import { useAuth } from '@/contexts/AuthContext';
 import { productionStatusLabels, billingStatusLabels, stepStatusLabels } from '@/types/order';
-import type { ProductionStatus, BillingStatus, OrderStep } from '@/types/order';
+import type { ProductionStatus, BillingStatus, OrderStep, OrderObject } from '@/types/order';
 import { StepStatusBadge } from '@/components/StatusBadge';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -103,12 +103,12 @@ export default function OrderDetails() {
     }
   };
 
-  const handleStepsChange = async (newSteps: OrderStep[]) => {
+  const handleObjectsAndStepsChange = async (newObjects: OrderObject[], newSteps: OrderStep[]) => {
     try {
       // Pass the current order.steps as previousSteps for comparison
-      await updateOrder(order.id, { steps: newSteps }, order.steps);
+      await updateOrder(order.id, { objects: newObjects, steps: newSteps }, order.steps);
     } catch (error) {
-      console.error('Error updating steps:', error);
+      console.error('Error updating objects and steps:', error);
     }
   };
 
@@ -330,18 +330,20 @@ export default function OrderDetails() {
               </CardContent>
             </Card>
 
-            {/* Treatment steps */}
+            {/* Objects and Treatment steps */}
             <Card>
               <CardHeader className="pb-3 sm:pb-6">
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                   <Wrench className="h-4 w-4 sm:h-5 sm:w-5" />
-                  Behandlingssteg
+                  Objekt & Behandlingssteg
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 sm:pt-0">
-                <OrderStepsEditor
+                <OrderObjectsEditor
+                  objects={order.objects || []}
                   steps={order.steps}
-                  onStepsChange={handleStepsChange}
+                  onObjectsChange={(newObjects) => handleObjectsAndStepsChange(newObjects, order.steps)}
+                  onStepsChange={(newSteps) => handleObjectsAndStepsChange(order.objects || [], newSteps)}
                 />
               </CardContent>
             </Card>

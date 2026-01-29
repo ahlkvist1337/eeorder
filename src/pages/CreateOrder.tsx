@@ -5,16 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useOrders } from '@/hooks/useOrders';
-import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
 import { parseMonitorXML } from '@/lib/xmlParser';
 import { Upload, FileText, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
-import type { Order, OrderStep, ParsedXMLOrder, ArticleRow } from '@/types/order';
+import { OrderObjectsEditor } from '@/components/OrderObjectsEditor';
+import type { Order, OrderStep, ParsedXMLOrder, ArticleRow, OrderObject } from '@/types/order';
 
 export default function CreateOrder() {
   const navigate = useNavigate();
@@ -22,7 +21,6 @@ export default function CreateOrder() {
   const defaultTab = searchParams.get('mode') === 'xml' ? 'xml' : 'manual';
   
   const { addOrder, orderNumberExists } = useOrders();
-  const { steps: treatmentSteps } = useTreatmentSteps();
 
   // Manual form state
   const [orderNumber, setOrderNumber] = useState('');
@@ -31,14 +29,16 @@ export default function CreateOrder() {
   const [plannedStart, setPlannedStart] = useState('');
   const [plannedEnd, setPlannedEnd] = useState('');
   const [comment, setComment] = useState('');
-  const [selectedSteps, setSelectedSteps] = useState<string[]>([]);
+  const [manualObjects, setManualObjects] = useState<OrderObject[]>([]);
+  const [manualSteps, setManualSteps] = useState<OrderStep[]>([]);
   const [manualArticleRows, setManualArticleRows] = useState<ArticleRow[]>([]);
   const [manualError, setManualError] = useState<string | null>(null);
 
   // XML import state
   const [xmlError, setXmlError] = useState<string | null>(null);
   const [parsedXml, setParsedXml] = useState<ParsedXMLOrder | null>(null);
-  const [xmlSelectedSteps, setXmlSelectedSteps] = useState<string[]>([]);
+  const [xmlObjects, setXmlObjects] = useState<OrderObject[]>([]);
+  const [xmlSteps, setXmlSteps] = useState<OrderStep[]>([]);
   const [xmlComment, setXmlComment] = useState('');
   const [isDragging, setIsDragging] = useState(false);
 
@@ -56,16 +56,6 @@ export default function CreateOrder() {
       return;
     }
 
-    const steps: OrderStep[] = selectedSteps.map(templateId => {
-      const template = treatmentSteps.find(t => t.id === templateId);
-      return {
-        id: crypto.randomUUID(),
-        templateId,
-        name: template?.name || 'Okänt steg',
-        status: 'pending',
-      };
-    });
-
     const totalPrice = manualArticleRows.reduce((sum, row) => sum + row.price * row.quantity, 0);
 
     const newOrder: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'> = {
@@ -77,7 +67,8 @@ export default function CreateOrder() {
       plannedStart: plannedStart || undefined,
       plannedEnd: plannedEnd || undefined,
       comment: comment.trim() || undefined,
-      steps,
+      objects: manualObjects.length > 0 ? manualObjects : undefined,
+      steps: manualSteps,
       hasDeviation: false,
       totalPrice,
       articleRows: manualArticleRows.length > 0 ? manualArticleRows : undefined,
@@ -149,16 +140,6 @@ export default function CreateOrder() {
   const handleXmlSubmit = async () => {
     if (!parsedXml) return;
 
-    const steps: OrderStep[] = xmlSelectedSteps.map(templateId => {
-      const template = treatmentSteps.find(t => t.id === templateId);
-      return {
-        id: crypto.randomUUID(),
-        templateId,
-        name: template?.name || 'Okänt steg',
-        status: 'pending',
-      };
-    });
-
     const newOrder: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'> = {
       orderNumber: parsedXml.orderNumber,
       customer: parsedXml.customer,
@@ -169,7 +150,8 @@ export default function CreateOrder() {
       plannedStart: parsedXml.orderDate || undefined,
       plannedEnd: parsedXml.deliveryDate || undefined,
       comment: xmlComment.trim() || undefined,
-      steps,
+      objects: xmlObjects.length > 0 ? xmlObjects : undefined,
+      steps: xmlSteps,
       hasDeviation: false,
       totalPrice: parsedXml.rows.reduce((sum, row) => sum + row.price * row.quantity, 0),
       xmlData: {
@@ -187,22 +169,6 @@ export default function CreateOrder() {
     } catch (error) {
       console.error('Error creating order:', error);
       setXmlError('Kunde inte skapa ordern. Försök igen.');
-    }
-  };
-
-  const toggleStep = (stepId: string, isXml: boolean) => {
-    if (isXml) {
-      setXmlSelectedSteps(prev => 
-        prev.includes(stepId) 
-          ? prev.filter(id => id !== stepId)
-          : [...prev, stepId]
-      );
-    } else {
-      setSelectedSteps(prev => 
-        prev.includes(stepId) 
-          ? prev.filter(id => id !== stepId)
-          : [...prev, stepId]
-      );
     }
   };
 
@@ -287,26 +253,15 @@ export default function CreateOrder() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Behandlingssteg</Label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {treatmentSteps.map(step => (
-                        <div key={step.id} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`step-${step.id}`}
-                            checked={selectedSteps.includes(step.id)}
-                            onCheckedChange={() => toggleStep(step.id, false)}
-                          />
-                          <Label htmlFor={`step-${step.id}`} className="font-normal cursor-pointer">
-                            {step.name}
-                          </Label>
-                        </div>
-                      ))}
+                    <Label>Objekt & Behandlingssteg</Label>
+                    <div className="border rounded-md p-4">
+                      <OrderObjectsEditor
+                        objects={manualObjects}
+                        steps={manualSteps}
+                        onObjectsChange={setManualObjects}
+                        onStepsChange={setManualSteps}
+                      />
                     </div>
-                    {treatmentSteps.length === 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        Inga behandlingssteg finns. Skapa steg under "Behandlingssteg".
-                      </p>
-                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -444,20 +399,14 @@ export default function CreateOrder() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Lägg till behandlingssteg</Label>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {treatmentSteps.map(step => (
-                          <div key={step.id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`xml-step-${step.id}`}
-                              checked={xmlSelectedSteps.includes(step.id)}
-                              onCheckedChange={() => toggleStep(step.id, true)}
-                            />
-                            <Label htmlFor={`xml-step-${step.id}`} className="font-normal cursor-pointer">
-                              {step.name}
-                            </Label>
-                          </div>
-                        ))}
+                      <Label>Objekt & Behandlingssteg</Label>
+                      <div className="border rounded-md p-4">
+                        <OrderObjectsEditor
+                          objects={xmlObjects}
+                          steps={xmlSteps}
+                          onObjectsChange={setXmlObjects}
+                          onStepsChange={setXmlSteps}
+                        />
                       </div>
                     </div>
 
@@ -477,7 +426,8 @@ export default function CreateOrder() {
                         variant="outline" 
                         onClick={() => {
                           setParsedXml(null);
-                          setXmlSelectedSteps([]);
+                          setXmlObjects([]);
+                          setXmlSteps([]);
                           setXmlComment('');
                         }}
                       >
