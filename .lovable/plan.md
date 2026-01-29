@@ -1,114 +1,199 @@
 
-## Målet
-Fixa “Tredje gången gilt”: när du väljer ett behandlingssteg i rullistan för ett objekt och klickar **Lägg till** ska steget faktiskt sparas och ligga kvar på objektet.
 
-## Vad som faktiskt är fel (root cause)
-Problemet sitter inte (primärt) i dropdownen längre – det sitter i hur vi **sparar till databasen** i `updateOrder(...)`.
+# Plan: Uppdatera Produktionsvyn för Objekt-hierarkin
 
-Just nu händer detta när du lägger till ett steg i ett objekt i orderdetaljvyn:
-
-1. `OrderObjectsEditor` lägger till steget i listan och anropar `onStepsChange(newSteps)`
-2. `OrderDetails` anropar `updateOrder(orderId, { objects: ..., steps: newSteps })`
-3. `updateOrder` gör:
-   - `DELETE FROM order_steps WHERE order_id = ...`
-   - `INSERT INTO order_steps (...)` (inkl. det nya steget med `object_id`)
-   - **sedan**: `DELETE FROM order_objects WHERE order_id = ...`
-   - `INSERT INTO order_objects (...)`
-
-Eftersom `order_steps.object_id` har **ON DELETE CASCADE** mot `order_objects`, så raderas alla steg som pekar på objektet när objekten tas bort – alltså raderas ditt nyligen insatta steg igen. Efter `fetchOrders()` ser du att inget har “lagts till”.
-
-Dessutom gör `OrderDetails` idag att objekt- och steguppdateringar kan skickas i **osynk** (två separata callbacks), vilket ökar risken för att vi sparar “fel kombination” (gamla objekt + nya steg, etc).
-
-## Lösning (vad vi ändrar)
-Vi gör sparlogiken robust så att:
-- Vi **aldrig** mass-raderar `order_objects` vid “vanliga” uppdateringar (t.ex. lägga till steg eller byta namn på objekt).
-- När både objekt och steg sparas samtidigt, sker det i rätt ordning så att vi inte råkar trigga cascade-delete på nyinsatta steg.
-- `OrderDetails` sparar **en konsekvent** (objects+steps) snapshot, gärna batchat/debouncat.
+## Sammanfattning
+Uppdatera ProductionOrderCard för att visa ordrar med deras objekt och tillhörande behandlingssteg på ett tydligt, hierarkiskt sätt. Korten ska visa objektnamn som rubriker med sina steg under, samt hantera bakåtkompatibilitet för äldre ordrar utan objekt.
 
 ---
 
-## Ändringar vi kommer göra (konkret)
+## Nuläge
 
-### 1) Fixa `updateOrder` i `src/contexts/OrdersContext.tsx`
-**Nuvarande fel:** “delete-all-objects + insert” gör att steps i objekt försvinner pga cascade.
+**ProductionOrderCard** visar idag:
+```
+┌─────────────────────────────────────┐
+│ 21210                               │
+│ ┌──────────┐                        │
+│ │ Ankommen │                        │
+│ └──────────┘                        │
+│                                     │
+│ ○ Målning RAL7040                   │  ← Platt lista, inget objektnamn
+│                                     │
+│ ─────────────────────────────       │
+│ Kund AB                             │
+│ 📅 Leveransredo: 15 feb 2026        │
+└─────────────────────────────────────┘
+```
 
-**Ny strategi:**
-- När `updates.objects` finns:
-  1. Hämta `currentOrder` från context (finns redan).
-  2. Räkna ut diff:
-     - `removedObjectIds = currentOrder.objects ids som inte finns i updates.objects`
-     - `upsertObjects = updates.objects` (alla som ska finnas kvar / uppdateras)
-  3. **Upsert** objekten istället för delete-all:
-     - `supabase.from('order_objects').upsert([...], { onConflict: 'id' })`
-     - Detta uppdaterar namn/description utan att radera rader => inga cascade deletes.
-  4. Om det finns borttagna objekt:
-     - (valfritt men korrekt) radera borttagna objekt med `.delete().in('id', removedObjectIds)`  
-       - OBS: detta kommer radera tillhörande steps via cascade, vilket är önskat när objekt tas bort.
-
-- När `updates.steps` finns:
-  - Vi kan fortsätta med “delete all steps + insert”, men:
-    - Om `updates.objects` också finns: kör objekt-upsert (och ev. objekt-delete) **innan** vi insertar steps.
-    - Då finns objekten kvar när vi skapar steps, och vi raderar inte objekten efteråt.
-
-**Resultat:** steg som läggs till på objekt ligger kvar efter save + refresh.
+**Data i databasen:**
+- Order 21210 har objekt "Stora Truck Delar" med steg "Målning RAL7040"
+- Order 21330 har steg utan objekt (legacy)
 
 ---
 
-### 2) Fixa hur `OrderDetails` skickar objects/steps till save (src/pages/OrderDetails.tsx)
-**Nuvarande problem:** `OrderObjectsEditor` har två separata callbacks, och `OrderDetails` skickar ibland “order.objects + newSteps” respektive “newObjects + order.steps”. Det kan bli osynk/race.
+## Ny design
 
-**Ny strategi i OrderDetails:**
-- Inför lokal “draft state”:
-  - `const [draftObjects, setDraftObjects] = useState(order.objects || [])`
-  - `const [draftSteps, setDraftSteps] = useState(order.steps)`
-- Synka draft när order laddas/ändras.
-- Skicka `draftObjects` + `draftSteps` in i `OrderObjectsEditor` (istället för direkt `order.objects/order.steps`).
-- När editor ändrar något:
-  - uppdatera draft state
-  - kör en **debouncad** save (t.ex. 150–300ms) som alltid skickar *senaste* `{ objects: draftObjects, steps: draftSteps }` i en och samma `updateOrder(...)`.
+```text
+┌───────────────────────────────────────────┐
+│ 21210                                     │
+│ ┌──────────┐                              │
+│ │ Ankommen │                              │
+│ └──────────┘                              │
+│                                           │
+│ ▸ Stora Truck Delar                       │  ← Objektnamn som rubrik
+│   ○ Målning RAL7040                       │  ← Steg indenterat under objekt
+│   ● Blästring                             │
+│                                           │
+│ ▸ Motorblock                              │  ← Annat objekt
+│   ◉ Sprutzink                             │
+│                                           │
+│ ─────────────────────────────────         │
+│ Kund AB                                   │
+│ 📅 Leveransredo: 15 feb 2026              │
+└───────────────────────────────────────────┘
+```
 
-**Extra:** Om `updateOrder` misslyckas visar vi en tydlig `toast.error(...)` istället för att bara logga i console, så du direkt ser om något inte sparats.
-
----
-
-### 3) Stabilitet i dropdownen (src/components/OrderObjectsEditor.tsx)
-Detta är sekundärt till den riktiga buggen ovan, men vi gör det stabilt:
-- Se till att Select är konsekvent “controlled” (undvika uncontrolled/controlled-varningen):
-  - använd alltid en string som `value` (t.ex. `selectedTemplates[obj.id] ?? ''`) istället för `undefined`.
-- Sätt `type="button"` på “Lägg till”-knappen för att framtidssäkra om komponenten skulle hamna i en `<form>`.
-
----
-
-## Filer som ändras
-1. `src/contexts/OrdersContext.tsx`  
-   - Byt ut objekt-hanteringen i `updateOrder` från “delete all + insert” till diff + upsert (+ delete removed).
-   - Säkerställ ordning: objects först, steps sen (när båda uppdateras).
-
-2. `src/pages/OrderDetails.tsx`  
-   - Inför draft state för `objects/steps`.
-   - Debounce/batch save till `updateOrder`.
-   - Tydliga toasts vid fel.
-
-3. `src/components/OrderObjectsEditor.tsx`  
-   - Stabil controlled Select value.
-   - `type="button"` på Add-knapp.
+**För ordrar utan objekt (bakåtkompatibilitet):**
+```text
+│ ○ Maskering                               │  ← Steg utan objekt visas direkt
+│ ● Blästring                               │
+│ ○ Sprutzink                               │
+```
 
 ---
 
-## Testplan (som jag kommer köra efter ändringen)
-1. Öppna order `/order/d10ee...` (din nuvarande).
-2. Välj objekt → välj behandlingssteg i dropdown → klicka **Lägg till**.
-   - Förväntat: steget visas direkt i listan och ligger kvar efter att sidan uppdaterar data.
-3. Uppdatera sidan (hard refresh).
-   - Förväntat: steget finns kvar på objektet.
-4. Lägg till samma behandlingssteg på ett annat objekt.
-   - Förväntat: fungerar (dubbletter tillåtna mellan objekt).
-5. Byt namn på ett objekt.
-   - Förväntat: alla dess steg ligger kvar.
-6. Ta bort ett objekt (om du har rätt behörighet).
-   - Förväntat: objektet tas bort och dess steg försvinner.
+## Filer att ändra
+
+| Fil | Ändring |
+|-----|---------|
+| `src/components/ProductionOrderCard.tsx` | Gruppera steg per objekt, visa objektnamn som rubriker |
+| `src/pages/ProductionScreen.tsx` | Uppdatera legend för att inkludera objektsymbol |
 
 ---
 
-## Varför detta kommer lösa det “på riktigt”
-Vi tar bort den underliggande orsaken (cascade-delete pga fel sparordning + delete-all objects) och gör sparningen deterministisk, istället för att försöka “lappa” UI-staten i dropdownen. Det gör att funktionen blir stabil även när du gör flera ändringar snabbt.
+## Detaljerade ändringar
+
+### 1. ProductionOrderCard.tsx
+
+**Logik för att gruppera steg:**
+```typescript
+// Gruppera steg per objekt
+const stepsWithObject = order.steps.filter(s => s.objectId);
+const stepsWithoutObject = order.steps.filter(s => !s.objectId);
+
+// Skapa map: objectId -> steg[]
+const stepsByObject = new Map<string, OrderStep[]>();
+stepsWithObject.forEach(step => {
+  const list = stepsByObject.get(step.objectId!) || [];
+  list.push(step);
+  stepsByObject.set(step.objectId!, list);
+});
+
+// Hämta objektinfo från order.objects
+const objectsWithSteps = (order.objects || []).filter(obj => 
+  stepsByObject.has(obj.id)
+);
+```
+
+**Ny renderingsstruktur:**
+```tsx
+<CardContent>
+  {/* Steg utan objekt (legacy / bakåtkompatibilitet) */}
+  {stepsWithoutObject.length > 0 && (
+    <div className="space-y-2 mb-4">
+      {stepsWithoutObject.map(step => (
+        <StepRow key={step.id} step={step} />
+      ))}
+    </div>
+  )}
+
+  {/* Objekt med sina steg */}
+  {objectsWithSteps.map(obj => (
+    <div key={obj.id} className="mb-4">
+      {/* Objektnamn som rubrik */}
+      <div className="flex items-center gap-2 mb-2">
+        <Box className="h-4 w-4 text-muted-foreground" />
+        <span className="font-semibold text-foreground">{obj.name}</span>
+      </div>
+      
+      {/* Steg för detta objekt, indenterade */}
+      <div className="pl-6 space-y-2">
+        {stepsByObject.get(obj.id)?.map(step => (
+          <StepRow key={step.id} step={step} />
+        ))}
+      </div>
+    </div>
+  ))}
+</CardContent>
+```
+
+**Extrahera StepRow som återanvändbar komponent:**
+```tsx
+function StepRow({ step }: { step: OrderStep }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div
+        className={cn(
+          'w-4 h-4 rounded-full ring-2 flex-shrink-0',
+          stepStatusIcons[step.status].bg,
+          stepStatusIcons[step.status].ring
+        )}
+      />
+      <span
+        className={cn(
+          'text-lg',
+          step.status === 'completed' && 'text-muted-foreground line-through',
+          step.status === 'in_progress' && 'font-semibold text-foreground',
+          step.status === 'pending' && 'text-muted-foreground'
+        )}
+      >
+        {step.name}
+      </span>
+    </div>
+  );
+}
+```
+
+### 2. ProductionScreen.tsx - Uppdatera legend
+
+Lägg till objekt-ikon i legenden:
+
+```tsx
+{/* Existing legend items */}
+<span className="text-muted-foreground ml-2">Objekt:</span>
+<div className="flex items-center gap-1">
+  <Box className="h-3 w-3 text-muted-foreground" />
+  <span className="text-xs">Orderobjekt</span>
+</div>
+```
+
+---
+
+## Visuella förbättringar
+
+1. **Objektrubrik:**
+   - Ikon: `Box` från lucide-react
+   - Font: `font-semibold`, normal storlek
+   - Färg: `text-foreground`
+
+2. **Indenterade steg:**
+   - Vänsterpadding: `pl-6` (24px)
+   - Mindre stegindikator: `w-4 h-4` istället för `w-5 h-5`
+   - Mindre text: `text-lg` istället för `text-xl`
+
+3. **Avklarade steg:**
+   - Lägg till `line-through` för `completed` steg för extra tydlighet
+
+4. **Tomt objekttillstånd:**
+   - Om ett objekt finns men har inga steg ännu, visa det ändå med "(inga steg)" text
+
+---
+
+## Testfall
+
+1. Order med objekt och steg (21210) - ska visa objektnamn + indenterade steg
+2. Order utan objekt (21330) - ska visa steg direkt (bakåtkompatibilitet)
+3. Order med flera objekt - ska gruppera korrekt
+4. Objekt utan steg - ska fortfarande visas
+5. Blandning av steg med och utan objekt - ska hantera båda
+
