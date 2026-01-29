@@ -60,9 +60,9 @@ export function OrderFilters({ filters, onFiltersChange, searchQuery, onSearchCh
     searchQuery.length > 0;
 
   return (
-    <div className="flex flex-wrap gap-3 items-center justify-between">
+    <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
       {/* Search field */}
-      <div className="relative w-[360px]">
+      <div className="relative w-full md:w-[360px]">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder="Sök på ordernummer, kund eller kommentar..."
@@ -80,60 +80,60 @@ export function OrderFilters({ filters, onFiltersChange, searchQuery, onSearchCh
         )}
       </div>
 
-      {/* Filters - pushed to the right */}
-      <div className="flex flex-wrap gap-3 items-center">
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-muted-foreground">Produktionsstatus:</span>
-        <Select value={filters.productionStatus} onValueChange={handleProductionStatusChange}>
-          <SelectTrigger className="w-[160px] h-9 bg-background">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-popover">
-            <SelectItem value="all">Alla</SelectItem>
-            {Object.entries(productionStatusLabels).map(([value, label]) => (
-              <SelectItem key={value} value={value}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Filters - pushed to the right on desktop, stacked on mobile */}
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-center">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground hidden sm:inline">Status:</span>
+          <Select value={filters.productionStatus} onValueChange={handleProductionStatusChange}>
+            <SelectTrigger className="w-full sm:w-[160px] h-9 bg-background">
+              <SelectValue placeholder="Produktionsstatus" />
+            </SelectTrigger>
+            <SelectContent className="bg-popover">
+              <SelectItem value="all">Alla statusar</SelectItem>
+              {Object.entries(productionStatusLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-muted-foreground">Fakturering:</span>
-        <Select value={filters.billingStatus} onValueChange={handleBillingStatusChange}>
-          <SelectTrigger className="w-[180px] h-9 bg-background">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-popover">
-            <SelectItem value="all">Alla</SelectItem>
-            {Object.entries(billingStatusLabels).map(([value, label]) => (
-              <SelectItem key={value} value={value}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground hidden sm:inline">Fakturering:</span>
+          <Select value={filters.billingStatus} onValueChange={handleBillingStatusChange}>
+            <SelectTrigger className="w-full sm:w-[180px] h-9 bg-background">
+              <SelectValue placeholder="Faktureringsstatus" />
+            </SelectTrigger>
+            <SelectContent className="bg-popover">
+              <SelectItem value="all">All fakturering</SelectItem>
+              {Object.entries(billingStatusLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-muted-foreground">Avvikelse:</span>
-        <Select 
-          value={filters.hasDeviation === null ? 'all' : filters.hasDeviation ? 'yes' : 'no'} 
-          onValueChange={handleDeviationChange}
-        >
-          <SelectTrigger className="w-[120px] h-9 bg-background">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-popover">
-            <SelectItem value="all">Alla</SelectItem>
-            <SelectItem value="yes">Ja</SelectItem>
-            <SelectItem value="no">Nej</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground hidden sm:inline">Avvikelse:</span>
+          <Select 
+            value={filters.hasDeviation === null ? 'all' : filters.hasDeviation ? 'yes' : 'no'} 
+            onValueChange={handleDeviationChange}
+          >
+            <SelectTrigger className="w-full sm:w-[120px] h-9 bg-background">
+              <SelectValue placeholder="Avvikelse" />
+            </SelectTrigger>
+            <SelectContent className="bg-popover">
+              <SelectItem value="all">Alla</SelectItem>
+              <SelectItem value="yes">Med avvikelse</SelectItem>
+              <SelectItem value="no">Utan avvikelse</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-      {hasActiveFilters && (
-        <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9">
-          Rensa filter
-        </Button>
-      )}
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 w-full sm:w-auto">
+            Rensa filter
+          </Button>
+        )}
       </div>
     </div>
   );

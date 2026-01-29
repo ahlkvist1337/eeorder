@@ -170,102 +170,162 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
   }
 
   return (
-    <div className="border rounded-sm">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/50 hover:bg-muted/50">
-            <TableHead className="w-[50px]">
-              <Checkbox
-                checked={allVisibleSelected}
-                ref={(el) => {
-                  if (el) {
-                    (el as HTMLButtonElement).dataset.state = someSelected && !allVisibleSelected ? 'indeterminate' : allVisibleSelected ? 'checked' : 'unchecked';
-                  }
-                }}
-                onCheckedChange={handleSelectAll}
-                aria-label="Markera alla"
-              />
-            </TableHead>
-            <TableHead className="w-[140px]">
-              <SortButton field="orderNumber">Ordernr</SortButton>
-            </TableHead>
-            <TableHead>
-              <SortButton field="customer">Kund</SortButton>
-            </TableHead>
-            <TableHead className="w-[120px]">
-              <SortButton field="productionStatus">Status</SortButton>
-            </TableHead>
-            <TableHead className="w-[100px]">
-              <SortButton field="plannedStart">Start</SortButton>
-            </TableHead>
-            <TableHead className="w-[100px]">
-              <SortButton field="plannedEnd">Klart</SortButton>
-            </TableHead>
-            <TableHead className="w-[160px]">Nästa steg</TableHead>
-            <TableHead className="w-[200px]">Kommentar</TableHead>
-            <TableHead className="w-[150px]">
-              <SortButton field="billingStatus">Fakturering</SortButton>
-            </TableHead>
-            <TableHead className="w-[50px]"></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sortedOrders.map(order => {
-            const isSelected = selectedOrderIds.has(order.id);
-            return (
-              <TableRow
-                key={order.id}
-                className={`cursor-pointer hover:bg-accent/50 ${isSelected ? 'bg-primary/10' : ''}`}
-                onClick={() => navigate(`/order/${order.id}`)}
-              >
-                <TableCell onClick={(e) => e.stopPropagation()}>
-                  <Checkbox
-                    checked={isSelected}
-                    onCheckedChange={(checked) => handleSelectOrder(order.id, checked as boolean)}
-                    aria-label={`Markera order ${order.orderNumber}`}
-                  />
-                </TableCell>
-                <TableCell className="font-mono font-semibold">
-                  {order.orderNumber}
-                </TableCell>
-              <TableCell>{order.customer || '-'}</TableCell>
-              <TableCell>
+    <>
+      {/* Desktop table */}
+      <div className="hidden md:block border rounded-sm">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className="w-[50px]">
+                <Checkbox
+                  checked={allVisibleSelected}
+                  ref={(el) => {
+                    if (el) {
+                      (el as HTMLButtonElement).dataset.state = someSelected && !allVisibleSelected ? 'indeterminate' : allVisibleSelected ? 'checked' : 'unchecked';
+                    }
+                  }}
+                  onCheckedChange={handleSelectAll}
+                  aria-label="Markera alla"
+                />
+              </TableHead>
+              <TableHead className="w-[140px]">
+                <SortButton field="orderNumber">Ordernr</SortButton>
+              </TableHead>
+              <TableHead>
+                <SortButton field="customer">Kund</SortButton>
+              </TableHead>
+              <TableHead className="w-[120px]">
+                <SortButton field="productionStatus">Status</SortButton>
+              </TableHead>
+              <TableHead className="w-[100px]">
+                <SortButton field="plannedStart">Start</SortButton>
+              </TableHead>
+              <TableHead className="w-[100px]">
+                <SortButton field="plannedEnd">Klart</SortButton>
+              </TableHead>
+              <TableHead className="w-[160px]">Nästa steg</TableHead>
+              <TableHead className="w-[200px]">Kommentar</TableHead>
+              <TableHead className="w-[150px]">
+                <SortButton field="billingStatus">Fakturering</SortButton>
+              </TableHead>
+              <TableHead className="w-[50px]"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedOrders.map(order => {
+              const isSelected = selectedOrderIds.has(order.id);
+              return (
+                <TableRow
+                  key={order.id}
+                  className={`cursor-pointer hover:bg-accent/50 ${isSelected ? 'bg-primary/10' : ''}`}
+                  onClick={() => navigate(`/order/${order.id}`)}
+                >
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={(checked) => handleSelectOrder(order.id, checked as boolean)}
+                      aria-label={`Markera order ${order.orderNumber}`}
+                    />
+                  </TableCell>
+                  <TableCell className="font-mono font-semibold">
+                    {order.orderNumber}
+                  </TableCell>
+                  <TableCell>{order.customer || '-'}</TableCell>
+                  <TableCell>
+                    <ProductionStatusBadge status={order.productionStatus} />
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {order.plannedStart 
+                      ? format(new Date(order.plannedStart), 'd MMM', { locale: sv })
+                      : '-'}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {order.plannedEnd 
+                      ? format(new Date(order.plannedEnd), 'd MMM', { locale: sv })
+                      : '-'}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {getNextStep(order)}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground max-w-[200px]" title={order.comment || ''}>
+                    {order.comment ? (
+                      <span className="flex items-center gap-1">
+                        <MessageSquare className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{order.comment}</span>
+                      </span>
+                    ) : '-'}
+                  </TableCell>
+                  <TableCell>
+                    <BillingStatusBadge status={order.billingStatus} />
+                  </TableCell>
+                  <TableCell>
+                    {order.hasDeviation && (
+                      <AlertTriangle className="h-4 w-4 text-destructive" />
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Mobile card list */}
+      <div className="md:hidden space-y-2">
+        {sortedOrders.map(order => {
+          const isSelected = selectedOrderIds.has(order.id);
+          return (
+            <div
+              key={order.id}
+              className={`border rounded-lg p-4 cursor-pointer active:bg-accent/50 ${isSelected ? 'bg-primary/10 border-primary/30' : 'bg-card'}`}
+              onClick={() => navigate(`/order/${order.id}`)}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={(checked) => handleSelectOrder(order.id, checked as boolean)}
+                      aria-label={`Markera order ${order.orderNumber}`}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold text-base">
+                        {order.orderNumber}
+                      </span>
+                      {order.hasDeviation && (
+                        <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {order.customer || 'Ingen kund'}
+                    </p>
+                  </div>
+                </div>
                 <ProductionStatusBadge status={order.productionStatus} />
-              </TableCell>
-              <TableCell className="text-sm">
-                {order.plannedStart 
-                  ? format(new Date(order.plannedStart), 'd MMM', { locale: sv })
-                  : '-'}
-              </TableCell>
-              <TableCell className="text-sm">
-                {order.plannedEnd 
-                  ? format(new Date(order.plannedEnd), 'd MMM', { locale: sv })
-                  : '-'}
-              </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-                {getNextStep(order)}
-              </TableCell>
-              <TableCell className="text-sm text-muted-foreground max-w-[200px]" title={order.comment || ''}>
-                {order.comment ? (
-                  <span className="flex items-center gap-1">
-                    <MessageSquare className="h-3 w-3 flex-shrink-0" />
-                    <span className="truncate">{order.comment}</span>
+              </div>
+              
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {order.plannedEnd && (
+                  <span>
+                    Klart: {format(new Date(order.plannedEnd), 'd MMM', { locale: sv })}
                   </span>
-                ) : '-'}
-              </TableCell>
-              <TableCell>
+                )}
+                <span className="text-muted-foreground/50">•</span>
                 <BillingStatusBadge status={order.billingStatus} />
-              </TableCell>
-                <TableCell>
-                  {order.hasDeviation && (
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
-                  )}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
+              </div>
+              
+              {order.comment && (
+                <p className="mt-2 text-xs text-muted-foreground line-clamp-2 flex items-start gap-1">
+                  <MessageSquare className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                  {order.comment}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }

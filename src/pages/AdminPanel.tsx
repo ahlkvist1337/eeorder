@@ -288,8 +288,8 @@ export default function AdminPanel() {
           </Dialog>
         </div>
 
-        {/* Users table */}
-        <div className="border rounded-lg">
+        {/* Desktop table */}
+        <div className="hidden md:block border rounded-lg">
           <Table>
             <TableHeader>
               <TableRow>
@@ -344,6 +344,54 @@ export default function AdminPanel() {
               )}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Mobile card list */}
+        <div className="md:hidden space-y-3">
+          {users.map((user) => (
+            <div key={user.id} className="border rounded-lg p-4 bg-card space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium truncate">{user.full_name || '-'}</p>
+                  <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Aktiv</span>
+                  <Switch
+                    checked={user.is_active}
+                    onCheckedChange={(checked) =>
+                      handleToggleActive(user.id, checked)
+                    }
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Roll:</span>
+                <Select
+                  value={user.roles[0] || 'lasa'}
+                  onValueChange={(v) => handleChangeRole(user.id, v as AppRole)}
+                >
+                  <SelectTrigger className="w-32">
+                    <SelectValue>
+                      <Badge variant={roleBadgeVariants[user.roles[0] || 'lasa']}>
+                        {roleLabels[user.roles[0] || 'lasa']}
+                      </Badge>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="redigera">Redigera</SelectItem>
+                    <SelectItem value="lasa">Läsa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ))}
+          {users.length === 0 && (
+            <div className="text-center text-muted-foreground py-8">
+              Inga användare hittades
+            </div>
+          )}
         </div>
       </div>
     </Layout>
