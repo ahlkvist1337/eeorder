@@ -43,7 +43,7 @@ export function OrderObjectsEditor({
   const [useCustomObjectName, setUseCustomObjectName] = useState(false);
   
   // Step add state per object
-  const [selectedTemplates, setSelectedTemplates] = useState<Record<string, string>>({});
+  const [selectedTemplates, setSelectedTemplates] = useState<Record<string, string | undefined>>({});
 
   // Get steps for a specific object
   const getStepsForObject = (objectId: string) => {
@@ -121,10 +121,16 @@ export function OrderObjectsEditor({
   // Step management within objects
   const handleAddStep = (objectId: string) => {
     const templateId = selectedTemplates[objectId];
-    if (!templateId) return;
+    if (!templateId) {
+      console.log('No template selected for object', objectId);
+      return;
+    }
     
     const template = treatmentTemplates.find(t => t.id === templateId);
-    if (!template) return;
+    if (!template) {
+      console.log('Template not found:', templateId);
+      return;
+    }
 
     const newStep: OrderStep = {
       id: crypto.randomUUID(),
@@ -135,7 +141,12 @@ export function OrderObjectsEditor({
     };
 
     onStepsChange([...steps, newStep]);
-    setSelectedTemplates(prev => ({ ...prev, [objectId]: '' }));
+    // Nollställ efter att steget lagts till
+    setSelectedTemplates(prev => {
+      const next = { ...prev };
+      delete next[objectId];
+      return next;
+    });
   };
 
   const handleRemoveStep = (stepId: string) => {
@@ -335,8 +346,12 @@ export function OrderObjectsEditor({
                       {/* Add step to object */}
                       <div className="flex gap-2 pt-2 border-t mt-3">
                         <Select 
-                          value={selectedTemplates[obj.id] || ''} 
-                          onValueChange={(v) => setSelectedTemplates(prev => ({ ...prev, [obj.id]: v }))}
+                          value={selectedTemplates[obj.id] ?? undefined} 
+                          onValueChange={(v) => {
+                            if (v && v !== '_none') {
+                              setSelectedTemplates(prev => ({ ...prev, [obj.id]: v }));
+                            }
+                          }}
                         >
                           <SelectTrigger className="flex-1 h-9 text-sm bg-background">
                             <SelectValue placeholder="Välj behandlingssteg..." />
@@ -358,7 +373,7 @@ export function OrderObjectsEditor({
                         <Button 
                           size="sm"
                           onClick={() => handleAddStep(obj.id)} 
-                          disabled={!selectedTemplates[obj.id]}
+                          disabled={!selectedTemplates[obj.id] || selectedTemplates[obj.id] === ''}
                         >
                           <Plus className="h-4 w-4 mr-1" />
                           Lägg till
