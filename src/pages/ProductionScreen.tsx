@@ -3,7 +3,7 @@ import { useOrders } from '@/contexts/OrdersContext';
 import { ProductionOrderCard } from '@/components/ProductionOrderCard';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { Pause } from 'lucide-react';
+import { Pause, Box } from 'lucide-react';
 import eeLogo from '@/assets/ee_logga.png';
 
 export default function ProductionScreen() {
@@ -65,6 +65,11 @@ export default function ProductionScreen() {
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-full ring-1 ring-[hsl(var(--status-completed))] bg-[hsl(var(--status-completed))]" />
             <span className="text-xs">Klar</span>
+          </div>
+          <span className="text-muted-foreground ml-2">Objekt:</span>
+          <div className="flex items-center gap-1">
+            <Box className="h-3 w-3 text-muted-foreground" />
+            <span className="text-xs">Orderobjekt</span>
           </div>
         </div>
 
