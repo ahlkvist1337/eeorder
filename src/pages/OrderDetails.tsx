@@ -159,22 +159,24 @@ export default function OrderDetails() {
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight font-mono">
-                {order.orderNumber}
-              </h1>
-              {order.hasDeviation && (
-                <AlertTriangle className="h-5 w-5 text-destructive" />
-              )}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="flex-1">
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight font-mono">
+                  {order.orderNumber}
+                </h1>
+                {order.hasDeviation && (
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                )}
+              </div>
+              <p className="text-muted-foreground">{order.customer || 'Ingen kund angiven'}</p>
             </div>
-            <p className="text-muted-foreground">{order.customer || 'Ingen kund angiven'}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 ml-12 sm:ml-0">
             <ProductionStatusBadge status={order.productionStatus} />
             <BillingStatusBadge status={order.billingStatus} />
           </div>

@@ -1,9 +1,15 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { ClipboardList, Plus, Settings, BarChart3, Tv, Users, LogOut } from 'lucide-react';
+import { ClipboardList, Plus, Settings, BarChart3, Tv, Users, LogOut, Menu } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import eeLogo from '@/assets/ee_logga.png';
 
 interface LayoutProps {
@@ -22,6 +28,7 @@ export function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, isAdmin, canEdit, signOut } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -34,6 +41,48 @@ export function Layout({ children }: LayoutProps) {
     return true;
   });
 
+  const NavLinks = ({ onClick }: { onClick?: () => void }) => (
+    <>
+      {visibleNavItems.map(item => {
+        const Icon = item.icon;
+        const isActive = location.pathname === item.to;
+        return (
+          <Link
+            key={item.to}
+            to={item.to}
+            onClick={onClick}
+            className={cn(
+              'flex items-center gap-2 px-3 py-2 rounded-sm text-sm font-medium transition-colors',
+              isActive
+                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {item.label}
+          </Link>
+        );
+      })}
+      
+      {/* Admin link - only for admins */}
+      {isAdmin && (
+        <Link
+          to="/admin"
+          onClick={onClick}
+          className={cn(
+            'flex items-center gap-2 px-3 py-2 rounded-sm text-sm font-medium transition-colors',
+            location.pathname === '/admin'
+              ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+              : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+          )}
+        >
+          <Users className="h-4 w-4" />
+          Admin
+        </Link>
+      )}
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -41,48 +90,14 @@ export function Layout({ children }: LayoutProps) {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-14">
             <Link to="/" className="flex items-center gap-3">
-              <img src={eeLogo} alt="EE Logo" className="h-10 w-auto" />
-              <span className="font-bold text-lg tracking-tight">Orderhantering</span>
+              <img src={eeLogo} alt="EE Logo" className="h-8 md:h-10 w-auto" />
+              <span className="font-bold text-base md:text-lg tracking-tight">Orderhantering</span>
             </Link>
             
-            <div className="flex items-center gap-1">
-              {/* Navigation */}
+            {/* Desktop navigation */}
+            <div className="hidden md:flex items-center gap-1">
               <nav className="flex items-center gap-1">
-                {visibleNavItems.map(item => {
-                  const Icon = item.icon;
-                  const isActive = location.pathname === item.to;
-                  return (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      className={cn(
-                        'flex items-center gap-2 px-3 py-2 rounded-sm text-sm font-medium transition-colors',
-                        isActive
-                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                          : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {item.label}
-                    </Link>
-                  );
-                })}
-                
-                {/* Admin link - only for admins */}
-                {isAdmin && (
-                  <Link
-                    to="/admin"
-                    className={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-sm text-sm font-medium transition-colors',
-                      location.pathname === '/admin'
-                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                        : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                    )}
-                  >
-                    <Users className="h-4 w-4" />
-                    Admin
-                  </Link>
-                )}
+                <NavLinks />
               </nav>
 
               {/* Divider */}
@@ -103,9 +118,46 @@ export function Layout({ children }: LayoutProps) {
                 </Button>
               </div>
             </div>
+
+            {/* Mobile: hamburger + logout */}
+            <div className="flex md:hidden items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSignOut}
+                className="text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setMobileMenuOpen(true)}
+                className="text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
         </div>
       </header>
+
+      {/* Mobile menu sheet */}
+      <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+        <SheetContent side="right" className="w-[280px] bg-sidebar text-sidebar-foreground">
+          <SheetHeader>
+            <SheetTitle className="text-sidebar-foreground">Meny</SheetTitle>
+          </SheetHeader>
+          <nav className="flex flex-col gap-1 mt-6">
+            <NavLinks onClick={() => setMobileMenuOpen(false)} />
+          </nav>
+          <div className="mt-6 pt-6 border-t border-sidebar-border">
+            <p className="text-sm text-sidebar-foreground/70 px-3">
+              Inloggad som: {profile?.full_name || profile?.email}
+            </p>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Main content */}
       <main className="container mx-auto px-4 py-6">

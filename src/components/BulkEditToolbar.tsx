@@ -26,14 +26,14 @@ export function BulkEditToolbar({
   onClearSelection,
 }: BulkEditToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-4 p-4 bg-muted/50 border rounded-lg">
+    <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 sm:gap-4 p-4 bg-muted/50 border rounded-lg">
       <span className="font-medium text-sm">
         {selectedCount} {selectedCount === 1 ? 'order markerad' : 'ordrar markerade'}
       </span>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-2 w-full sm:w-auto">
         <Select onValueChange={(value) => onProductionStatusChange(value as ProductionStatus)}>
-          <SelectTrigger className="w-[160px] bg-background">
+          <SelectTrigger className="w-full sm:w-[160px] bg-background">
             <SelectValue placeholder="Produktionsstatus" />
           </SelectTrigger>
           <SelectContent className="bg-background z-50">
@@ -46,7 +46,7 @@ export function BulkEditToolbar({
         </Select>
 
         <Select onValueChange={(value) => onBillingStatusChange(value as BillingStatus)}>
-          <SelectTrigger className="w-[180px] bg-background">
+          <SelectTrigger className="w-full sm:w-[180px] bg-background">
             <SelectValue placeholder="Faktureringsstatus" />
           </SelectTrigger>
           <SelectContent className="bg-background z-50">
@@ -58,11 +58,12 @@ export function BulkEditToolbar({
           </SelectContent>
         </Select>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 w-full sm:w-auto">
           <span className="text-sm text-muted-foreground mr-1">Avvikelse:</span>
           <Button
             variant="outline"
             size="sm"
+            className="flex-1 sm:flex-none"
             onClick={() => onDeviationChange(true)}
           >
             Ja
@@ -70,6 +71,7 @@ export function BulkEditToolbar({
           <Button
             variant="outline"
             size="sm"
+            className="flex-1 sm:flex-none"
             onClick={() => onDeviationChange(false)}
           >
             Nej
@@ -80,7 +82,7 @@ export function BulkEditToolbar({
           variant="ghost"
           size="sm"
           onClick={onClearSelection}
-          className="ml-2"
+          className="w-full sm:w-auto sm:ml-2"
         >
           <X className="h-4 w-4 mr-1" />
           Rensa markering
