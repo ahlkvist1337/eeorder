@@ -1,117 +1,150 @@
 
-# Plan: Separera Helt Klara Ordrar till Egen Flik
+
+# Plan: Objekthantering i Orderhanteringssystemet
 
 ## Sammanfattning
-Skapa ett fliksystem på orderöversikten där "Aktuella ordrar" och "Orderhistorik" separeras. Ordrar med produktionsstatus "Avslutad" OCH faktureringsstatus "Fakturerad" flyttas automatiskt till historikfliken.
+Lägga till stöd för "objekt" som en mellanliggande nivå mellan order och behandlingssteg. Ett objekt representerar en del av en order som kan följas separat med sina egna behandlingssteg.
 
 ---
 
-## Lösningsöversikt
+## Datastruktur
 
-### Flikar
-1. **Aktuella ordrar** (standard) - Alla ordrar som INTE är helt klara
-2. **Orderhistorik** - Ordrar med `productionStatus === 'completed'` OCH `billingStatus === 'billed'`
+**Ny hierarki:**
+```text
+Order
+  └── Objekt (1 eller flera)
+        └── Behandlingssteg (1 eller flera per objekt)
+```
 
-### Funktionalitet per flik
-| Funktion | Aktuella ordrar | Orderhistorik |
-|----------|-----------------|---------------|
-| Sökfunktion | Ja | Ja |
-| Statusfilter | Ja | Nej |
-| Faktureringsfilter | Ja | Nej |
-| Avvikelsefilter | Ja | Nej |
-| Massredigering | Ja | Nej |
+**Exempel:**
+- Order 12345 (Kund: ACME AB)
+  - Objekt A: "Ram vänster"
+    - Blästring
+    - Målning
+  - Objekt B: "Ram höger"
+    - Blästring
+    - Målning
+  - Objekt C: "Motorblock"
+    - Sprutzink
 
 ---
 
-## Implementation
+## Databasändringar
 
-### Fil: `src/pages/Index.tsx`
+### Ny tabell: `order_objects`
+| Kolumn | Typ | Beskrivning |
+|--------|-----|-------------|
+| id | uuid | Primärnyckel |
+| order_id | uuid | FK till orders |
+| name | text | Namn på objektet (t.ex. "Ram vänster") |
+| description | text | Valfri beskrivning |
+| created_at | timestamp | Skapades |
 
-1. **Lägg till Tabs-komponenten** från shadcn/ui
-2. **Separera ordrar i två listor:**
-   - `activeOrders` = ordrar där INTE (productionStatus === 'completed' OCH billingStatus === 'billed')
-   - `archivedOrders` = ordrar där productionStatus === 'completed' OCH billingStatus === 'billed'
+### Ändring i `order_steps`
+| Ny kolumn | Typ | Beskrivning |
+|-----------|-----|-------------|
+| object_id | uuid | FK till order_objects (nullable för bakåtkompatibilitet) |
 
-3. **Skapa två flikar:**
-   - "Aktuella ordrar" med antal i parentes
-   - "Orderhistorik" med antal i parentes
+**Bakåtkompatibilitet:** Befintliga order som inte har objekt kommer fortsätta fungera eftersom `object_id` är nullable.
 
-4. **Aktuella ordrar-fliken:**
-   - Visar befintliga OrderFilters med alla filter
-   - Visar BulkEditToolbar
-   - Visar OrdersTable med activeOrders
+---
 
-5. **Orderhistorik-fliken:**
-   - Visar endast sökfält (ingen full OrderFilters-komponent)
-   - Inget BulkEditToolbar
-   - Visar OrdersTable med archivedOrders (utan filter)
+## Komponentändringar
 
-### Logik för orderseparering
-```typescript
-// I Index.tsx
-const activeOrders = useMemo(() => 
-  orders.filter(o => 
-    !(o.productionStatus === 'completed' && o.billingStatus === 'billed')
-  ), [orders]
-);
+### Ny komponent: `OrderObjectsEditor.tsx`
+Ersätter/utökar nuvarande `OrderStepsEditor` i OrderDetails och CreateOrder.
 
-const archivedOrders = useMemo(() => 
-  orders.filter(o => 
-    o.productionStatus === 'completed' && o.billingStatus === 'billed'
-  ), [orders]
-);
-```
+**Funktionalitet:**
+- Lista alla objekt i ordern
+- Lägga till nytt objekt (namn + valfri beskrivning)
+- Redigera objektnamn
+- Ta bort objekt (med bekräftelse om det har steg)
+- Visa behandlingssteg per objekt (expanderbart)
+- Lägga till behandlingssteg till specifikt objekt
+- Samma behandlingssteg kan finnas på flera objekt (t.ex. "Målning" på både objekt A och B)
 
-### UI-struktur
-```
+**UI-struktur:**
+```text
 ┌─────────────────────────────────────────────────────────────┐
-│  Orderöversikt                      [Importera XML] [Ny order] │
-│  X ordrar totalt                                              │
+│ Objekt & Behandlingssteg                                    │
 ├─────────────────────────────────────────────────────────────┤
-│  [Aktuella ordrar (25)]  [Orderhistorik (12)]                │
-├─────────────────────────────────────────────────────────────┤
-│  AKTUELLA:                                                   │
-│  [Sökfält............] [Status ▼] [Fakturering ▼] [Avvikelse▼]│
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │ Ordertabell med aktiva ordrar                           │ │
-│  └─────────────────────────────────────────────────────────┘ │
-│                                                              │
-│  HISTORIK:                                                   │
-│  [Sökfält..............................................]     │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │ Ordertabell med arkiverade ordrar                       │ │
-│  └─────────────────────────────────────────────────────────┘ │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ ▼ Objekt 1: Ram vänster                        [Redigera] [Ta bort] │
+│ │   ├── Blästring      [Väntande ▼]              [Ta bort] │
+│ │   └── Målning        [Pågående ▼]              [Ta bort] │
+│ │   [+ Lägg till steg...]                                  │
+│ └─────────────────────────────────────────────────────────┘ │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ ▼ Objekt 2: Ram höger                          [Redigera] [Ta bort] │
+│ │   ├── Blästring      [Klar ▼]                  [Ta bort] │
+│ │   └── Målning        [Väntande ▼]              [Ta bort] │
+│ │   [+ Lägg till steg...]                                  │
+│ └─────────────────────────────────────────────────────────┘ │
+│                                                             │
+│ [+ Lägg till objekt]                                        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Ändringar per fil
+## Påverkade filer
 
-### 1. `src/pages/Index.tsx`
-- Importera `Tabs, TabsList, TabsTrigger, TabsContent` från `@/components/ui/tabs`
-- Importera `useMemo` från React
-- Lägg till `archiveSearchQuery` state för sökfältet i historikfliken
-- Skapa `activeOrders` och `archivedOrders` med useMemo
-- Wrap innehållet i Tabs-komponenten
-- Flytta filter och tabell till TabsContent för "active"
-- Skapa enkel sökvy för TabsContent "archive"
+### 1. Databasmigrering
+- Skapa tabell `order_objects`
+- Lägg till kolumn `object_id` i `order_steps`
+- RLS-policies för nya tabellen
 
-### 2. `src/components/OrdersTable.tsx`
-- Lägg till ny prop `showFilters?: boolean` (default true)
-- När `showFilters === false`, visa bara sök-funktionen internt
-- Alternativt: Skapa en ny enkel tabell-prop eller skicka redan filtrerade ordrar
+### 2. `src/types/order.ts`
+- Ny interface `OrderObject`
+- Uppdatera `OrderStep` med `objectId?: string`
+- Uppdatera `Order` med `objects?: OrderObject[]`
 
-**Enklare approach:** Skicka redan filtrerade ordrar till OrdersTable och hantera filtrering i Index.tsx. OrdersTable behöver inga ändringar om vi filtrerar ordrar före vi skickar dem.
+### 3. `src/contexts/OrdersContext.tsx`
+- Hämta `order_objects` tillsammans med övriga data
+- Uppdatera `mapDbOrderToOrder` för att inkludera objekt
+- Uppdatera `addOrder` för att skapa objekt
+- Uppdatera `updateOrder` för att hantera objekt och steg
+
+### 4. Ny fil: `src/components/OrderObjectsEditor.tsx`
+- Huvudkomponent för att hantera objekt och deras steg
+- Ersätter `OrderStepsEditor` i detaljvy och skapande
+
+### 5. `src/pages/OrderDetails.tsx`
+- Ersätt `OrderStepsEditor` med `OrderObjectsEditor`
+- Visa objekt-baserad layout för behandlingssteg
+
+### 6. `src/pages/CreateOrder.tsx`
+- Manuell skapning: lägg till möjlighet att skapa objekt och koppla steg
+- XML-import: behåll befintlig logik men med möjlighet att gruppera i objekt efteråt
+
+### 7. `src/components/OrderStepsEditor.tsx`
+- Behåll men modifiera för att användas per objekt (ta emot `objectId` som prop)
+- Tar bort filtret som hindrar samma stegtyp att läggas till flera gånger
 
 ---
 
-## Mobilvänligt
-Tabs-komponenten från shadcn är redan responsiv och fungerar bra på mobil. Fliknamnen kommer att visas horisontellt och scrollas vid behov.
+## Implementationsdetaljer
+
+### Bakåtkompatibilitet
+- Order utan objekt kommer fortfarande fungera
+- Om en order har steg men inga objekt, visas stegen på ordernivå (legacy-läge)
+- Nya order uppmuntras att använda objekt men det är inte obligatoriskt
+
+### Behandlingssteg på flera objekt
+- Nuvarande begränsning (ett steg per typ per order) tas bort
+- Varje objekt kan ha sina egna instanser av samma stegtyp
+- Status hanteras per steg-instans, inte per stegtyp
+
+### Auto-status för order
+Befintlig logik bibehålls:
+- Om ett steg startas → order blir "Startad"
+- Om alla steg är klara → order blir "Avslutad"
+- Nu räknas alla steg från alla objekt
 
 ---
 
-## Sammanfattning av påverkade filer
-| Fil | Ändring |
-|-----|---------|
-| `src/pages/Index.tsx` | Lägg till fliksystem, separera ordrar, separat sökning för historik |
+## Framtida förbättringar (ej inkluderat nu)
+- Filtrera/söka på objektnamn i produktionsvyn
+- Visa objektprogress i orderöversikten
+- Kopiera objekt (med steg) till annan order
+
