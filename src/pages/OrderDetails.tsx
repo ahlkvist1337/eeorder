@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { ArrowLeft, AlertTriangle, Clock, Package, Wrench, Save } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Clock, Package, Wrench, Save, CalendarIcon } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -22,9 +24,12 @@ import { OrderStepsEditor } from '@/components/OrderStepsEditor';
 import { OrderAttachments } from '@/components/OrderAttachments';
 import { useOrders } from '@/hooks/useOrders';
 import { useOrderAttachments } from '@/hooks/useOrderAttachments';
+import { useAuth } from '@/contexts/AuthContext';
 import { productionStatusLabels, billingStatusLabels, stepStatusLabels } from '@/types/order';
 import type { ProductionStatus, BillingStatus, OrderStep } from '@/types/order';
 import { StepStatusBadge } from '@/components/StatusBadge';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
@@ -41,6 +46,7 @@ export default function OrderDetails() {
 
   const order = getOrderById(id || '');
   const { attachments, refetch: refetchAttachments } = useOrderAttachments(id || '');
+  const { canEdit } = useAuth();
   
   // Local state for deviation comment to avoid saving on every keystroke
   const [localDeviationComment, setLocalDeviationComment] = useState(order?.deviationComment || '');
@@ -200,21 +206,97 @@ export default function OrderDetails() {
                     <Label className="text-xs sm:text-sm text-muted-foreground">Kundreferens</Label>
                     <p className="font-medium text-sm sm:text-base break-words">{order.customerReference || '-'}</p>
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <Label className="text-xs sm:text-sm text-muted-foreground">Planerat start</Label>
-                    <p className="font-medium text-sm sm:text-base">
-                      {order.plannedStart 
-                        ? format(new Date(order.plannedStart), 'd MMM yyyy', { locale: sv })
-                        : '-'}
-                    </p>
+                    {canEdit ? (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal text-sm h-9",
+                              !order.plannedStart && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {order.plannedStart
+                              ? format(new Date(order.plannedStart), 'd MMM yyyy', { locale: sv })
+                              : 'Välj datum'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={order.plannedStart ? new Date(order.plannedStart) : undefined}
+                            onSelect={async (date) => {
+                              try {
+                                await updateOrder(order.id, { 
+                                  plannedStart: date ? date.toISOString() : undefined 
+                                });
+                                toast.success('Planerat startdatum uppdaterat');
+                              } catch (error) {
+                                console.error('Error updating planned start:', error);
+                                toast.error('Kunde inte uppdatera datum');
+                              }
+                            }}
+                            initialFocus
+                            className="p-3 pointer-events-auto"
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    ) : (
+                      <p className="font-medium text-sm sm:text-base">
+                        {order.plannedStart 
+                          ? format(new Date(order.plannedStart), 'd MMM yyyy', { locale: sv })
+                          : '-'}
+                      </p>
+                    )}
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <Label className="text-xs sm:text-sm text-muted-foreground">Planerat slut</Label>
-                    <p className="font-medium text-sm sm:text-base">
-                      {order.plannedEnd 
-                        ? format(new Date(order.plannedEnd), 'd MMM yyyy', { locale: sv })
-                        : '-'}
-                    </p>
+                    {canEdit ? (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal text-sm h-9",
+                              !order.plannedEnd && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {order.plannedEnd
+                              ? format(new Date(order.plannedEnd), 'd MMM yyyy', { locale: sv })
+                              : 'Välj datum'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={order.plannedEnd ? new Date(order.plannedEnd) : undefined}
+                            onSelect={async (date) => {
+                              try {
+                                await updateOrder(order.id, { 
+                                  plannedEnd: date ? date.toISOString() : undefined 
+                                });
+                                toast.success('Planerat slutdatum uppdaterat');
+                              } catch (error) {
+                                console.error('Error updating planned end:', error);
+                                toast.error('Kunde inte uppdatera datum');
+                              }
+                            }}
+                            initialFocus
+                            className="p-3 pointer-events-auto"
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    ) : (
+                      <p className="font-medium text-sm sm:text-base">
+                        {order.plannedEnd 
+                          ? format(new Date(order.plannedEnd), 'd MMM yyyy', { locale: sv })
+                          : '-'}
+                      </p>
+                    )}
                   </div>
                   {order.deliveryAddress && (
                     <div className="sm:col-span-2">
