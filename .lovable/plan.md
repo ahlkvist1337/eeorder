@@ -1,150 +1,182 @@
 
 
-# Plan: Objekthantering i Orderhanteringssystemet
+# Plan: Objektmallar och Förbättrad Objekthantering
 
 ## Sammanfattning
-Lägga till stöd för "objekt" som en mellanliggande nivå mellan order och behandlingssteg. Ett objekt representerar en del av en order som kan följas separat med sina egna behandlingssteg.
+Skapa stöd för fördefinierade objektmallar (som behandlingsstegmallar) och fixa problemet med att lägga till steg i objekt.
 
 ---
 
-## Datastruktur
+## Problem att lösa
 
-**Ny hierarki:**
+### 1. Kan inte lägga till steg i objekt
+Tittar på koden ser jag att `handleAddStep` fungerar korrekt. Problemet kan vara att dropdown för att välja stegmall inte visas ordentligt eller att staten inte sparas. Behöver kontrollera att:
+- `treatmentTemplates` laddas korrekt
+- `selectedTemplates` state uppdateras
+
+### 2. Saknar objektmallar
+Idag måste man skriva objektnamn manuellt. Användaren vill kunna välja från fördefinierade objekt-mallar, precis som för behandlingssteg.
+
+---
+
+## Lösning
+
+### Del 1: Databas - Ny tabell för objektmallar
+
 ```text
-Order
-  └── Objekt (1 eller flera)
-        └── Behandlingssteg (1 eller flera per objekt)
+Tabell: object_templates
++------------+--------+-----------------------+
+| Kolumn     | Typ    | Beskrivning           |
++------------+--------+-----------------------+
+| id         | uuid   | Primärnyckel          |
+| name       | text   | Mallnamn (t.ex. "Ram")|
+| created_at | timestamp | Skapad             |
++------------+--------+-----------------------+
 ```
 
-**Exempel:**
-- Order 12345 (Kund: ACME AB)
-  - Objekt A: "Ram vänster"
-    - Blästring
-    - Målning
-  - Objekt B: "Ram höger"
-    - Blästring
-    - Målning
-  - Objekt C: "Motorblock"
-    - Sprutzink
+RLS-policies som matchar `treatment_step_templates`.
+
+### Del 2: Ny hook - useObjectTemplates
+
+Skapa `src/hooks/useObjectTemplates.ts` som speglar `useTreatmentSteps.ts`:
+- `templates` - lista med alla objektmallar
+- `addTemplate(name)` - lägg till ny mall
+- `updateTemplate(id, name)` - uppdatera mall
+- `deleteTemplate(id)` - ta bort mall
+
+### Del 3: Uppdatera inställningssidan
+
+Ändra `src/pages/TreatmentSteps.tsx` till att hantera **båda** typer av mallar:
+- Flikar: "Behandlingssteg" | "Objekt"
+- Samma UI för båda - lista med möjlighet att lägga till, redigera, ta bort
+
+Alternativt: Byt namn på sidan till "Inställningar" eller skapa ny sida.
+
+### Del 4: Uppdatera OrderObjectsEditor
+
+Ändra hur objekt läggs till:
+- Ersätt fritextfält med Select-dropdown som visar tillgängliga objektmallar
+- Behåll möjlighet att skriva eget namn (input bredvid eller "Annan..." i dropdown)
+
+**Ny UI för att lägga till objekt:**
+```text
+┌────────────────────────────────────────────────────────────┐
+│ [Välj objektmall... ▼]  eller  [Eget namn...]  [Lägg till] │
+└────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Databasändringar
+## Filer att ändra
 
-### Ny tabell: `order_objects`
-| Kolumn | Typ | Beskrivning |
-|--------|-----|-------------|
-| id | uuid | Primärnyckel |
-| order_id | uuid | FK till orders |
-| name | text | Namn på objektet (t.ex. "Ram vänster") |
-| description | text | Valfri beskrivning |
-| created_at | timestamp | Skapades |
-
-### Ändring i `order_steps`
-| Ny kolumn | Typ | Beskrivning |
-|-----------|-----|-------------|
-| object_id | uuid | FK till order_objects (nullable för bakåtkompatibilitet) |
-
-**Bakåtkompatibilitet:** Befintliga order som inte har objekt kommer fortsätta fungera eftersom `object_id` är nullable.
+| Fil | Ändring |
+|-----|---------|
+| **Ny migration** | Skapa `object_templates` tabell med RLS |
+| `src/hooks/useObjectTemplates.ts` | **Ny fil** - hook för objektmallar |
+| `src/pages/TreatmentSteps.tsx` | Lägg till flik för objektmallar |
+| `src/components/OrderObjectsEditor.tsx` | Använd dropdown för att välja objektmall |
+| `src/pages/CreateOrder.tsx` | Säkerställ att objektmallar kan väljas vid skapande |
 
 ---
 
-## Komponentändringar
+## Detaljerade ändringar
 
-### Ny komponent: `OrderObjectsEditor.tsx`
-Ersätter/utökar nuvarande `OrderStepsEditor` i OrderDetails och CreateOrder.
+### 1. Migration (SQL)
+```sql
+CREATE TABLE object_templates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
-**Funktionalitet:**
-- Lista alla objekt i ordern
-- Lägga till nytt objekt (namn + valfri beskrivning)
-- Redigera objektnamn
-- Ta bort objekt (med bekräftelse om det har steg)
-- Visa behandlingssteg per objekt (expanderbart)
-- Lägga till behandlingssteg till specifikt objekt
-- Samma behandlingssteg kan finnas på flera objekt (t.ex. "Målning" på både objekt A och B)
+ALTER TABLE object_templates ENABLE ROW LEVEL SECURITY;
 
-**UI-struktur:**
+-- RLS policies (samma mönster som treatment_step_templates)
+```
+
+### 2. useObjectTemplates.ts
+Samma struktur som `useTreatmentSteps.ts`:
+- Fetcha från `object_templates`
+- CRUD-funktioner
+- State-hantering
+
+### 3. TreatmentSteps.tsx → Inställningar med flikar
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│ Objekt & Behandlingssteg                                    │
+│  Inställningar                                              │
 ├─────────────────────────────────────────────────────────────┤
-│ ┌─────────────────────────────────────────────────────────┐ │
-│ │ ▼ Objekt 1: Ram vänster                        [Redigera] [Ta bort] │
-│ │   ├── Blästring      [Väntande ▼]              [Ta bort] │
-│ │   └── Målning        [Pågående ▼]              [Ta bort] │
-│ │   [+ Lägg till steg...]                                  │
-│ └─────────────────────────────────────────────────────────┘ │
-│ ┌─────────────────────────────────────────────────────────┐ │
-│ │ ▼ Objekt 2: Ram höger                          [Redigera] [Ta bort] │
-│ │   ├── Blästring      [Klar ▼]                  [Ta bort] │
-│ │   └── Målning        [Väntande ▼]              [Ta bort] │
-│ │   [+ Lägg till steg...]                                  │
-│ └─────────────────────────────────────────────────────────┘ │
+│  [Behandlingssteg]  [Objektmallar]                          │
+├─────────────────────────────────────────────────────────────┤
+│  BEHANDLINGSSTEG-FLIKEN:                                    │
+│  [Nytt stegnamn.....................] [Lägg till]           │
+│  ┌───────────────────────────────────────────────┐          │
+│  │ Blästring                    [Redigera] [Ta bort] │      │
+│  │ Målning                      [Redigera] [Ta bort] │      │
+│  │ Sprutzink                    [Redigera] [Ta bort] │      │
+│  └───────────────────────────────────────────────┘          │
 │                                                             │
-│ [+ Lägg till objekt]                                        │
+│  OBJEKTMALLAR-FLIKEN:                                       │
+│  [Nytt objektnamn...................] [Lägg till]           │
+│  ┌───────────────────────────────────────────────┐          │
+│  │ Ram vänster                  [Redigera] [Ta bort] │      │
+│  │ Ram höger                    [Redigera] [Ta bort] │      │
+│  │ Motorblock                   [Redigera] [Ta bort] │      │
+│  └───────────────────────────────────────────────┘          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
----
+### 4. OrderObjectsEditor.tsx - Nytt gränssnitt för att lägga till objekt
+```text
+Befintligt (bara fritext):
+[Nytt objektnamn...] [Lägg till]
 
-## Påverkade filer
+Nytt (dropdown + fritext):
+[Välj objektmall... ▼] [Lägg till]
+--- eller ---
+[Eget namn...] [Lägg till som eget]
+```
 
-### 1. Databasmigrering
-- Skapa tabell `order_objects`
-- Lägg till kolumn `object_id` i `order_steps`
-- RLS-policies för nya tabellen
-
-### 2. `src/types/order.ts`
-- Ny interface `OrderObject`
-- Uppdatera `OrderStep` med `objectId?: string`
-- Uppdatera `Order` med `objects?: OrderObject[]`
-
-### 3. `src/contexts/OrdersContext.tsx`
-- Hämta `order_objects` tillsammans med övriga data
-- Uppdatera `mapDbOrderToOrder` för att inkludera objekt
-- Uppdatera `addOrder` för att skapa objekt
-- Uppdatera `updateOrder` för att hantera objekt och steg
-
-### 4. Ny fil: `src/components/OrderObjectsEditor.tsx`
-- Huvudkomponent för att hantera objekt och deras steg
-- Ersätter `OrderStepsEditor` i detaljvy och skapande
-
-### 5. `src/pages/OrderDetails.tsx`
-- Ersätt `OrderStepsEditor` med `OrderObjectsEditor`
-- Visa objekt-baserad layout för behandlingssteg
-
-### 6. `src/pages/CreateOrder.tsx`
-- Manuell skapning: lägg till möjlighet att skapa objekt och koppla steg
-- XML-import: behåll befintlig logik men med möjlighet att gruppera i objekt efteråt
-
-### 7. `src/components/OrderStepsEditor.tsx`
-- Behåll men modifiera för att användas per objekt (ta emot `objectId` som prop)
-- Tar bort filtret som hindrar samma stegtyp att läggas till flera gånger
+**Alternativ implementation:** En Select med "Skriv eget..." som sista val som visar input-fältet.
 
 ---
 
-## Implementationsdetaljer
+## Teknisk implementation för OrderObjectsEditor
 
-### Bakåtkompatibilitet
-- Order utan objekt kommer fortfarande fungera
-- Om en order har steg men inga objekt, visas stegen på ordernivå (legacy-läge)
-- Nya order uppmuntras att använda objekt men det är inte obligatoriskt
+```typescript
+// I OrderObjectsEditor.tsx
+const { templates: objectTemplates } = useObjectTemplates();
 
-### Behandlingssteg på flera objekt
-- Nuvarande begränsning (ett steg per typ per order) tas bort
-- Varje objekt kan ha sina egna instanser av samma stegtyp
-- Status hanteras per steg-instans, inte per stegtyp
+// State för val av mall vs eget namn
+const [selectedTemplateId, setSelectedTemplateId] = useState('');
+const [useCustomName, setUseCustomName] = useState(false);
+const [customObjectName, setCustomObjectName] = useState('');
 
-### Auto-status för order
-Befintlig logik bibehålls:
-- Om ett steg startas → order blir "Startad"
-- Om alla steg är klara → order blir "Avslutad"
-- Nu räknas alla steg från alla objekt
+const handleAddObject = () => {
+  let name = '';
+  
+  if (useCustomName) {
+    name = customObjectName.trim();
+  } else {
+    const template = objectTemplates.find(t => t.id === selectedTemplateId);
+    name = template?.name || '';
+  }
+  
+  if (!name) return;
+  
+  const newObject: OrderObject = {
+    id: crypto.randomUUID(),
+    name,
+  };
+  
+  onObjectsChange([...objects, newObject]);
+  // Reset state...
+};
+```
 
 ---
 
-## Framtida förbättringar (ej inkluderat nu)
-- Filtrera/söka på objektnamn i produktionsvyn
-- Visa objektprogress i orderöversikten
-- Kopiera objekt (med steg) till annan order
+## Navigering
+
+Uppdatera Layout.tsx:
+- Ändra "/steps" → "Inställningar" (eller behåll "Behandlingssteg" och visa flikar inuti)
 
