@@ -13,6 +13,7 @@ import { StepStatusBadge } from '@/components/StatusBadge';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
+import { useObjectTemplates } from '@/hooks/useObjectTemplates';
 import { stepStatusLabels } from '@/types/order';
 import type { OrderStep, StepStatus, OrderObject } from '@/types/order';
 
@@ -29,11 +30,19 @@ export function OrderObjectsEditor({
   onObjectsChange, 
   onStepsChange 
 }: OrderObjectsEditorProps) {
-  const { steps: treatmentTemplates } = useTreatmentSteps();
+  const { steps: treatmentTemplates, isLoading: treatmentLoading } = useTreatmentSteps();
+  const { templates: objectTemplates, isLoading: objectLoading } = useObjectTemplates();
+  
   const [expandedObjects, setExpandedObjects] = useState<Set<string>>(new Set(objects.map(o => o.id)));
   const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
   const [editingObjectName, setEditingObjectName] = useState('');
-  const [newObjectName, setNewObjectName] = useState('');
+  
+  // Object add state
+  const [selectedObjectTemplateId, setSelectedObjectTemplateId] = useState('');
+  const [customObjectName, setCustomObjectName] = useState('');
+  const [useCustomObjectName, setUseCustomObjectName] = useState(false);
+  
+  // Step add state per object
   const [selectedTemplates, setSelectedTemplates] = useState<Record<string, string>>({});
 
   // Get steps for a specific object
@@ -60,16 +69,27 @@ export function OrderObjectsEditor({
 
   // Object management
   const handleAddObject = () => {
-    if (!newObjectName.trim()) return;
+    let name = '';
+    
+    if (useCustomObjectName) {
+      name = customObjectName.trim();
+    } else if (selectedObjectTemplateId) {
+      const template = objectTemplates.find(t => t.id === selectedObjectTemplateId);
+      name = template?.name || '';
+    }
+    
+    if (!name) return;
     
     const newObject: OrderObject = {
       id: crypto.randomUUID(),
-      name: newObjectName.trim(),
+      name,
     };
     
     onObjectsChange([...objects, newObject]);
     setExpandedObjects(prev => new Set([...prev, newObject.id]));
-    setNewObjectName('');
+    setSelectedObjectTemplateId('');
+    setCustomObjectName('');
+    setUseCustomObjectName(false);
   };
 
   const handleRemoveObject = (objectId: string) => {
@@ -129,6 +149,7 @@ export function OrderObjectsEditor({
   };
 
   const unassignedSteps = getUnassignedSteps();
+  const isLoading = treatmentLoading || objectLoading;
 
   return (
     <div className="space-y-4">
@@ -353,23 +374,72 @@ export function OrderObjectsEditor({
       )}
 
       {/* Add new object */}
-      <div className="flex gap-2 pt-2 border-t">
-        <Input
-          value={newObjectName}
-          onChange={(e) => setNewObjectName(e.target.value)}
-          placeholder="Nytt objektnamn (t.ex. 'Ram vänster')..."
-          className="flex-1"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleAddObject();
-          }}
-        />
-        <Button 
-          onClick={handleAddObject} 
-          disabled={!newObjectName.trim()}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Lägg till objekt
-        </Button>
+      <div className="space-y-3 pt-2 border-t">
+        <div className="text-sm font-medium">Lägg till objekt</div>
+        
+        {/* Template selection or custom name */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          {!useCustomObjectName ? (
+            <>
+              <Select 
+                value={selectedObjectTemplateId} 
+                onValueChange={setSelectedObjectTemplateId}
+                disabled={isLoading}
+              >
+                <SelectTrigger className="flex-1 bg-background">
+                  <SelectValue placeholder="Välj objektmall..." />
+                </SelectTrigger>
+                <SelectContent className="bg-popover">
+                  {objectTemplates.length === 0 ? (
+                    <SelectItem value="_none" disabled>
+                      Inga mallar tillgängliga
+                    </SelectItem>
+                  ) : (
+                    objectTemplates.map(template => (
+                      <SelectItem key={template.id} value={template.id}>
+                        {template.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              <Button 
+                variant="outline"
+                onClick={() => setUseCustomObjectName(true)}
+              >
+                Eget namn
+              </Button>
+            </>
+          ) : (
+            <>
+              <Input
+                value={customObjectName}
+                onChange={(e) => setCustomObjectName(e.target.value)}
+                placeholder="Skriv objektnamn..."
+                className="flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddObject();
+                }}
+              />
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  setUseCustomObjectName(false);
+                  setCustomObjectName('');
+                }}
+              >
+                Välj mall
+              </Button>
+            </>
+          )}
+          <Button 
+            onClick={handleAddObject} 
+            disabled={useCustomObjectName ? !customObjectName.trim() : !selectedObjectTemplateId}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Lägg till objekt
+          </Button>
+        </div>
       </div>
     </div>
   );

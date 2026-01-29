@@ -19,7 +19,7 @@ interface LayoutProps {
 const navItems = [
   { to: '/', label: 'Ordrar', icon: ClipboardList },
   { to: '/create', label: 'Ny order', icon: Plus, requiresEdit: true },
-  { to: '/steps', label: 'Behandlingssteg', icon: Settings },
+  { to: '/steps', label: 'Inställningar', icon: Settings },
   { to: '/statistics', label: 'Statistik', icon: BarChart3 },
   { to: '/production', label: 'Produktion', icon: Tv },
 ];

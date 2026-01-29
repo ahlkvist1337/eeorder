@@ -24,6 +24,12 @@ export interface TreatmentStepTemplate {
   createdAt: string;
 }
 
+export interface ObjectTemplate {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 export interface OrderObject {
   id: string;
   name: string;
