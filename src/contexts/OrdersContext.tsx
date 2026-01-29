@@ -362,7 +362,40 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
     }
 
-    // Update steps if provided
+    // IMPORTANT: Handle objects BEFORE steps to avoid cascade-delete issues
+    // When order_objects are deleted, order_steps with object_id pointing to them are cascade-deleted
+    
+    // Update objects if provided - use UPSERT strategy to avoid cascade-delete issues
+    if (updates.objects !== undefined) {
+      const currentOrder = orders.find(o => o.id === id);
+      const currentObjectIds = new Set((currentOrder?.objects || []).map(o => o.id));
+      const newObjectIds = new Set(updates.objects.map(o => o.id));
+      
+      // Find objects that were removed
+      const removedObjectIds = [...currentObjectIds].filter(objId => !newObjectIds.has(objId));
+      
+      // UPSERT all current objects (insert new ones, update existing ones)
+      if (updates.objects.length > 0) {
+        const { error } = await supabase.from('order_objects').upsert(
+          updates.objects.map(obj => ({
+            id: obj.id,
+            order_id: id,
+            name: obj.name,
+            description: obj.description || null,
+          })),
+          { onConflict: 'id' }
+        );
+        if (error) throw error;
+      }
+      
+      // Delete removed objects (this will cascade-delete their steps, which is correct)
+      if (removedObjectIds.length > 0) {
+        const { error } = await supabase.from('order_objects').delete().in('id', removedObjectIds);
+        if (error) throw error;
+      }
+    }
+
+    // Update steps if provided (AFTER objects are handled)
     if (updates.steps !== undefined) {
       const currentOrder = orders.find(o => o.id === id);
       
@@ -462,19 +495,32 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Update objects if provided
+    // Update objects if provided - use UPSERT strategy to avoid cascade-delete issues
     if (updates.objects !== undefined) {
-      // Delete existing objects (steps will be deleted via cascade or already handled above)
-      await supabase.from('order_objects').delete().eq('order_id', id);
+      const currentOrder = orders.find(o => o.id === id);
+      const currentObjectIds = new Set((currentOrder?.objects || []).map(o => o.id));
+      const newObjectIds = new Set(updates.objects.map(o => o.id));
+      
+      // Find objects that were removed
+      const removedObjectIds = [...currentObjectIds].filter(objId => !newObjectIds.has(objId));
+      
+      // UPSERT all current objects (insert new ones, update existing ones)
       if (updates.objects.length > 0) {
-        const { error } = await supabase.from('order_objects').insert(
+        const { error } = await supabase.from('order_objects').upsert(
           updates.objects.map(obj => ({
             id: obj.id,
             order_id: id,
             name: obj.name,
             description: obj.description || null,
-          }))
+          })),
+          { onConflict: 'id' }
         );
+        if (error) throw error;
+      }
+      
+      // Delete removed objects (this will cascade-delete their steps, which is correct)
+      if (removedObjectIds.length > 0) {
+        const { error } = await supabase.from('order_objects').delete().in('id', removedObjectIds);
         if (error) throw error;
       }
     }

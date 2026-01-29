@@ -106,9 +106,11 @@ export default function OrderDetails() {
   const handleObjectsAndStepsChange = async (newObjects: OrderObject[], newSteps: OrderStep[]) => {
     try {
       // Pass the current order.steps as previousSteps for comparison
+      // IMPORTANT: Always send both objects AND steps together to ensure consistent save
       await updateOrder(order.id, { objects: newObjects, steps: newSteps }, order.steps);
     } catch (error) {
       console.error('Error updating objects and steps:', error);
+      toast.error('Kunde inte spara ändringarna. Försök igen.');
     }
   };
 
