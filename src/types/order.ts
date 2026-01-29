@@ -24,11 +24,19 @@ export interface TreatmentStepTemplate {
   createdAt: string;
 }
 
+export interface OrderObject {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt?: string;
+}
+
 export interface OrderStep {
   id: string;
   templateId: string;
   name: string;
   status: StepStatus;
+  objectId?: string; // Link to OrderObject
   plannedStart?: string;
   plannedEnd?: string;
   actualStart?: string;
@@ -64,6 +72,7 @@ export interface Order {
   plannedEnd?: string;
   actualStart?: string;
   actualEnd?: string;
+  objects?: OrderObject[]; // Objects within the order
   steps: OrderStep[];
   statusHistory: StatusChange[];
   stepStatusHistory: StepStatusChange[];
