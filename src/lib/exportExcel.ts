@@ -1,14 +1,16 @@
 export interface PriceListItem {
   part_number: string;
   description: string;
+  step_name: string | null;
   price: number;
 }
 
 export function exportToCsv(data: PriceListItem[], filename: string) {
-  const headers = ['Artikelnummer', 'Benämning', 'Pris'];
+  const headers = ['Artikelnummer', 'Benämning', 'Steg', 'Pris'];
   const rows = data.map(item => [
     item.part_number,
     item.description,
+    item.step_name || '',
     item.price.toString()
   ]);
   
