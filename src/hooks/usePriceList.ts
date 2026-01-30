@@ -99,6 +99,15 @@ export function usePriceList() {
       return { total: 0, imported: 0 };
     }
 
+    // Hämta befintliga prisrader för att undvika dubbletter
+    const { data: existingPrices } = await supabase
+      .from('price_list')
+      .select('part_number, step_name');
+
+    const existingKeys = new Set(
+      (existingPrices || []).map(p => `${p.part_number}|${p.step_name || ''}`)
+    );
+
     // Skapa unika kombinationer
     const uniqueRows = new Map<string, { part_number: string; description: string; price: number }>();
     for (const row of articleRows || []) {
@@ -114,24 +123,29 @@ export function usePriceList() {
       }
     }
 
-    const rowsToInsert = Array.from(uniqueRows.values());
-    const total = rowsToInsert.length;
+    // Filtrera bort de som redan finns
+    const rowsToInsert = Array.from(uniqueRows.values()).filter(
+      r => !existingKeys.has(`${r.part_number}|`)
+    );
 
-    if (total === 0) {
-      return { total: 0, imported: 0 };
+    const total = uniqueRows.size;
+    const toInsertCount = rowsToInsert.length;
+
+    if (toInsertCount === 0) {
+      toast({ title: `Alla ${total} rader finns redan i prislistan` });
+      return { total, imported: 0 };
     }
 
-    // Infoga med ON CONFLICT DO NOTHING (via upsert med ignoreDuplicates)
-    const { error: insertError, count } = await supabase
+    // Infoga nya rader
+    const { error: insertError } = await supabase
       .from('price_list')
-      .upsert(
+      .insert(
         rowsToInsert.map(r => ({
           part_number: r.part_number,
           description: r.description,
           price: r.price,
           step_name: null,
-        })),
-        { onConflict: 'part_number,step_name', ignoreDuplicates: true, count: 'exact' }
+        }))
       );
 
     if (insertError) {
@@ -143,8 +157,9 @@ export function usePriceList() {
       return { total, imported: 0 };
     }
 
+    toast({ title: `${toInsertCount} nya prisrader importerade` });
     await fetchPrices();
-    return { total, imported: count || 0 };
+    return { total, imported: toInsertCount };
   };
 
   const deletePrice = async (id: string) => {
