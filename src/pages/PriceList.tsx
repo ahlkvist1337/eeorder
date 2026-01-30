@@ -31,7 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Search, Download, Plus, Pencil, Trash2, ArrowUpDown, Upload } from 'lucide-react';
+import { Search, Download, Plus, Pencil, Trash2, ArrowUpDown, Upload, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type SortField = 'part_number' | 'description' | 'step_name' | 'price';
 type SortDirection = 'asc' | 'desc';
@@ -58,6 +58,10 @@ export default function PriceList() {
   const [formPrice, setFormPrice] = useState('');
   const [isNewItem, setIsNewItem] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 100;
 
   // Filter and sort
   const filteredPrices = useMemo(() => {
@@ -86,6 +90,19 @@ export default function PriceList() {
     return filtered;
   }, [prices, search, sortField, sortDirection]);
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredPrices.length / pageSize);
+  const paginatedPrices = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredPrices.slice(start, start + pageSize);
+  }, [filteredPrices, currentPage, pageSize]);
+
+  // Reset to page 1 when search changes
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setCurrentPage(1);
+  };
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -93,6 +110,7 @@ export default function PriceList() {
       setSortField(field);
       setSortDirection('asc');
     }
+    setCurrentPage(1);
   };
 
   const handleExport = () => {
@@ -190,9 +208,9 @@ export default function PriceList() {
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Sök artikelnummer eller benämning..."
+            placeholder="Sök artikelnummer, benämning eller steg..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-10"
           />
         </div>
@@ -255,7 +273,7 @@ export default function PriceList() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredPrices.map((item) => (
+                paginatedPrices.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">{item.part_number}</TableCell>
                     <TableCell>{item.description}</TableCell>
@@ -289,6 +307,38 @@ export default function PriceList() {
             </TableBody>
           </Table>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Visar {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, filteredPrices.length)} av {filteredPrices.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Föregående
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Sida {currentPage} av {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Nästa
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Add button */}
         {canEdit && (
