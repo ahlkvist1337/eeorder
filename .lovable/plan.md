@@ -1,199 +1,205 @@
 
 
-# Plan: Uppdatera Produktionsvyn för Objekt-hierarkin
+# Plan: Prislistesida
 
 ## Sammanfattning
-Uppdatera ProductionOrderCard för att visa ordrar med deras objekt och tillhörande behandlingssteg på ett tydligt, hierarkiskt sätt. Korten ska visa objektnamn som rubriker med sina steg under, samt hantera bakåtkompatibilitet för äldre ordrar utan objekt.
+
+Skapa en ny fristående sida för att hantera prisuppgifter. Sidan samlar alla artikelnummer, benämningar och priser på ett ställe - för uppslag, jämförelse och historik. Den påverkar inte orderflödet.
 
 ---
 
-## Nuläge
+## Vad som ska byggas
 
-**ProductionOrderCard** visar idag:
-```
-┌─────────────────────────────────────┐
-│ 21210                               │
-│ ┌──────────┐                        │
-│ │ Ankommen │                        │
-│ └──────────┘                        │
-│                                     │
-│ ○ Målning RAL7040                   │  ← Platt lista, inget objektnamn
-│                                     │
-│ ─────────────────────────────       │
-│ Kund AB                             │
-│ 📅 Leveransredo: 15 feb 2026        │
-└─────────────────────────────────────┘
-```
+### Ny sida: `/prices`
 
-**Data i databasen:**
-- Order 21210 har objekt "Stora Truck Delar" med steg "Målning RAL7040"
-- Order 21330 har steg utan objekt (legacy)
+En tabell med följande kolumner:
+- **Artikelnummer** (part_number)
+- **Benämning** (text/description)  
+- **Pris** (price)
+
+### Funktioner
+
+| Funktion | Beskrivning |
+|----------|-------------|
+| Visa alla | Tabell med alla prisrader, sorterbara kolumner |
+| Lägg till | Manuellt lägga in nya prisrader |
+| Redigera | Ändra befintliga uppgifter inline |
+| Ta bort | Radera prisrader (med bekräftelse) |
+| Sök/filtrera | Sökfält som filtrerar på artikelnummer och benämning |
+| Exportera | Knapp för att ladda ner som Excel-fil |
 
 ---
 
-## Ny design
+## Datamodell
+
+### Ny databastabell: `price_list`
 
 ```text
-┌───────────────────────────────────────────┐
-│ 21210                                     │
-│ ┌──────────┐                              │
-│ │ Ankommen │                              │
-│ └──────────┘                              │
-│                                           │
-│ ▸ Stora Truck Delar                       │  ← Objektnamn som rubrik
-│   ○ Målning RAL7040                       │  ← Steg indenterat under objekt
-│   ● Blästring                             │
-│                                           │
-│ ▸ Motorblock                              │  ← Annat objekt
-│   ◉ Sprutzink                             │
-│                                           │
-│ ─────────────────────────────────         │
-│ Kund AB                                   │
-│ 📅 Leveransredo: 15 feb 2026              │
-└───────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ price_list                                                  │
+├─────────────────────────────────────────────────────────────┤
+│ id           │ uuid        │ PK, auto-genererad             │
+│ part_number  │ text        │ Artikelnummer (unikt)          │
+│ description  │ text        │ Benämning/beskrivning          │
+│ price        │ numeric     │ Pris                           │
+│ created_at   │ timestamptz │ Skapad                         │
+│ updated_at   │ timestamptz │ Senast uppdaterad              │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**För ordrar utan objekt (bakåtkompatibilitet):**
-```text
-│ ○ Maskering                               │  ← Steg utan objekt visas direkt
-│ ● Blästring                               │
-│ ○ Sprutzink                               │
-```
+**Viktig skillnad**: Detta är en separat tabell från `article_rows` som är kopplad till ordrar. `price_list` är fristående och används endast för uppslag.
+
+### RLS-policies
+
+- **SELECT**: Alla inloggade användare kan läsa
+- **INSERT/UPDATE**: Användare med roll `admin` eller `redigera`
+- **DELETE**: Endast `admin`
 
 ---
 
-## Filer att ändra
+## Filer som skapas/ändras
+
+### Nya filer
+
+| Fil | Beskrivning |
+|-----|-------------|
+| `src/pages/PriceList.tsx` | Huvudsidan med tabell, sök och CRUD |
+| `src/hooks/usePriceList.ts` | Hook för datahantering mot databasen |
+| `src/lib/exportExcel.ts` | Hjälpfunktion för Excel-export |
+
+### Ändringar i befintliga filer
 
 | Fil | Ändring |
 |-----|---------|
-| `src/components/ProductionOrderCard.tsx` | Gruppera steg per objekt, visa objektnamn som rubriker |
-| `src/pages/ProductionScreen.tsx` | Uppdatera legend för att inkludera objektsymbol |
+| `src/App.tsx` | Lägg till route `/prices` |
+| `src/components/Layout.tsx` | Lägg till "Prislista" i navigeringen |
 
 ---
 
-## Detaljerade ändringar
+## Tekniska detaljer
 
-### 1. ProductionOrderCard.tsx
+### 1. Databas-migration
 
-**Logik för att gruppera steg:**
-```typescript
-// Gruppera steg per objekt
-const stepsWithObject = order.steps.filter(s => s.objectId);
-const stepsWithoutObject = order.steps.filter(s => !s.objectId);
-
-// Skapa map: objectId -> steg[]
-const stepsByObject = new Map<string, OrderStep[]>();
-stepsWithObject.forEach(step => {
-  const list = stepsByObject.get(step.objectId!) || [];
-  list.push(step);
-  stepsByObject.set(step.objectId!, list);
-});
-
-// Hämta objektinfo från order.objects
-const objectsWithSteps = (order.objects || []).filter(obj => 
-  stepsByObject.has(obj.id)
+```sql
+CREATE TABLE public.price_list (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  part_number text NOT NULL UNIQUE,
+  description text NOT NULL DEFAULT '',
+  price numeric NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- RLS
+ALTER TABLE public.price_list ENABLE ROW LEVEL SECURITY;
+
+-- Läsa: alla inloggade
+CREATE POLICY "Authenticated users can read price_list"
+  ON public.price_list FOR SELECT TO authenticated
+  USING (true);
+
+-- Skriva: admin eller redigera
+CREATE POLICY "Editors can insert price_list"
+  ON public.price_list FOR INSERT TO authenticated
+  WITH CHECK (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'redigera'));
+
+CREATE POLICY "Editors can update price_list"
+  ON public.price_list FOR UPDATE TO authenticated
+  USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'redigera'));
+
+-- Radera: endast admin
+CREATE POLICY "Admins can delete price_list"
+  ON public.price_list FOR DELETE TO authenticated
+  USING (has_role(auth.uid(), 'admin'));
+
+-- Trigger för updated_at
+CREATE TRIGGER update_price_list_updated_at
+  BEFORE UPDATE ON public.price_list
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 ```
 
-**Ny renderingsstruktur:**
-```tsx
-<CardContent>
-  {/* Steg utan objekt (legacy / bakåtkompatibilitet) */}
-  {stepsWithoutObject.length > 0 && (
-    <div className="space-y-2 mb-4">
-      {stepsWithoutObject.map(step => (
-        <StepRow key={step.id} step={step} />
-      ))}
-    </div>
-  )}
+### 2. Hook: `usePriceList.ts`
 
-  {/* Objekt med sina steg */}
-  {objectsWithSteps.map(obj => (
-    <div key={obj.id} className="mb-4">
-      {/* Objektnamn som rubrik */}
-      <div className="flex items-center gap-2 mb-2">
-        <Box className="h-4 w-4 text-muted-foreground" />
-        <span className="font-semibold text-foreground">{obj.name}</span>
-      </div>
-      
-      {/* Steg för detta objekt, indenterade */}
-      <div className="pl-6 space-y-2">
-        {stepsByObject.get(obj.id)?.map(step => (
-          <StepRow key={step.id} step={step} />
-        ))}
-      </div>
-    </div>
-  ))}
-</CardContent>
+```typescript
+// Samma mönster som useTreatmentSteps.ts
+// - fetchPrices() - hämta alla
+// - addPrice(partNumber, description, price)
+// - updatePrice(id, updates)
+// - deletePrice(id)
 ```
 
-**Extrahera StepRow som återanvändbar komponent:**
-```tsx
-function StepRow({ step }: { step: OrderStep }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div
-        className={cn(
-          'w-4 h-4 rounded-full ring-2 flex-shrink-0',
-          stepStatusIcons[step.status].bg,
-          stepStatusIcons[step.status].ring
-        )}
-      />
-      <span
-        className={cn(
-          'text-lg',
-          step.status === 'completed' && 'text-muted-foreground line-through',
-          step.status === 'in_progress' && 'font-semibold text-foreground',
-          step.status === 'pending' && 'text-muted-foreground'
-        )}
-      >
-        {step.name}
-      </span>
-    </div>
-  );
+### 3. Sida: `PriceList.tsx`
+
+Struktur:
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ Prislista                                           [Excel] │
+│ 45 artiklar                                                 │
+├─────────────────────────────────────────────────────────────┤
+│ 🔍 [Sök artikelnummer eller benämning...          ]         │
+├─────────────────────────────────────────────────────────────┤
+│ Artikelnr ▼    │ Benämning              │ Pris        │     │
+├────────────────┼────────────────────────┼─────────────┼─────┤
+│ 3903041        │ Lagerlock              │ 1 000 kr    │ ✏️🗑│
+│ 7598618-002    │ Gaffelrygg             │ 850 kr      │ ✏️🗑│
+│ PSP001-1       │ Artikel Special        │ 500 kr      │ ✏️🗑│
+├────────────────┴────────────────────────┴─────────────┴─────┤
+│ [+ Lägg till ny prisrad]                                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 4. Excel-export
+
+Använder **CSV-format** som öppnas i Excel (ingen extern dependency krävs):
+
+```typescript
+// src/lib/exportExcel.ts
+export function exportToCsv(data: any[], filename: string) {
+  const headers = ['Artikelnummer', 'Benämning', 'Pris'];
+  const rows = data.map(item => [
+    item.part_number,
+    item.description,
+    item.price
+  ]);
+  
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(cell => `"${cell}"`).join(';'))
+    .join('\n');
+  
+  // Ladda ner som .csv fil
+  const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8' });
+  // ... trigger download
 }
 ```
 
-### 2. ProductionScreen.tsx - Uppdatera legend
+### 5. Navigation
 
-Lägg till objekt-ikon i legenden:
+Lägg till i `navItems` array i `Layout.tsx`:
 
-```tsx
-{/* Existing legend items */}
-<span className="text-muted-foreground ml-2">Objekt:</span>
-<div className="flex items-center gap-1">
-  <Box className="h-3 w-3 text-muted-foreground" />
-  <span className="text-xs">Orderobjekt</span>
-</div>
+```typescript
+{ to: '/prices', label: 'Prislista', icon: Receipt }
 ```
 
----
-
-## Visuella förbättringar
-
-1. **Objektrubrik:**
-   - Ikon: `Box` från lucide-react
-   - Font: `font-semibold`, normal storlek
-   - Färg: `text-foreground`
-
-2. **Indenterade steg:**
-   - Vänsterpadding: `pl-6` (24px)
-   - Mindre stegindikator: `w-4 h-4` istället för `w-5 h-5`
-   - Mindre text: `text-lg` istället för `text-xl`
-
-3. **Avklarade steg:**
-   - Lägg till `line-through` för `completed` steg för extra tydlighet
-
-4. **Tomt objekttillstånd:**
-   - Om ett objekt finns men har inga steg ännu, visa det ändå med "(inga steg)" text
+Ikon: `Receipt` från lucide-react (passar för prislistor/fakturor).
 
 ---
 
-## Testfall
+## Användarrättigheter
 
-1. Order med objekt och steg (21210) - ska visa objektnamn + indenterade steg
-2. Order utan objekt (21330) - ska visa steg direkt (bakåtkompatibilitet)
-3. Order med flera objekt - ska gruppera korrekt
-4. Objekt utan steg - ska fortfarande visas
-5. Blandning av steg med och utan objekt - ska hantera båda
+| Roll | Läsa | Lägga till | Redigera | Ta bort |
+|------|------|------------|----------|---------|
+| Läsa | ✅ | ❌ | ❌ | ❌ |
+| Redigera | ✅ | ✅ | ✅ | ❌ |
+| Admin | ✅ | ✅ | ✅ | ✅ |
+
+---
+
+## Vad som INTE påverkas
+
+- **Orderflödet** - helt orört
+- **article_rows** - befintlig tabell för artikelrader i ordrar
+- **Orderskapande** - ingen koppling till prislistan
+
+Prislistan är helt fristående och används endast för manuell referens.
 
