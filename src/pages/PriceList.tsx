@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Layout } from '@/components/Layout';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { usePriceList, PriceListItem } from '@/hooks/usePriceList';
 import { useAuth } from '@/contexts/AuthContext';
 import { exportToCsv } from '@/lib/exportExcel';
@@ -46,6 +47,7 @@ type SortField = 'part_number' | 'description' | 'step_count' | 'price';
 type SortDirection = 'asc' | 'desc';
 
 export default function PriceList() {
+  useDocumentTitle('Prislista');
   const { prices, loading, addPrice, updatePrice, deletePrice, importFromOrders } = usePriceList();
   const { canEdit, isAdmin } = useAuth();
 

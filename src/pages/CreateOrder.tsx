@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +17,7 @@ import { OrderObjectsEditor } from '@/components/OrderObjectsEditor';
 import type { Order, OrderStep, ParsedXMLOrder, ArticleRow, OrderObject } from '@/types/order';
 
 export default function CreateOrder() {
+  useDocumentTitle('Ny order');
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const defaultTab = searchParams.get('mode') === 'xml' ? 'xml' : 'manual';

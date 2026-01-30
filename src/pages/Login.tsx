@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +11,7 @@ import { AlertCircle, Loader2 } from 'lucide-react';
 import eeLogo from '@/assets/ee_logga.png';
 
 export default function Login() {
+  useDocumentTitle('Logga in');
   const { user, isLoading, signIn } = useAuth();
   const location = useLocation();
   const [email, setEmail] = useState('');
