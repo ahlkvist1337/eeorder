@@ -31,13 +31,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Search, Download, Plus, Pencil, Trash2, ArrowUpDown } from 'lucide-react';
+import { Search, Download, Plus, Pencil, Trash2, ArrowUpDown, Upload } from 'lucide-react';
 
-type SortField = 'part_number' | 'description' | 'price';
+type SortField = 'part_number' | 'description' | 'step_name' | 'price';
 type SortDirection = 'asc' | 'desc';
 
 export default function PriceList() {
-  const { prices, loading, addPrice, updatePrice, deletePrice } = usePriceList();
+  const { prices, loading, addPrice, updatePrice, deletePrice, importFromOrders } = usePriceList();
   const { canEdit, isAdmin } = useAuth();
 
   // Search & sort state
@@ -48,13 +48,16 @@ export default function PriceList() {
   // Dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<PriceListItem | null>(null);
 
   // Form state
   const [formPartNumber, setFormPartNumber] = useState('');
   const [formDescription, setFormDescription] = useState('');
+  const [formStepName, setFormStepName] = useState('');
   const [formPrice, setFormPrice] = useState('');
   const [isNewItem, setIsNewItem] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   // Filter and sort
   const filteredPrices = useMemo(() => {
@@ -62,13 +65,18 @@ export default function PriceList() {
     let filtered = prices.filter(
       (p) =>
         p.part_number.toLowerCase().includes(searchLower) ||
-        p.description.toLowerCase().includes(searchLower)
+        p.description.toLowerCase().includes(searchLower) ||
+        (p.step_name && p.step_name.toLowerCase().includes(searchLower))
     );
 
     filtered.sort((a, b) => {
       let cmp = 0;
       if (sortField === 'price') {
         cmp = a.price - b.price;
+      } else if (sortField === 'step_name') {
+        const aVal = a.step_name || '';
+        const bVal = b.step_name || '';
+        cmp = aVal.localeCompare(bVal, 'sv');
       } else {
         cmp = a[sortField].localeCompare(b[sortField], 'sv');
       }
@@ -95,6 +103,7 @@ export default function PriceList() {
     setIsNewItem(true);
     setFormPartNumber('');
     setFormDescription('');
+    setFormStepName('');
     setFormPrice('');
     setSelectedItem(null);
     setEditDialogOpen(true);
@@ -104,6 +113,7 @@ export default function PriceList() {
     setIsNewItem(false);
     setFormPartNumber(item.part_number);
     setFormDescription(item.description);
+    setFormStepName(item.step_name || '');
     setFormPrice(item.price.toString());
     setSelectedItem(item);
     setEditDialogOpen(true);
@@ -116,16 +126,29 @@ export default function PriceList() {
 
   const handleSave = async () => {
     const price = parseFloat(formPrice) || 0;
+    const stepName = formStepName.trim() || undefined;
     if (isNewItem) {
-      const success = await addPrice(formPartNumber, formDescription, price);
+      const success = await addPrice(formPartNumber, formDescription, price, stepName);
       if (success) setEditDialogOpen(false);
     } else if (selectedItem) {
       const success = await updatePrice(selectedItem.id, {
         part_number: formPartNumber,
         description: formDescription,
+        step_name: stepName || null,
         price,
       });
       if (success) setEditDialogOpen(false);
+    }
+  };
+
+  const handleImport = async () => {
+    setIsImporting(true);
+    const result = await importFromOrders();
+    setIsImporting(false);
+    setImportDialogOpen(false);
+    
+    if (result.total > 0) {
+      // Toast handled by hook, but we can show summary
     }
   };
 
@@ -147,12 +170,20 @@ export default function PriceList() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Prislista</h1>
-            <p className="text-muted-foreground">{filteredPrices.length} artiklar</p>
+            <p className="text-muted-foreground">{filteredPrices.length} prisrader</p>
           </div>
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" />
-            Exportera Excel
-          </Button>
+          <div className="flex gap-2">
+            {canEdit && (
+              <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Importera från ordrar
+              </Button>
+            )}
+            <Button variant="outline" onClick={handleExport}>
+              <Download className="h-4 w-4 mr-2" />
+              Exportera Excel
+            </Button>
+          </div>
         </div>
 
         {/* Search */}
@@ -190,6 +221,15 @@ export default function PriceList() {
                   </div>
                 </TableHead>
                 <TableHead
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort('step_name')}
+                >
+                  <div className="flex items-center gap-2">
+                    Steg
+                    <ArrowUpDown className="h-4 w-4" />
+                  </div>
+                </TableHead>
+                <TableHead
                   className="cursor-pointer hover:bg-muted/50 text-right"
                   onClick={() => handleSort('price')}
                 >
@@ -204,13 +244,13 @@ export default function PriceList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={canEdit ? 4 : 3} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={canEdit ? 5 : 4} className="text-center py-8 text-muted-foreground">
                     Laddar...
                   </TableCell>
                 </TableRow>
               ) : filteredPrices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={canEdit ? 4 : 3} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={canEdit ? 5 : 4} className="text-center py-8 text-muted-foreground">
                     {search ? 'Inga träffar' : 'Inga prisrader ännu'}
                   </TableCell>
                 </TableRow>
@@ -219,6 +259,7 @@ export default function PriceList() {
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">{item.part_number}</TableCell>
                     <TableCell>{item.description}</TableCell>
+                    <TableCell className="text-muted-foreground">{item.step_name || '—'}</TableCell>
                     <TableCell className="text-right">{formatPrice(item.price)}</TableCell>
                     {canEdit && (
                       <TableCell>
@@ -283,6 +324,15 @@ export default function PriceList() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="stepName">Steg (valfritt)</Label>
+                <Input
+                  id="stepName"
+                  value={formStepName}
+                  onChange={(e) => setFormStepName(e.target.value)}
+                  placeholder="T.ex. Blästring, Sprutzink, Målning"
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="price">Pris (kr)</Label>
                 <Input
                   id="price"
@@ -310,13 +360,31 @@ export default function PriceList() {
             <AlertDialogHeader>
               <AlertDialogTitle>Ta bort prisrad?</AlertDialogTitle>
               <AlertDialogDescription>
-                Är du säker på att du vill ta bort "{selectedItem?.part_number}"? Detta kan inte ångras.
+                Är du säker på att du vill ta bort "{selectedItem?.part_number}{selectedItem?.step_name ? ` (${selectedItem.step_name})` : ''}"? Detta kan inte ångras.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Avbryt</AlertDialogCancel>
               <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                 Ta bort
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Import confirmation */}
+        <AlertDialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Importera från ordrar</AlertDialogTitle>
+              <AlertDialogDescription>
+                Detta kommer att hämta alla unika kombinationer av artikelnummer, benämning och pris från befintliga ordrar och lägga till dem i prislistan. Dubbletter hoppas över.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isImporting}>Avbryt</AlertDialogCancel>
+              <AlertDialogAction onClick={handleImport} disabled={isImporting}>
+                {isImporting ? 'Importerar...' : 'Importera'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

@@ -273,6 +273,7 @@ export type Database = {
           id: string
           part_number: string
           price: number
+          step_name: string | null
           updated_at: string
         }
         Insert: {
@@ -281,6 +282,7 @@ export type Database = {
           id?: string
           part_number: string
           price?: number
+          step_name?: string | null
           updated_at?: string
         }
         Update: {
@@ -289,6 +291,7 @@ export type Database = {
           id?: string
           part_number?: string
           price?: number
+          step_name?: string | null
           updated_at?: string
         }
         Relationships: []
