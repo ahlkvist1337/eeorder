@@ -1,135 +1,118 @@
 
-
-# Plan: Stegbaserade priser med fritext + Import
+# Plan: Expanderbara artikelrader i prislistan
 
 ## Sammanfattning
 
-Utöka prislistan med ett valfritt fritextfält för "steg/behandling" så att samma artikel kan ha olika priser för t.ex. blästring, sprutzink och målning. Lägg till import-funktion för att hämta befintlig data från ordrar.
+Gruppera prisrader per artikelnummer i prislistan, så att varje artikel visas på en rad med möjlighet att expandera och se/redigera alla stegpriser under.
 
 ---
 
-## Ny datamodell
+## Ny design
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│ price_list (uppdaterad)                                         │
-├─────────────────────────────────────────────────────────────────┤
-│ id           │ uuid        │ PK                                 │
-│ part_number  │ text        │ Artikelnummer                      │
-│ description  │ text        │ Benämning                          │
-│ step_name    │ text        │ Steg/behandling (fritext, valfritt)│
-│ price        │ numeric     │ Pris                               │
-│ created_at   │ timestamptz │ Skapad                             │
-│ updated_at   │ timestamptz │ Uppdaterad                         │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Unik constraint:** `(part_number, step_name)` - samma artikel kan ha olika priser för olika steg.
-
----
-
-## Exempel på data
-
-| Artikelnr | Benämning | Steg | Pris |
-|-----------|-----------|------|------|
-| 7589450-777 | Hjulgaffel | Blästring | 200 kr |
-| 7589450-777 | Hjulgaffel | Sprutzink | 350 kr |
-| 7589450-777 | Hjulgaffel | Målning | 450 kr |
-| 3903041 | Lagerlock | — | 1 000 kr |
-| 3903041 | Lagerlock | Svetsning | 500 kr |
-
----
-
-## Ny design av prislistesidan
-
-```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│ Prislista                                [Importera från ordrar] [Excel] │
-│ 127 prisrader                                                            │
-├──────────────────────────────────────────────────────────────────────────┤
-│ 🔍 [Sök artikelnummer, benämning eller steg...                      ]    │
-├──────────────────────────────────────────────────────────────────────────┤
-│ Artikelnr ▼   │ Benämning        │ Steg          │ Pris        │         │
-├───────────────┼──────────────────┼───────────────┼─────────────┼─────────┤
-│ 7589450-777   │ Hjulgaffel       │ Blästring     │ 200 kr      │ ✏️ 🗑   │
-│ 7589450-777   │ Hjulgaffel       │ Sprutzink     │ 350 kr      │ ✏️ 🗑   │
-│ 7589450-777   │ Hjulgaffel       │ Målning       │ 450 kr      │ ✏️ 🗑   │
-│ 3903041       │ Lagerlock        │ —             │ 1 000 kr    │ ✏️ 🗑   │
-├───────────────┴──────────────────┴───────────────┴─────────────┴─────────┤
-│ [+ Lägg till ny prisrad]                                                 │
-└──────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│ Prislista                                  [Importera från ordrar] [Exportera]    │
+│ 45 artiklar (127 prisrader)                                                       │
+├───────────────────────────────────────────────────────────────────────────────────┤
+│ 🔍 [Sök artikelnummer, benämning eller steg...                              ]     │
+├───────────────────────────────────────────────────────────────────────────────────┤
+│ Artikelnr ▼   │ Benämning        │ Antal steg  │ Priser              │           │
+├───────────────┼──────────────────┼─────────────┼─────────────────────┼───────────┤
+│ ▶ 7589450-777 │ Hjulgaffel       │ 3 steg      │ 200–450 kr          │ ✏️        │
+├───────────────┼──────────────────┼─────────────┼─────────────────────┼───────────┤
+│ ▼ 3903041     │ Lagerlock        │ 2 steg      │ 500–1 000 kr        │ ✏️        │
+│ ┌─────────────────────────────────────────────────────────────────────────────┐   │
+│ │ Steg              │ Pris        │                                           │   │
+│ ├───────────────────┼─────────────┼───────────────────────────────────────────┤   │
+│ │ (grundpris)       │ 1 000 kr    │ ✏️  🗑                                    │   │
+│ │ Svetsning         │ 500 kr      │ ✏️  🗑                                    │   │
+│ ├───────────────────┴─────────────┴───────────────────────────────────────────┤   │
+│ │ [+ Lägg till stegpris]                                                      │   │
+│ └─────────────────────────────────────────────────────────────────────────────┘   │
+├───────────────┼──────────────────┼─────────────┼─────────────────────┼───────────┤
+│ ▶ 8821234     │ Axel             │ 1 steg      │ 750 kr              │ ✏️        │
+└───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Lägg till/Redigera dialog
+## Funktionalitet
 
-Fritextfält för steg (inte dropdown):
+### Grupperad visning
+- Alla prisrader med samma `part_number` grupperas till en "huvudrad"
+- Huvudraden visar artikelnummer, benämning, antal steg och prisintervall (min–max)
 
-```text
-┌─────────────────────────────────────┐
-│ Lägg till prisrad                   │
-├─────────────────────────────────────┤
-│ Artikelnummer                       │
-│ [7589450-777                     ]  │
-│                                     │
-│ Benämning                           │
-│ [Hjulgaffel                      ]  │
-│                                     │
-│ Steg (valfritt)                     │
-│ [Blästring                       ]  │  ← Fritext, inte dropdown
-│                                     │
-│ Pris (kr)                           │
-│ [200                             ]  │
-│                                     │
-│         [Avbryt]  [Lägg till]       │
-└─────────────────────────────────────┘
-```
+### Expandera artikel
+- Klicka på pilen (▶/▼) för att expandera
+- Visar alla stegpriser för den artikeln i en undertabell
+- Varje stegpris kan redigeras och tas bort individuellt
 
----
+### Lägg till stegpris
+- Inuti den expanderade sektionen finns knapp för att lägga till nytt stegpris
+- Öppnar dialog med förifyllt artikelnummer och benämning
+- Användaren fyller i stegnamn och pris
 
-## Import-funktion
-
-**Knapp:** "Importera från ordrar"
-
-1. Hämtar alla unika `(part_number, text, price)` från `article_rows`
-2. Visar dialog: "Hittade 87 unika prisrader i befintliga ordrar. Importera?"
-3. Infogar i `price_list` (hoppar över dubbletter)
-4. Visar resultat: "67 nya prisrader importerade"
+### Redigera huvudrad
+- Pennikonen på huvudraden öppnar dialog för att redigera artikelnummer/benämning
+- Uppdaterar alla prisrader med samma artikelnummer
 
 ---
 
 ## Tekniska ändringar
 
-### 1. Databas-migration
+### Fil: src/pages/PriceList.tsx
 
-```sql
--- Lägg till step_name kolumn
-ALTER TABLE public.price_list 
-  ADD COLUMN step_name text DEFAULT NULL;
+| Ändring | Beskrivning |
+|---------|-------------|
+| Gruppera data | Ny `useMemo` som grupperar `prices` per `part_number` till objekt med alla stegpriser |
+| Expanderat state | `expandedPartNumber: string | null` för att hålla koll på vilken artikel som är expanderad |
+| Undertabell | Rendera stegpriser i en collapsible sektion under varje grupperad rad |
+| Lägg till stegpris | Ny knapp i expanderad sektion som öppnar dialogen med förifyllt artikelnummer |
 
--- Ta bort gamla unika constraint
-ALTER TABLE public.price_list 
-  DROP CONSTRAINT IF EXISTS price_list_part_number_key;
+### Datastruktur (i komponenten)
 
--- Ny unik constraint på (part_number, step_name)
-CREATE UNIQUE INDEX price_list_part_number_step_unique 
-  ON public.price_list (part_number, COALESCE(step_name, ''));
+```typescript
+interface GroupedArticle {
+  partNumber: string;
+  description: string;  // Från första raden
+  prices: PriceListItem[];  // Alla prisrader för denna artikel
+  minPrice: number;
+  maxPrice: number;
+}
 ```
 
-### 2. Filer som ändras
+### Logik för gruppering
 
-| Fil | Ändring |
-|-----|---------|
-| `src/hooks/usePriceList.ts` | Lägg till `step_name` i interface och queries, ny `importFromOrders()` funktion |
-| `src/pages/PriceList.tsx` | Ny "Steg"-kolumn, fritextfält i dialog, import-knapp med bekräftelse |
-| `src/lib/exportExcel.ts` | Inkludera steg i CSV-exporten |
+```typescript
+const groupedPrices = useMemo(() => {
+  const groups = new Map<string, GroupedArticle>();
+  
+  for (const item of filteredPrices) {
+    const existing = groups.get(item.part_number);
+    if (existing) {
+      existing.prices.push(item);
+      existing.minPrice = Math.min(existing.minPrice, item.price);
+      existing.maxPrice = Math.max(existing.maxPrice, item.price);
+    } else {
+      groups.set(item.part_number, {
+        partNumber: item.part_number,
+        description: item.description,
+        prices: [item],
+        minPrice: item.price,
+        maxPrice: item.price,
+      });
+    }
+  }
+  
+  return Array.from(groups.values());
+}, [filteredPrices]);
+```
 
 ---
 
-## Orderflödet påverkas INTE
+## Fördelar
 
-- Prislistan förblir fristående referensinformation
-- `article_rows` i ordrar ändras inte
-- Orderskapande fungerar precis som förut
-
+- Renare översikt: ser direkt vilka artiklar som finns
+- Enklare att hantera stegpriser: alla på samma ställe
+- Prisintervall ger snabb överblick
+- Samma databas och RLS-policies, ingen migration behövs
