@@ -1,7 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { ClipboardList, Plus, Settings, BarChart3, Tv, Users, LogOut, Menu } from 'lucide-react';
+import { ClipboardList, Plus, Settings, BarChart3, Tv, Users, LogOut, Menu, Receipt } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +22,7 @@ const navItems = [
   { to: '/steps', label: 'Inställningar', icon: Settings },
   { to: '/statistics', label: 'Statistik', icon: BarChart3 },
   { to: '/production', label: 'Produktion', icon: Tv },
+  { to: '/prices', label: 'Prislista', icon: Receipt },
 ];
 
 export function Layout({ children }: LayoutProps) {

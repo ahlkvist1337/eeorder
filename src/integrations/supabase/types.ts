@@ -266,6 +266,33 @@ export type Database = {
         }
         Relationships: []
       }
+      price_list: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          part_number: string
+          price: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          id?: string
+          part_number: string
+          price?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          part_number?: string
+          price?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
