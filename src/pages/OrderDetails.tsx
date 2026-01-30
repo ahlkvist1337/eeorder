@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
 import { ArrowLeft, AlertTriangle, Clock, Package, Wrench, Save, CalendarIcon } from 'lucide-react';
@@ -47,6 +48,9 @@ export default function OrderDetails() {
   const order = getOrderById(id || '');
   const { attachments, refetch: refetchAttachments } = useOrderAttachments(id || '');
   const { canEdit } = useAuth();
+  
+  // Set dynamic page title
+  useDocumentTitle(order ? `Order ${order.orderNumber}` : 'Order');
   
   // Local state for deviation comment to avoid saving on every keystroke
   const [localDeviationComment, setLocalDeviationComment] = useState(order?.deviationComment || '');

@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
 import { BarChart3, CheckCircle2, Clock, DollarSign, AlertTriangle, Package } from 'lucide-react';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useOrders } from '@/hooks/useOrders';
 
 export default function Statistics() {
+  useDocumentTitle('Statistik');
   const { orders } = useOrders();
 
   const stats = useMemo(() => {

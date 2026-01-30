@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Trash2, Edit2, Check, X } from 'lucide-react';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +10,7 @@ import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
 import { useObjectTemplates } from '@/hooks/useObjectTemplates';
 
 export default function TreatmentSteps() {
+  useDocumentTitle('Inställningar');
   const { steps, addStep, updateStep, deleteStep } = useTreatmentSteps();
   const { templates: objectTemplates, addTemplate, updateTemplate, deleteTemplate } = useObjectTemplates();
   

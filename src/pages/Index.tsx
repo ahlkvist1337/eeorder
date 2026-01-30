@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Upload, Search, X } from 'lucide-react';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Layout } from '@/components/Layout';
 import { OrdersTable } from '@/components/OrdersTable';
 import { OrderFilters } from '@/components/OrderFilters';
@@ -15,6 +16,7 @@ import { toast } from 'sonner';
 import type { ProductionStatus, BillingStatus } from '@/types/order';
 
 const Index = () => {
+  useDocumentTitle('Ordrar');
   const { orders, isLoading, bulkUpdateOrders } = useOrders();
   const { canEdit } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');

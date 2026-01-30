@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useOrders } from '@/contexts/OrdersContext';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { ProductionOrderCard } from '@/components/ProductionOrderCard';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
@@ -7,6 +8,7 @@ import { Pause, Box } from 'lucide-react';
 import eeLogo from '@/assets/ee_logga.png';
 
 export default function ProductionScreen() {
+  useDocumentTitle('Produktion');
   const { orders, refreshOrders, isLoading } = useOrders();
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
