@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Upload, X, FileIcon, Download, Loader2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -141,12 +141,38 @@ export function OrderAttachments({ orderId, attachments, onAttachmentsChange }: 
     }
   };
 
-  const getDownloadUrl = (filePath: string) => {
-    const { data } = supabase.storage
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+
+  // Generate signed URLs for all attachments
+  const getSignedUrl = async (filePath: string): Promise<string> => {
+    if (signedUrls[filePath]) {
+      return signedUrls[filePath];
+    }
+    
+    const { data, error } = await supabase.storage
       .from('order-attachments')
-      .getPublicUrl(filePath);
-    return data.publicUrl;
+      .createSignedUrl(filePath, 3600); // 1 hour expiry
+    
+    if (error || !data?.signedUrl) {
+      console.error('Error creating signed URL:', error);
+      return '';
+    }
+    
+    setSignedUrls(prev => ({ ...prev, [filePath]: data.signedUrl }));
+    return data.signedUrl;
   };
+
+  // Load signed URLs for all attachments
+  useEffect(() => {
+    const loadSignedUrls = async () => {
+      for (const attachment of attachments) {
+        await getSignedUrl(attachment.file_path);
+      }
+    };
+    if (attachments.length > 0) {
+      loadSignedUrls();
+    }
+  }, [attachments]);
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -212,15 +238,15 @@ export function OrderAttachments({ orderId, attachments, onAttachmentsChange }: 
                 className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30"
               >
                 {/* Preview or icon */}
-                {isImage(attachment.mime_type) ? (
+                {isImage(attachment.mime_type) && signedUrls[attachment.file_path] ? (
                   <img
-                    src={getDownloadUrl(attachment.file_path)}
+                    src={signedUrls[attachment.file_path]}
                     alt={attachment.file_name}
                     className="h-12 w-12 object-cover rounded"
                   />
-                ) : isPdf(attachment.mime_type) ? (
+                ) : isPdf(attachment.mime_type) && signedUrls[attachment.file_path] ? (
                   <a
-                    href={getDownloadUrl(attachment.file_path)}
+                    href={signedUrls[attachment.file_path]}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="h-12 w-12 flex flex-col items-center justify-center bg-destructive/10 rounded hover:bg-destructive/20 transition-colors"
@@ -250,7 +276,7 @@ export function OrderAttachments({ orderId, attachments, onAttachmentsChange }: 
                     asChild
                   >
                     <a
-                      href={getDownloadUrl(attachment.file_path)}
+                      href={signedUrls[attachment.file_path] || '#'}
                       download={attachment.file_name}
                       target="_blank"
                       rel="noopener noreferrer"
