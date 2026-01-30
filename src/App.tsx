@@ -13,6 +13,7 @@ import OrderDetails from "./pages/OrderDetails";
 import TreatmentSteps from "./pages/TreatmentSteps";
 import Statistics from "./pages/Statistics";
 import ProductionScreen from "./pages/ProductionScreen";
+import PriceList from "./pages/PriceList";
 import Login from "./pages/Login";
 import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
@@ -36,6 +37,7 @@ const App = () => {
                 <Route path="/steps" element={<ProtectedRoute><TreatmentSteps /></ProtectedRoute>} />
                 <Route path="/statistics" element={<ProtectedRoute><Statistics /></ProtectedRoute>} />
                 <Route path="/production" element={<ProtectedRoute><ProductionScreen /></ProtectedRoute>} />
+                <Route path="/prices" element={<ProtectedRoute><PriceList /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AdminPanel /></ProtectedRoute>} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
