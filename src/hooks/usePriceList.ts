@@ -85,10 +85,10 @@ export function usePriceList() {
   };
 
   const importFromOrders = async (): Promise<{ total: number; imported: number }> => {
-    // Hämta alla unika kombinationer från article_rows
+    // Hämta artikelrader + orderns created_at så vi kan ta "senaste" pris per artikelnummer
     const { data: articleRows, error: fetchError } = await supabase
       .from('article_rows')
-      .select('part_number, text, price');
+      .select('part_number, text, price, orders(created_at)');
 
     if (fetchError) {
       toast({
@@ -108,27 +108,31 @@ export function usePriceList() {
       (existingPrices || []).map(p => `${p.part_number}|${p.step_name || ''}`)
     );
 
-    // Skapa unika kombinationer
-    const uniqueRows = new Map<string, { part_number: string; description: string; price: number }>();
-    for (const row of articleRows || []) {
-      if (row.part_number && row.part_number.trim()) {
-        const key = `${row.part_number}|${row.text}|${row.price}`;
-        if (!uniqueRows.has(key)) {
-          uniqueRows.set(key, {
-            part_number: row.part_number,
-            description: row.text,
-            price: row.price,
-          });
-        }
-      }
+    // OBS: eftersom vi importerar med step_name = null så tillåter unika indexet bara
+    // EN rad per part_number (för "tomt steg"). Därför deduplicerar vi per part_number.
+    const sorted = [...(articleRows || [])].sort((a: any, b: any) => {
+      const aT = a?.orders?.created_at ? new Date(a.orders.created_at).getTime() : 0;
+      const bT = b?.orders?.created_at ? new Date(b.orders.created_at).getTime() : 0;
+      return bT - aT;
+    });
+
+    const latestPerPartNumber = new Map<string, { part_number: string; description: string; price: number }>();
+    for (const row of sorted as any[]) {
+      const pn = (row.part_number || '').trim();
+      if (!pn) continue;
+      if (latestPerPartNumber.has(pn)) continue;
+
+      latestPerPartNumber.set(pn, {
+        part_number: pn,
+        description: row.text || '',
+        price: row.price || 0,
+      });
     }
 
-    // Filtrera bort de som redan finns
-    const rowsToInsert = Array.from(uniqueRows.values()).filter(
-      r => !existingKeys.has(`${r.part_number}|`)
-    );
+    const total = latestPerPartNumber.size;
 
-    const total = uniqueRows.size;
+    // Filtrera bort de som redan finns (med tomt steg)
+    const rowsToInsert = Array.from(latestPerPartNumber.values()).filter((r) => !existingKeys.has(`${r.part_number}|`));
     const toInsertCount = rowsToInsert.length;
 
     if (toInsertCount === 0) {
