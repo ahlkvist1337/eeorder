@@ -31,9 +31,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Search, Download, Plus, Pencil, Trash2, ArrowUpDown, Upload, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Search, Download, Plus, Pencil, Trash2, ArrowUpDown, Upload, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon } from 'lucide-react';
 
-type SortField = 'part_number' | 'description' | 'step_name' | 'price';
+interface GroupedArticle {
+  partNumber: string;
+  description: string;
+  prices: PriceListItem[];
+  minPrice: number;
+  maxPrice: number;
+}
+
+type SortField = 'part_number' | 'description' | 'step_count' | 'price';
 type SortDirection = 'asc' | 'desc';
 
 export default function PriceList() {
@@ -44,6 +53,9 @@ export default function PriceList() {
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('part_number');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  // Expanded state
+  const [expandedPartNumber, setExpandedPartNumber] = useState<string | null>(null);
 
   // Dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -63,44 +75,83 @@ export default function PriceList() {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 100;
 
-  // Filter and sort
+  // Filter prices by search
   const filteredPrices = useMemo(() => {
     const searchLower = search.toLowerCase();
-    let filtered = prices.filter(
+    return prices.filter(
       (p) =>
         p.part_number.toLowerCase().includes(searchLower) ||
         p.description.toLowerCase().includes(searchLower) ||
         (p.step_name && p.step_name.toLowerCase().includes(searchLower))
     );
+  }, [prices, search]);
 
-    filtered.sort((a, b) => {
+  // Group by part_number
+  const groupedPrices = useMemo(() => {
+    const groups = new Map<string, GroupedArticle>();
+
+    for (const item of filteredPrices) {
+      const existing = groups.get(item.part_number);
+      if (existing) {
+        existing.prices.push(item);
+        existing.minPrice = Math.min(existing.minPrice, item.price);
+        existing.maxPrice = Math.max(existing.maxPrice, item.price);
+      } else {
+        groups.set(item.part_number, {
+          partNumber: item.part_number,
+          description: item.description,
+          prices: [item],
+          minPrice: item.price,
+          maxPrice: item.price,
+        });
+      }
+    }
+
+    // Sort each group's prices by step_name
+    for (const group of groups.values()) {
+      group.prices.sort((a, b) => {
+        const aStep = a.step_name || '';
+        const bStep = b.step_name || '';
+        return aStep.localeCompare(bStep, 'sv');
+      });
+    }
+
+    let result = Array.from(groups.values());
+
+    // Sort grouped results
+    result.sort((a, b) => {
       let cmp = 0;
       if (sortField === 'price') {
-        cmp = a.price - b.price;
-      } else if (sortField === 'step_name') {
-        const aVal = a.step_name || '';
-        const bVal = b.step_name || '';
-        cmp = aVal.localeCompare(bVal, 'sv');
+        cmp = a.minPrice - b.minPrice;
+      } else if (sortField === 'step_count') {
+        cmp = a.prices.length - b.prices.length;
+      } else if (sortField === 'description') {
+        cmp = a.description.localeCompare(b.description, 'sv');
       } else {
-        cmp = a[sortField].localeCompare(b[sortField], 'sv');
+        cmp = a.partNumber.localeCompare(b.partNumber, 'sv');
       }
       return sortDirection === 'asc' ? cmp : -cmp;
     });
 
-    return filtered;
-  }, [prices, search, sortField, sortDirection]);
+    return result;
+  }, [filteredPrices, sortField, sortDirection]);
 
   // Pagination calculations
-  const totalPages = Math.ceil(filteredPrices.length / pageSize);
-  const paginatedPrices = useMemo(() => {
+  const totalPages = Math.ceil(groupedPrices.length / pageSize);
+  const paginatedGroups = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredPrices.slice(start, start + pageSize);
-  }, [filteredPrices, currentPage, pageSize]);
+    return groupedPrices.slice(start, start + pageSize);
+  }, [groupedPrices, currentPage, pageSize]);
+
+  // Stats
+  const totalArticles = groupedPrices.length;
+  const totalPriceRows = filteredPrices.length;
 
   // Reset to page 1 when search changes
   const handleSearchChange = (value: string) => {
     setSearch(value);
     setCurrentPage(1);
+    setExpandedPartNumber(null);
   };
 
   const handleSort = (field: SortField) => {
@@ -117,10 +168,10 @@ export default function PriceList() {
     exportToCsv(filteredPrices, `prislista-${new Date().toISOString().split('T')[0]}.csv`);
   };
 
-  const openAddDialog = () => {
+  const openAddDialog = (prefillPartNumber?: string, prefillDescription?: string) => {
     setIsNewItem(true);
-    setFormPartNumber('');
-    setFormDescription('');
+    setFormPartNumber(prefillPartNumber || '');
+    setFormDescription(prefillDescription || '');
     setFormStepName('');
     setFormPrice('');
     setSelectedItem(null);
@@ -161,13 +212,9 @@ export default function PriceList() {
 
   const handleImport = async () => {
     setIsImporting(true);
-    const result = await importFromOrders();
+    await importFromOrders();
     setIsImporting(false);
     setImportDialogOpen(false);
-    
-    if (result.total > 0) {
-      // Toast handled by hook, but we can show summary
-    }
   };
 
   const handleDelete = async () => {
@@ -181,6 +228,17 @@ export default function PriceList() {
     return price.toLocaleString('sv-SE', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' kr';
   };
 
+  const formatPriceRange = (min: number, max: number) => {
+    if (min === max) {
+      return formatPrice(min);
+    }
+    return `${formatPrice(min)} – ${formatPrice(max)}`;
+  };
+
+  const toggleExpanded = (partNumber: string) => {
+    setExpandedPartNumber((prev) => (prev === partNumber ? null : partNumber));
+  };
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -188,7 +246,9 @@ export default function PriceList() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Prislista</h1>
-            <p className="text-muted-foreground">{filteredPrices.length} prisrader</p>
+            <p className="text-muted-foreground">
+              {totalArticles} artiklar ({totalPriceRows} prisrader)
+            </p>
           </div>
           <div className="flex gap-2">
             {canEdit && (
@@ -220,6 +280,7 @@ export default function PriceList() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10"></TableHead>
                 <TableHead
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => handleSort('part_number')}
@@ -240,10 +301,10 @@ export default function PriceList() {
                 </TableHead>
                 <TableHead
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => handleSort('step_name')}
+                  onClick={() => handleSort('step_count')}
                 >
                   <div className="flex items-center gap-2">
-                    Steg
+                    Antal steg
                     <ArrowUpDown className="h-4 w-4" />
                   </div>
                 </TableHead>
@@ -252,7 +313,7 @@ export default function PriceList() {
                   onClick={() => handleSort('price')}
                 >
                   <div className="flex items-center justify-end gap-2">
-                    Pris
+                    Priser
                     <ArrowUpDown className="h-4 w-4" />
                   </div>
                 </TableHead>
@@ -262,47 +323,123 @@ export default function PriceList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={canEdit ? 5 : 4} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={canEdit ? 6 : 5} className="text-center py-8 text-muted-foreground">
                     Laddar...
                   </TableCell>
                 </TableRow>
-              ) : filteredPrices.length === 0 ? (
+              ) : groupedPrices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={canEdit ? 5 : 4} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={canEdit ? 6 : 5} className="text-center py-8 text-muted-foreground">
                     {search ? 'Inga träffar' : 'Inga prisrader ännu'}
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedPrices.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium">{item.part_number}</TableCell>
-                    <TableCell>{item.description}</TableCell>
-                    <TableCell className="text-muted-foreground">{item.step_name || '—'}</TableCell>
-                    <TableCell className="text-right">{formatPrice(item.price)}</TableCell>
-                    {canEdit && (
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openEditDialog(item)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          {isAdmin && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => openDeleteDialog(item)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
+                paginatedGroups.map((group) => {
+                  const isExpanded = expandedPartNumber === group.partNumber;
+                  return (
+                    <Collapsible key={group.partNumber} open={isExpanded} onOpenChange={() => toggleExpanded(group.partNumber)} asChild>
+                      <>
+                        <TableRow className="cursor-pointer hover:bg-muted/50" onClick={() => toggleExpanded(group.partNumber)}>
+                          <TableCell className="w-10">
+                            <CollapsibleTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => e.stopPropagation()}>
+                                {isExpanded ? (
+                                  <ChevronDown className="h-4 w-4" />
+                                ) : (
+                                  <ChevronRightIcon className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </CollapsibleTrigger>
+                          </TableCell>
+                          <TableCell className="font-medium">{group.partNumber}</TableCell>
+                          <TableCell>{group.description}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {group.prices.length} steg
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatPriceRange(group.minPrice, group.maxPrice)}
+                          </TableCell>
+                          {canEdit && (
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openAddDialog(group.partNumber, group.description)}
+                                  title="Lägg till stegpris"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
                           )}
-                        </div>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))
+                        </TableRow>
+                        <CollapsibleContent asChild>
+                          <TableRow className="bg-muted/30">
+                            <TableCell colSpan={canEdit ? 6 : 5} className="p-0">
+                              <div className="px-6 py-4">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead className="w-1/2">Steg</TableHead>
+                                      <TableHead className="text-right">Pris</TableHead>
+                                      {canEdit && <TableHead className="w-24"></TableHead>}
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {group.prices.map((item) => (
+                                      <TableRow key={item.id}>
+                                        <TableCell className="text-muted-foreground">
+                                          {item.step_name || '(grundpris)'}
+                                        </TableCell>
+                                        <TableCell className="text-right font-medium">
+                                          {formatPrice(item.price)}
+                                        </TableCell>
+                                        {canEdit && (
+                                          <TableCell>
+                                            <div className="flex items-center justify-end gap-1">
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => openEditDialog(item)}
+                                              >
+                                                <Pencil className="h-4 w-4" />
+                                              </Button>
+                                              {isAdmin && (
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  onClick={() => openDeleteDialog(item)}
+                                                >
+                                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                                </Button>
+                                              )}
+                                            </div>
+                                          </TableCell>
+                                        )}
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                                {canEdit && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-3"
+                                    onClick={() => openAddDialog(group.partNumber, group.description)}
+                                  >
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Lägg till stegpris
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        </CollapsibleContent>
+                      </>
+                    </Collapsible>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -312,7 +449,7 @@ export default function PriceList() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              Visar {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, filteredPrices.length)} av {filteredPrices.length}
+              Visar {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, groupedPrices.length)} av {groupedPrices.length} artiklar
             </p>
             <div className="flex items-center gap-2">
               <Button
@@ -342,9 +479,9 @@ export default function PriceList() {
 
         {/* Add button */}
         {canEdit && (
-          <Button onClick={openAddDialog}>
+          <Button onClick={() => openAddDialog()}>
             <Plus className="h-4 w-4 mr-2" />
-            Lägg till ny prisrad
+            Lägg till ny artikel
           </Button>
         )}
 
