@@ -1,5 +1,20 @@
 import { useState } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronRight, Pencil, Check, X, Package } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -10,12 +25,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { StepStatusBadge } from '@/components/StatusBadge';
-import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
 import { useObjectTemplates } from '@/hooks/useObjectTemplates';
 import { stepStatusLabels } from '@/types/order';
 import type { OrderStep, StepStatus, OrderObject } from '@/types/order';
+import { SortableStep } from '@/components/SortableStep';
 
 interface OrderObjectsEditorProps {
   objects: OrderObject[];
@@ -44,6 +59,14 @@ export function OrderObjectsEditor({
   
   // Step add state per object
   const [selectedTemplates, setSelectedTemplates] = useState<Record<string, string>>({});
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Get steps for a specific object
   const getStepsForObject = (objectId: string) => {
@@ -157,6 +180,24 @@ export function OrderObjectsEditor({
     onStepsChange(steps.map(step => 
       step.id === stepId ? { ...step, status } : step
     ));
+  };
+
+  // Drag end handler for reordering steps within an object
+  const handleDragEnd = (objectId: string) => (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (over && active.id !== over.id) {
+      const objectSteps = steps.filter(s => s.objectId === objectId);
+      const otherSteps = steps.filter(s => s.objectId !== objectId);
+      
+      const oldIndex = objectSteps.findIndex(s => s.id === active.id);
+      const newIndex = objectSteps.findIndex(s => s.id === over.id);
+      
+      const reorderedObjectSteps = arrayMove(objectSteps, oldIndex, newIndex);
+      
+      // Combine: keep other steps, then add reordered object steps
+      onStepsChange([...otherSteps, ...reorderedObjectSteps]);
+    }
   };
 
   const unassignedSteps = getUnassignedSteps();
@@ -311,36 +352,27 @@ export function OrderObjectsEditor({
                           Inga steg tillagda för detta objekt.
                         </p>
                       ) : (
-                        objectSteps.map((step, index) => (
-                          <div key={step.id}>
-                            {index > 0 && <Separator className="my-2" />}
-                            <div className="flex items-center gap-2">
-                              <span className="flex-1 text-sm">{step.name}</span>
-                              <StepStatusBadge status={step.status} />
-                              <Select 
-                                value={step.status} 
-                                onValueChange={(v) => handleStepStatusChange(step.id, v as StepStatus)}
-                              >
-                                <SelectTrigger className="w-[130px] h-8 text-xs bg-background">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="bg-popover">
-                                  {Object.entries(stepStatusLabels).map(([value, label]) => (
-                                    <SelectItem key={value} value={value} className="text-xs">{label}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-destructive hover:text-destructive"
-                                onClick={() => handleRemoveStep(step.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                        <DndContext
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={handleDragEnd(obj.id)}
+                        >
+                          <SortableContext
+                            items={objectSteps.map(s => s.id)}
+                            strategy={verticalListSortingStrategy}
+                          >
+                            <div className="space-y-1">
+                              {objectSteps.map((step) => (
+                                <SortableStep
+                                  key={step.id}
+                                  step={step}
+                                  onStatusChange={handleStepStatusChange}
+                                  onRemove={handleRemoveStep}
+                                />
+                              ))}
                             </div>
-                          </div>
-                        ))
+                          </SortableContext>
+                        </DndContext>
                       )}
 
                       {/* Add step to object */}
