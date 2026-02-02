@@ -53,6 +53,7 @@ export interface ObjectTruck {
   truckNumber: string;
   status: TruckStatus; // Production status for this truck
   stepStatuses: TruckStepStatus[];
+  sortOrder?: number; // Manual prioritization order
   createdAt?: string;
 }
 
@@ -191,4 +192,35 @@ export const truckStatusLabels: Record<TruckStatus, string> = {
   started: 'Startad',
   paused: 'Pausad',
   completed: 'Klar',
+};
+
+// Truck lifecycle events for unified history
+export type TruckLifecycleEventType = 
+  | 'planned'
+  | 'arrived'
+  | 'started'
+  | 'paused'
+  | 'completed'
+  | 'step_started'
+  | 'step_completed';
+
+export interface TruckLifecycleEvent {
+  id: string;
+  orderId: string;
+  truckId: string;
+  truckNumber: string;
+  eventType: TruckLifecycleEventType;
+  stepName?: string;
+  timestamp: string;
+  note?: string;
+}
+
+export const truckLifecycleEventLabels: Record<TruckLifecycleEventType, string> = {
+  planned: 'Truck planerad',
+  arrived: 'Truck ankommen',
+  started: 'Arbete påbörjat',
+  paused: 'Pausad',
+  completed: 'Truck klar',
+  step_started: 'Steg påbörjat',
+  step_completed: 'Steg klart',
 };

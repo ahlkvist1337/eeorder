@@ -123,19 +123,53 @@ export function ObjectTrucksEditor({
       currentStatus === 'pending' ? 'in_progress' :
       currentStatus === 'in_progress' ? 'completed' : 'pending';
     
+    // Find the truck to check if all steps will be completed
+    const truck = trucks.find(t => t.id === truckId);
+    
     if (onTruckStepStatusChange) {
       onTruckStepStatusChange(truckId, stepId, nextStatus);
+      
+      // Check if all steps are now completed (after this change)
+      if (truck && nextStatus === 'completed') {
+        const allStepsCompleted = objectSteps.every(step => {
+          if (step.id === stepId) return true; // This step will be completed
+          const status = truck.stepStatuses.find(s => s.stepId === step.id);
+          return status?.status === 'completed';
+        });
+        
+        // Auto-mark truck as completed if all steps are done
+        if (allStepsCompleted && truck.status !== 'completed' && onTruckStatusChange) {
+          onTruckStatusChange(truckId, 'completed');
+        }
+      }
     } else {
       // Update locally
-      onTrucksChange(trucks.map(t => {
+      const updatedTrucks = trucks.map(t => {
         if (t.id !== truckId) return t;
-        return {
+        const updatedTruck = {
           ...t,
           stepStatuses: t.stepStatuses.map(s => 
             s.stepId === stepId ? { ...s, status: nextStatus } : s
           ),
         };
-      }));
+        
+        // Check if all steps are now completed
+        if (nextStatus === 'completed') {
+          const allStepsCompleted = objectSteps.every(step => {
+            if (step.id === stepId) return true;
+            const status = updatedTruck.stepStatuses.find(s => s.stepId === step.id);
+            return status?.status === 'completed';
+          });
+          
+          if (allStepsCompleted) {
+            updatedTruck.status = 'completed';
+          }
+        }
+        
+        return updatedTruck;
+      });
+      
+      onTrucksChange(updatedTrucks);
     }
   };
 
