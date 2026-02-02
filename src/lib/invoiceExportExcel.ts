@@ -7,6 +7,7 @@ export function exportInvoiceToExcel(data: InvoiceExportData): void {
     'Ordernummer',
     'Kund',
     'Kundreferens',
+    'Kommentar',
     'Artikelnr',
     'Benämning',
     'Antal',
@@ -25,6 +26,7 @@ export function exportInvoiceToExcel(data: InvoiceExportData): void {
         order.orderNumber,
         order.customer,
         order.customerReference || '',
+        order.comment || '',
         article.partNumber,
         article.text,
         article.quantity.toString(),
@@ -41,6 +43,7 @@ export function exportInvoiceToExcel(data: InvoiceExportData): void {
         order.orderNumber,
         order.customer,
         order.customerReference || '',
+        order.comment || '',
         '',
         '(inga artikelrader)',
         '',
@@ -52,6 +55,7 @@ export function exportInvoiceToExcel(data: InvoiceExportData): void {
 
   // Add total row
   rows.push([
+    '',
     '',
     '',
     '',
