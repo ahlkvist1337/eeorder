@@ -914,8 +914,18 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       };
     }));
 
-    // Save to DB in background
-    await supabase.from('truck_step_status').update({ status: newStatus }).eq('truck_id', truckId).eq('step_id', stepId);
+    // Save to DB in background - use upsert in case the row doesn't exist yet
+    const existingStepStatus = orders.find(o => o.id === orderId)
+      ?.objects?.flatMap(obj => obj.trucks || [])
+      .find(t => t.id === truckId)
+      ?.stepStatuses.find(s => s.stepId === stepId);
+    
+    await supabase.from('truck_step_status').upsert({
+      id: existingStepStatus?.id || crypto.randomUUID(),
+      truck_id: truckId,
+      step_id: stepId,
+      status: newStatus,
+    }, { onConflict: 'id' });
     
     // Log to history
     await supabase.from('truck_status_history').insert({
