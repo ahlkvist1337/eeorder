@@ -1,218 +1,307 @@
 
-# Plan: Bulk-export av fakturaunderlag
+# Plan: Arbetskort-centrerat produktionssystem
 
 ## Sammanfattning
 
-Bygger ut det befintliga bulk-urvalet med möjlighet att exportera fakturaunderlag i PDF och/eller Excel för ordrar som är "Klar för fakturering".
+Systemet fungerar idag bra men har kvar terminologi och vissa koncept som skapar förvirring. Denna plan rensar upp terminologin och förtydligar rollfördelningen mellan **Order** (affär) och **Arbetskort** (produktion).
 
 ---
 
-## Nuvarande system (bevaras)
+## Nuläge
 
-| Komponent | Funktion |
-|-----------|----------|
-| `Index.tsx` | Hanterar bulk-urval med `selectedOrderIds` |
-| `BulkEditToolbar.tsx` | Visar åtgärder för valda ordrar |
-| `OrdersTable.tsx` | Checkbox-urval och filtrering |
-| `exportExcel.ts` | Befintlig CSV-export för prislistan |
+### Vad som redan fungerar korrekt
+
+| Komponent | Status |
+|-----------|--------|
+| `ObjectTruck` som arbetsenhet | Fungerar |
+| Valfritt trucknummer | Implementerat (truck_number nullable) |
+| Stegstatus per arbetsenhet | Fungerar |
+| Automatisk "klar" när alla steg klara | Fungerar |
+| Produktionsvy visar arbetsenheter | Fungerar |
+| Historik per arbetsenhet | Fungerar |
+| Fallback-identifiering utan trucknummer | Fungerar |
+
+### Vad som behöver förfinas
+
+| Problem | Åtgärd |
+|---------|--------|
+| "Truck"-terminologi överallt i kod och UI | Byt till "Arbetskort" |
+| Orderstatus (ProductionStatus) har för många val | Begränsa till back-office |
+| Objektets quantity-fält (Plan/Mott/Klart) är manuella | Beräkna automatiskt från arbetskort |
+| Otydlig rollfördelning Order vs Arbetskort | Förtydliga i UI |
 
 ---
 
-## Nya komponenter och filer
+## Del 1: Terminologiändring
 
-### 1. Export-funktion i `BulkEditToolbar.tsx`
+### UI-texter att ändra
 
-Lägg till en "Exportera fakturaunderlag"-knapp som:
-- Endast är aktiv när **alla valda ordrar** har `billingStatus === 'ready_for_billing'`
-- Öppnar en dialog för formatval
+| Nuvarande | Ny text |
+|-----------|---------|
+| Arbetsenheter | Arbetskort |
+| Arbetsenhet | Arbetskort |
+| Lägg till arbetsenhet | Lägg till arbetskort |
+| Inga arbetsenheter | Inga arbetskort |
+| Historik per arbetsenhet | Historik per arbetskort |
+| Arbetsenheter med status... | Arbetskort med status... |
 
-### 2. Ny dialog: `InvoiceExportDialog.tsx`
+### Berörda filer
 
-Formatval och bekräftelse:
+- `src/types/order.ts` - Etiketter
+- `src/components/ObjectTrucksEditor.tsx` - UI-texter
+- `src/components/ProductionTruckCard.tsx` - Rubriker
+- `src/pages/ProductionScreen.tsx` - Rubriker och meddelanden
+- `src/pages/OrderDetails.tsx` - Sammanfattning och historik
+- `src/components/TruckTimeline.tsx` - Tidslinje-etiketter
 
-```text
-┌─────────────────────────────────────────┐
-│ Exportera fakturaunderlag               │
-│                                         │
-│ 3 ordrar valda                          │
-│ Totalt: 45 600 kr                       │
-│                                         │
-│ Format:                                 │
-│ ☑ PDF (för granskning och utskick)      │
-│ ☑ Excel (för ekonomi/import)            │
-│                                         │
-│        [Avbryt]  [Exportera]            │
-└─────────────────────────────────────────┘
-```
+### Exempel på ändring i types/order.ts
 
-### 3. Ny lib: `src/lib/invoiceExport.ts`
-
-Logik för att generera fakturaunderlag:
-
-**Interface:**
 ```typescript
-interface InvoiceExportOrder {
-  orderNumber: string;
-  customer: string;
-  customerReference?: string;
-  completedDate?: string;  // actualEnd eller plannedEnd
-  articleRows: {
-    partNumber: string;
-    text: string;
-    quantity: number;
-    price: number;
-    total: number;
-  }[];
-  orderTotal: number;
-}
+// Nuvarande
+export const truckLifecycleEventLabels: Record<TruckLifecycleEventType, string> = {
+  planned: 'Arbetsenhet planerad',
+  arrived: 'Arbetsenhet ankommen',
+  ...
+};
 
-interface InvoiceExportData {
-  exportId: string;           // Ex: "EXP-20260202-001"
-  exportDate: string;
-  orders: InvoiceExportOrder[];
-  grandTotal: number;
+// Ny
+export const truckLifecycleEventLabels: Record<TruckLifecycleEventType, string> = {
+  planned: 'Arbetskort planerat',
+  arrived: 'Arbetskort ankommet',
+  started: 'Arbete påbörjat',
+  paused: 'Pausat',
+  completed: 'Arbetskort klart',
+  step_started: 'Steg påbörjat',
+  step_completed: 'Steg klart',
+};
+```
+
+---
+
+## Del 2: Orderstatus renodlas till back-office
+
+### Nuvarande ProductionStatus
+
+```typescript
+export type ProductionStatus = 
+  | 'created'      // Skapad
+  | 'started'      // Startad ← produktionslogik, bör bort
+  | 'paused'       // Pausad ← produktionslogik, bör bort
+  | 'arrived'      // Ankommen ← produktionslogik, bör bort
+  | 'completed'    // Avslutad
+  | 'cancelled';   // Avbruten
+```
+
+### Förenklad ProductionStatus (administrativ)
+
+```typescript
+export type OrderStatus = 
+  | 'active'       // Aktiv (ny order, arbete pågår)
+  | 'completed'    // Avslutad
+  | 'cancelled';   // Avbruten
+```
+
+### Migreringsplan
+
+1. Lägg till `active` som ny status
+2. Mappa befintliga `created`, `started`, `paused`, `arrived` → `active`
+3. Behåll `completed` och `cancelled`
+4. Uppdatera UI för att endast visa tre val
+
+### Databasmigration
+
+```sql
+-- Konsolidera produktionsstatus till administrativ
+UPDATE orders 
+SET production_status = 'active'
+WHERE production_status IN ('created', 'started', 'paused', 'arrived');
+```
+
+---
+
+## Del 3: Automatisk beräkning av Plan/Mott/Klart
+
+### Nuvarande problem
+
+Objektets quantity-fält (plannedQuantity, receivedQuantity, completedQuantity) är manuellt inmatade och kan komma ur synk med arbetskortsdata.
+
+### Ny beräkningslogik
+
+```typescript
+// I OrderObjectsEditor eller OrderDetails
+function calculateObjectQuantities(obj: OrderObject): {
+  planned: number;
+  received: number;
+  completed: number;
+} {
+  const trucks = obj.trucks || [];
+  
+  return {
+    planned: trucks.length,
+    received: trucks.filter(t => 
+      t.status === 'arrived' || 
+      t.status === 'started' || 
+      t.status === 'paused' || 
+      t.status === 'completed'
+    ).length,
+    completed: trucks.filter(t => t.status === 'completed').length,
+  };
 }
 ```
 
-### 4. Excel-export
+### UI-ändring
 
-Maskinvänlig enradsformat per artikelrad:
-
-| Ordernummer | Kund | Kundreferens | Artikelnr | Benämning | Antal | Pris | Summa |
-|-------------|------|--------------|-----------|-----------|-------|------|-------|
-| 12345 | Volvo | REF-001 | 100-200 | Blästring motorlåda | 3 | 450 | 1350 |
-| 12345 | Volvo | REF-001 | 100-201 | Lackering | 3 | 800 | 2400 |
-| 12346 | Scania | SC-2024 | 100-200 | Blästring | 1 | 450 | 450 |
-
-Sista raden innehåller totalsumma.
-
-### 5. PDF-export med jsPDF
-
-Installera `jspdf` och `jspdf-autotable` för tabellrendering.
-
-**PDF-layout:**
+Istället för manuella input-fält visar vi beräknade värden:
 
 ```text
-┌────────────────────────────────────────────────────┐
-│                 FAKTURAUNDERLAG                     │
-│                                                     │
-│ Export-ID: EXP-20260202-001                        │
-│ Exportdatum: 2 feb 2026                            │
-│                                                     │
-│ ═══════════════════════════════════════════════════│
-│                                                     │
-│ Order: 12345                                        │
-│ Kund: Volvo AB                                      │
-│ Referens: REF-001                                   │
-│ Klart: 28 jan 2026                                 │
-│                                                     │
-│ Artikel     Benämning           Antal   Pris   Sum │
-│ ─────────────────────────────────────────────────  │
-│ 100-200     Blästring motorlåda    3    450  1350  │
-│ 100-201     Lackering motorlåda    3    800  2400  │
-│                                                     │
-│                          Ordersumma:     3 750 kr   │
-│                                                     │
-│ ═══════════════════════════════════════════════════│
-│                                                     │
-│ Order: 12346                                        │
-│ ...                                                 │
-│                                                     │
-│ ═══════════════════════════════════════════════════│
-│                                                     │
-│                     TOTALT: 45 600 kr              │
-│                                                     │
-└────────────────────────────────────────────────────┘
+Före:
+[Plan: ___] [Mott: ___] [Klart: ___]
+
+Efter:
+Arbetskort: 3 planerade • 2 ankomna • 1 klart
 ```
 
 ---
 
-## Tekniska ändringar
+## Del 4: Förtydliga Order vs Arbetskort i UI
 
-### Nya filer
+### Orderdetaljvy
 
-| Fil | Beskrivning |
-|-----|-------------|
-| `src/lib/invoiceExport.ts` | Dataförberedelse och export-ID-generering |
-| `src/lib/invoiceExportPdf.ts` | PDF-generering med jsPDF |
-| `src/lib/invoiceExportExcel.ts` | Excel/CSV-generering |
-| `src/components/InvoiceExportDialog.tsx` | Dialog för formatval |
-
-### Ändrade filer
-
-| Fil | Ändring |
-|-----|---------|
-| `src/components/BulkEditToolbar.tsx` | Lägg till export-knapp och props |
-| `src/pages/Index.tsx` | Koppla export-funktionen till state |
-| `package.json` | Lägg till `jspdf` och `jspdf-autotable` |
-
----
-
-## Flöde
+Strukturera om för att tydliggöra:
 
 ```text
-Användare markerar 3 ordrar med status "Klar för fakturering"
-    ↓
-Klickar "Exportera fakturaunderlag" i toolbar
-    ↓
-Dialog öppnas med sammanfattning och formatval
-    ↓
-Väljer PDF + Excel → klickar "Exportera"
-    ↓
-1. Generera export-ID: "EXP-20260202-001"
-2. Hämta artikelrader för valda ordrar
-3. Filtrera bort: trucknummer, steg, historik, kommentarer
-4. Generera PDF och ladda ner
-5. Generera Excel och ladda ner
-    ↓
-Toast: "Fakturaunderlag exporterat (3 ordrar)"
+┌─────────────────────────────────────────────────┐
+│ ORDER 12345                                     │
+│ Kund: Volvo AB • Referens: REF-001             │
+│                                                 │
+│ [Aktiv ▼]  [Klar för fakturering ▼]            │
+├─────────────────────────────────────────────────┤
+│ OBJEKT & ARBETSKORT                             │
+│                                                 │
+│ ▼ Motorlåda                                     │
+│   Steg: Blästring → Lackering → Montering       │
+│   Arbetskort:                                   │
+│   ┌──────────────────────────────────────────┐  │
+│   │ #135  [Ankommen ▼] [Blästring ●] [Lack ○]│  │
+│   │ #136  [Väntande ▼] [Blästring ○] [Lack ○]│  │
+│   │ Reserv A7B2 [Klar ▼] [✓] [✓] [✓]         │  │
+│   └──────────────────────────────────────────┘  │
+│   Sammanfattning: 3 planerade • 2 ankomna • 1 klar│
+└─────────────────────────────────────────────────┘
+```
+
+### Produktionsvy
+
+Behålls som idag - visar endast arbetskort, inte ordrar:
+
+```text
+┌───────────┐ ┌───────────┐ ┌───────────┐
+│ #135      │ │ #136      │ │ Reserv    │
+│ Motorlåda │ │ Motorlåda │ │ A7B2      │
+│ [Blästr ●]│ │ [Väntar] │ │ [Klar ✓] │
+│ [Lack ○] │ │           │ │           │
+│ 12345     │ │ 12345     │ │ 12345     │
+│ Volvo     │ │ Volvo     │ │ Volvo     │
+└───────────┘ └───────────┘ └───────────┘
 ```
 
 ---
 
-## Validering och begränsningar
+## Del 5: Filändringar i detalj
 
-**Kontroller vid export:**
-1. Minst en order måste vara vald
-2. Alla valda ordrar måste ha `billingStatus === 'ready_for_billing'`
-3. Ordrar utan artikelrader inkluderas men markeras tydligt
+### 1. `src/types/order.ts`
 
-**Vad som INTE inkluderas:**
-- Trucknummer / arbetsenheter
-- Produktionsstatus
-- Behandlingssteg och historik
-- Interna kommentarer
-- Avvikelsedetaljer
+**Ändringar:**
+- Byt `ProductionStatus` till `OrderStatus` med endast `active`, `completed`, `cancelled`
+- Uppdatera alla labels till "Arbetskort"
+- Lägg till hjälpfunktion för quantity-beräkning
+
+### 2. `src/components/ObjectTrucksEditor.tsx`
+
+**Ändringar:**
+- Byt alla "arbetsenhet"-texter till "arbetskort"
+- Byt placeholder från "Nummer (valfritt)..." till "Arbetskort-ID (valfritt)..."
+
+### 3. `src/components/OrderObjectsEditor.tsx`
+
+**Ändringar:**
+- Ta bort manuella quantity-inputfält
+- Visa beräknad sammanfattning istället
+- Byt "Truck"-ikon mot "ClipboardList" eller liknande
+
+### 4. `src/pages/ProductionScreen.tsx`
+
+**Ändringar:**
+- Byt rubriker till "Arbetskort"
+- Behåll funktionalitet
+
+### 5. `src/pages/OrderDetails.tsx`
+
+**Ändringar:**
+- Uppdatera arbetskortssammanfattning
+- Byt historikrubrik
+- Uppdatera produktionsstatus-dropdown till 3 val
+
+### 6. `src/components/TruckTimeline.tsx`
+
+**Ändringar:**
+- Byt rubrik till "Tidslinje för arbetskort"
+
+### 7. `src/contexts/OrdersContext.tsx`
+
+**Ändringar:**
+- Hantera mappning av gamla statusar till `active`
 
 ---
 
-## Beroenden
+## Migreringar
 
-Nya npm-paket:
-- `jspdf` - PDF-generering
-- `jspdf-autotable` - Tabeller i PDF
+### Databasmigration
 
----
-
-## Exempeldata Excel
-
-```csv
-Export-ID;Exportdatum;Ordernummer;Kund;Kundreferens;Artikelnr;Benämning;Antal;Pris;Summa
-EXP-20260202-001;2026-02-02;12345;Volvo AB;REF-001;100-200;Blästring motorlåda;3;450;1350
-EXP-20260202-001;2026-02-02;12345;Volvo AB;REF-001;100-201;Lackering;3;800;2400
-EXP-20260202-001;2026-02-02;12346;Scania;SC-2024;100-200;Blästring;1;450;450
-;;;;;;;;TOTALT:;4200
+```sql
+-- 1. Konsolidera status
+UPDATE orders 
+SET production_status = 'active'
+WHERE production_status IN ('created', 'started', 'paused', 'arrived');
 ```
+
+### Inga strukturella databasändringar
+
+Tabellnamn (`object_trucks`, `truck_step_status`, etc.) behålls för bakåtkompatibilitet.
+
+---
+
+## Validering efter implementation
+
+1. **Skapa nytt arbetskort utan nummer** → Visas som "Objektnamn XXXX"
+2. **Skapa arbetskort med nummer** → Visas som "#123"
+3. **Ändra arbetskortsstatus** → Objektets sammanfattning uppdateras automatiskt
+4. **Alla steg klara** → Arbetskort markeras automatiskt som klart
+5. **Produktionsvyn** → Visar endast ankomna/startade arbetskort
+6. **Orderstatus** → Endast 3 val: Aktiv, Avslutad, Avbruten
+
+---
+
+## Vad som INTE ändras
+
+- Databasstruktur (tabellnamn behålls)
+- TypeScript-typnamn i kod (behålls för bakåtkompatibilitet)
+- Befintlig steglogik
+- Befintlig historikloggning
+- Fakturaexport
 
 ---
 
 ## Sammanfattning
 
-| Vad | Hur |
-|-----|-----|
-| Urval | Befintligt checkbox-system i `OrdersTable` |
-| Validering | Endast "Klar för fakturering" kan exporteras |
-| PDF | jsPDF med sammanfattning + per order |
-| Excel | En rad per artikelrad, maskinvänlig |
-| Spårbarhet | Export-ID + datum i varje fil |
-| Avgränsningar | Endast ekonomiskt relevant data |
+| Område | Ändring |
+|--------|---------|
+| Terminologi | "Arbetsenhet" → "Arbetskort" |
+| Orderstatus | 6 val → 3 val (aktiv/avslutad/avbruten) |
+| Quantity | Manuell → Automatisk beräkning |
+| Rollfördelning | Tydligare separation Order/Arbetskort |
+
+Grundprincipen:
+- **Order = affär och administration**
+- **Arbetskort = verklighet i verkstaden**
+
