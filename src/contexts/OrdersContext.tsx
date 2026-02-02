@@ -55,6 +55,7 @@ interface DbObjectTruck {
   object_id: string;
   truck_number: string;
   status: 'waiting' | 'arrived' | 'started' | 'paused' | 'completed';
+  sort_order: number | null;
   created_at: string;
 }
 
@@ -173,6 +174,7 @@ function mapDbOrderToOrder(
         objectId: t.object_id,
         truckNumber: t.truck_number,
         status: t.status,
+        sortOrder: t.sort_order ?? undefined,
         createdAt: t.created_at,
         stepStatuses: truckStepStatuses
           .filter(s => s.truck_id === t.id)

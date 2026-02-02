@@ -81,6 +81,7 @@ export type Database = {
           created_at: string
           id: string
           object_id: string
+          sort_order: number | null
           status: Database["public"]["Enums"]["truck_status"]
           truck_number: string
         }
@@ -88,6 +89,7 @@ export type Database = {
           created_at?: string
           id?: string
           object_id: string
+          sort_order?: number | null
           status?: Database["public"]["Enums"]["truck_status"]
           truck_number: string
         }
@@ -95,6 +97,7 @@ export type Database = {
           created_at?: string
           id?: string
           object_id?: string
+          sort_order?: number | null
           status?: Database["public"]["Enums"]["truck_status"]
           truck_number?: string
         }
@@ -448,6 +451,54 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      truck_lifecycle_events: {
+        Row: {
+          event_type: string
+          id: string
+          note: string | null
+          order_id: string
+          step_name: string | null
+          timestamp: string
+          truck_id: string
+          truck_number: string
+        }
+        Insert: {
+          event_type: string
+          id?: string
+          note?: string | null
+          order_id: string
+          step_name?: string | null
+          timestamp?: string
+          truck_id: string
+          truck_number: string
+        }
+        Update: {
+          event_type?: string
+          id?: string
+          note?: string | null
+          order_id?: string
+          step_name?: string | null
+          timestamp?: string
+          truck_id?: string
+          truck_number?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "truck_lifecycle_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "truck_lifecycle_events_truck_id_fkey"
+            columns: ["truck_id"]
+            isOneToOne: false
+            referencedRelation: "object_trucks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       truck_status_history: {
         Row: {
