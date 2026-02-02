@@ -1,22 +1,33 @@
-import { useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Trash2, Edit2, Check, X, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import type { ArticleRow } from '@/types/order';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import type { ArticleRow, OrderObject } from '@/types/order';
 
 interface ArticleRowsEditorProps {
   rows: ArticleRow[];
   onRowsChange: (rows: ArticleRow[]) => void;
   showTotal?: boolean;
   readOnly?: boolean;
+  objects?: OrderObject[];
+  onObjectLinkChange?: (rowId: string, objectId: string | undefined) => void;
 }
 
 export function ArticleRowsEditor({ 
   rows, 
   onRowsChange, 
   showTotal = true,
-  readOnly = false 
+  readOnly = false,
+  objects = [],
+  onObjectLinkChange,
 }: ArticleRowsEditorProps) {
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<ArticleRow>>({});
@@ -78,7 +89,24 @@ export function ArticleRowsEditor({
     setEditForm({});
   };
 
+  const handleObjectChange = (rowId: string, value: string) => {
+    const objectId = value === '_none' ? undefined : value;
+    
+    // Update the row directly
+    onRowsChange(rows.map(r => 
+      r.id === rowId ? { ...r, objectId } : r
+    ));
+    
+    // Also call the callback if provided (for triggering work card sync)
+    if (onObjectLinkChange) {
+      onObjectLinkChange(rowId, objectId);
+    }
+  };
+
   const total = rows.reduce((sum, row) => sum + (row.price * row.quantity), 0);
+
+  // Show object column only if objects are available
+  const showObjectColumn = objects.length > 0 && !readOnly;
 
   return (
     <div className="space-y-4">
@@ -93,6 +121,14 @@ export function ArticleRowsEditor({
               <th className="text-left py-2 pr-2 font-medium text-muted-foreground w-16">Enhet</th>
               <th className="text-right py-2 pr-2 font-medium text-muted-foreground w-24">Pris</th>
               <th className="text-right py-2 pr-2 font-medium text-muted-foreground w-24">Summa</th>
+              {showObjectColumn && (
+                <th className="text-left py-2 pr-2 font-medium text-muted-foreground w-36">
+                  <span className="flex items-center gap-1">
+                    <Link2 className="h-3 w-3" />
+                    Objekt
+                  </span>
+                </th>
+              )}
               {!readOnly && <th className="w-20"></th>}
             </tr>
           </thead>
@@ -148,6 +184,7 @@ export function ArticleRowsEditor({
                     <td className="py-2 pr-2 text-right font-medium">
                       {((editForm.price || 0) * (editForm.quantity || 0)).toLocaleString('sv-SE')} kr
                     </td>
+                    {showObjectColumn && <td className="py-2 pr-2"></td>}
                     <td className="py-2">
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSaveEdit}>
@@ -170,6 +207,28 @@ export function ArticleRowsEditor({
                     <td className="py-2 pr-2 text-right font-medium">
                       {(row.price * row.quantity).toLocaleString('sv-SE')} kr
                     </td>
+                    {showObjectColumn && (
+                      <td className="py-2 pr-2">
+                        <Select 
+                          value={row.objectId || '_none'} 
+                          onValueChange={(value) => handleObjectChange(row.id, value)}
+                        >
+                          <SelectTrigger className="h-8 text-xs bg-background">
+                            <SelectValue placeholder="Välj objekt..." />
+                          </SelectTrigger>
+                          <SelectContent className="bg-popover">
+                            <SelectItem value="_none">
+                              <span className="text-muted-foreground">Ej länkad</span>
+                            </SelectItem>
+                            {objects.map(obj => (
+                              <SelectItem key={obj.id} value={obj.id}>
+                                {obj.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                    )}
                     {!readOnly && (
                       <td className="py-2">
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100">
@@ -250,6 +309,7 @@ export function ArticleRowsEditor({
                 <td className="py-2 pr-2 text-right font-medium">
                   {((newRow.price || 0) * (newRow.quantity || 0)).toLocaleString('sv-SE')} kr
                 </td>
+                {showObjectColumn && <td className="py-2 pr-2"></td>}
                 <td className="py-2">
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleAddRow}>

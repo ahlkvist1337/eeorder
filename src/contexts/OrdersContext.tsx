@@ -78,6 +78,7 @@ interface DbArticleRow {
   unit: string;
   price: number;
   step_id: string | null;
+  object_id: string | null;
 }
 
 interface DbStatusHistory {
@@ -220,6 +221,7 @@ function mapDbOrderToOrder(
       unit: r.unit,
       price: Number(r.price),
       stepId: r.step_id || undefined,
+      objectId: r.object_id || undefined,
     })),
     statusHistory: statusHistory.map(h => ({
       id: h.id,
@@ -457,6 +459,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           unit: row.unit,
           price: row.price,
           step_id: row.stepId || null,
+          object_id: row.objectId || null,
         }))
       );
       if (rowsError) throw rowsError;
@@ -713,6 +716,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
             unit: row.unit,
             price: row.price,
             step_id: row.stepId || null,
+            object_id: row.objectId || null,
           }))
         );
         if (error) throw error;

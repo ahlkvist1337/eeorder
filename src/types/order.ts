@@ -156,6 +156,7 @@ export interface ArticleRow {
   unit: string;
   price: number;
   stepId?: string; // Optional link to treatment step
+  objectId?: string; // Link to OrderObject for auto work card generation
 }
 
 export interface ParsedXMLOrder {
