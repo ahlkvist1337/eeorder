@@ -59,9 +59,13 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
       yPosition += 5;
     }
     
-    if (order.comment) {
-      doc.text(`Kommentar: ${order.comment}`, 14, yPosition);
+    if (order.instructions && order.instructions.length > 0) {
+      doc.text('Instruktioner:', 14, yPosition);
       yPosition += 5;
+      for (const instruction of order.instructions) {
+        doc.text(`  • ${instruction}`, 14, yPosition);
+        yPosition += 5;
+      }
     }
     
     yPosition += 3;

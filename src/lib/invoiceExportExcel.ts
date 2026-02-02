@@ -7,7 +7,7 @@ export function exportInvoiceToExcel(data: InvoiceExportData): void {
     'Ordernummer',
     'Kund',
     'Kundreferens',
-    'Kommentar',
+    'Instruktioner',
     'Artikelnr',
     'Benämning',
     'Antal',
@@ -19,6 +19,8 @@ export function exportInvoiceToExcel(data: InvoiceExportData): void {
 
   // Add data rows for each article in each order
   for (const order of data.orders) {
+    const instructionsText = order.instructions?.join(' | ') || '';
+    
     for (const article of order.articleRows) {
       rows.push([
         data.exportId,
@@ -26,7 +28,7 @@ export function exportInvoiceToExcel(data: InvoiceExportData): void {
         order.orderNumber,
         order.customer,
         order.customerReference || '',
-        order.comment || '',
+        instructionsText,
         article.partNumber,
         article.text,
         article.quantity.toString(),
@@ -43,7 +45,7 @@ export function exportInvoiceToExcel(data: InvoiceExportData): void {
         order.orderNumber,
         order.customer,
         order.customerReference || '',
-        order.comment || '',
+        instructionsText,
         '',
         '(inga artikelrader)',
         '',
