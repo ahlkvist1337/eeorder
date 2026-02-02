@@ -1,69 +1,204 @@
 
-# Plan: Fixa XML-import av ordrar
 
-## Identifierade problem
+# Plan: Prislistans medvetenhet i artikelradseditor
 
-### Problem 1: Foreign key-fel vid skapande av arbetskort
-**Rotorsak:** I `addOrder` skapas `truck_step_status` (rad 413-427) **innan** `order_steps` skapas (rad 437-453). Detta orsakar ett "foreign key constraint violation" eftersom `truck_step_status.step_id` refererar till `order_steps.id`.
+## Sammanfattning
 
-**Konsekvens:** 
-- Ordern skapas framgångsrikt
-- Objekt och trucks skapas framgångsrikt
-- truck_step_status misslyckas → exception kastas
-- Steps och article rows skapas aldrig
-- Användaren ser "kunde inte skapa ordern" men ordern finns redan i databasen
-
-### Problem 2: Datum parsas inte korrekt från XML
-**Rotorsak:** XML-parsern läser `orderDate` och `deliveryDate` som råtext från XML-filen. Dessa datum skickas direkt till databasen utan formatkonvertering.
-
-Monitor ERP kan använda olika datumformat som kanske inte är kompatibla med PostgreSQL `timestamp with time zone`.
+Lägger till diskret prislistajämförelse i ArticleRowsEditor som visas **endast när priset skiljer sig** - utan att störa arbetsflödet eller blockera sparande.
 
 ---
 
-## Lösning
+## Hur det fungerar
 
-### Fix 1: Ändra ordningen i addOrder
+### Bakgrundslogik (tyst)
+När användaren redigerar eller lägger till en artikelrad:
+1. Systemet söker i prislistan efter:
+   - **Exakt match på artikelnummer** (stark träff)
+   - **Liknande benämning** (svag träff, enkel ordmatchning)
+2. Om träff hittas med **annat pris** → visa diskret notis
+3. Om samma pris eller ingen träff → inget visas
 
-Flytta insättning av `order_steps` **FÖRE** insättning av `truck_step_status`:
+### UI-placering
+Notisen visas direkt **under prisfältet** i redigeringsläge - inte som popup eller modal.
 
 ```text
-Nuvarande ordning:
-1. orders ✓
-2. order_objects ✓
-3. object_trucks ✓
-4. truck_step_status ❌ (step_id finns inte ännu)
-5. order_steps (körs aldrig)
-6. article_rows (körs aldrig)
-
-Ny ordning:
-1. orders
-2. order_objects
-3. order_steps ← FLYTTA UPP
-4. object_trucks
-5. truck_step_status ← Nu finns step_id
-6. article_rows
+┌────────────────────────────────────────────────────────────────┐
+│ Rad │ Artikelnr │ Beskrivning    │ Antal │ Enhet │ Pris       │
+├─────┼───────────┼────────────────┼───────┼───────┼────────────┤
+│ [1] │ [ABC123 ] │ [Blästring   ] │ [2  ] │ [st.] │ [1 500   ] │
+│     │           │                │       │       │ ⚠ Pris i   │
+│     │           │                │       │       │ prislistan:│
+│     │           │                │       │       │ 1 250 kr   │
+│     │           │                │       │       │ [Använd]   │
+└─────┴───────────┴────────────────┴───────┴───────┴────────────┘
 ```
 
-### Fix 2: Normalisera datumformat
+### Åtgärder från notisen (ett klick)
+1. **"Använd"** - Ersätter priset med prislistans värde
+2. **Ignorera** - Stäng notisen och fortsätt (inget klick krävs)
 
-Skapa en hjälpfunktion som konverterar datum från XML till ISO 8601-format:
+---
+
+## Vad som INTE händer
+
+- Ingen blockering av sparande
+- Inget krav på beslut
+- Ingen automatisk prisändring
+- Inga popup-dialoger eller modaler
+- Ingen "smart" gissning av liknande artiklar
+
+---
+
+## Teknisk implementation
+
+### 1. Ny hook: `usePriceListLookup`
+Skapar en lätt hook som:
+- Hämtar prislistan en gång vid mount
+- Exponerar en `findMatch(partNumber, description)` funktion
+- Returnerar bästa träff med pris och matchtyp
 
 ```typescript
-function normalizeDate(dateString: string | undefined): string | null {
-  if (!dateString) return null;
+// src/hooks/usePriceListLookup.ts
+
+interface PriceMatch {
+  price: number;
+  partNumber: string;
+  description: string;
+  matchType: 'exact_part' | 'similar_desc';
+}
+
+function usePriceListLookup() {
+  const [prices, setPrices] = useState<PriceListItem[]>([]);
   
-  // Försök tolka olika format
-  const date = new Date(dateString);
-  if (!isNaN(date.getTime())) {
-    return date.toISOString();
-  }
+  // Hämta prislistan en gång
+  useEffect(() => {
+    supabase
+      .from('price_list')
+      .select('*')
+      .then(({ data }) => setPrices(data || []));
+  }, []);
   
-  // Om det inte går att tolka, returnera null
-  return null;
+  const findMatch = useCallback((partNumber: string, description: string): PriceMatch | null => {
+    // 1. Exakt artikelnummer-match (stark)
+    const exactMatch = prices.find(p => 
+      p.part_number.trim().toLowerCase() === partNumber.trim().toLowerCase()
+    );
+    if (exactMatch) {
+      return { 
+        price: exactMatch.price, 
+        partNumber: exactMatch.part_number,
+        description: exactMatch.description,
+        matchType: 'exact_part' 
+      };
+    }
+    
+    // 2. Enkel ordmatchning på beskrivning (svag)
+    // Matcha om minst 2 ord överlappar
+    const descWords = description.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    const matches = prices.filter(p => {
+      const priceWords = p.description.toLowerCase().split(/\s+/);
+      const overlap = descWords.filter(w => priceWords.includes(w));
+      return overlap.length >= 2;
+    });
+    
+    if (matches.length > 0) {
+      // Ta den senast uppdaterade
+      const best = matches.sort((a, b) => 
+        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      )[0];
+      return { 
+        price: best.price, 
+        partNumber: best.part_number,
+        description: best.description,
+        matchType: 'similar_desc' 
+      };
+    }
+    
+    return null;
+  }, [prices]);
+  
+  return { findMatch, isReady: prices.length > 0 };
 }
 ```
 
-Använd denna i `handleXmlSubmit` för att normalisera `plannedStart` och `plannedEnd`.
+### 2. Uppdatering av ArticleRowsEditor
+
+Lägg till prislistematchning i redigeringsläge:
+
+**Nya imports och state:**
+```typescript
+import { usePriceListLookup } from '@/hooks/usePriceListLookup';
+
+// Inuti komponenten:
+const { findMatch } = usePriceListLookup();
+const [priceHint, setPriceHint] = useState<{
+  match: PriceMatch;
+  currentPrice: number;
+} | null>(null);
+```
+
+**I redigeringsläge - under prisfältet:**
+```tsx
+{/* Visa prishintar endast om prislistan har annat pris */}
+{priceHint && priceHint.match.price !== priceHint.currentPrice && (
+  <div className="flex items-center gap-2 text-xs text-amber-600 mt-1">
+    <span>
+      Prislistan: {priceHint.match.price.toLocaleString('sv-SE')} kr
+      {priceHint.match.matchType === 'similar_desc' && ' (liknande)'}
+    </span>
+    <Button 
+      variant="link" 
+      size="sm" 
+      className="h-auto p-0 text-xs"
+      onClick={() => {
+        setEditForm({ ...editForm, price: priceHint.match.price });
+        setPriceHint(null);
+      }}
+    >
+      Använd
+    </Button>
+  </div>
+)}
+```
+
+**Uppdatera prishinten vid ändringar:**
+```typescript
+// I useEffect eller onChange för artikelnummer/beskrivning/pris:
+useEffect(() => {
+  if (!editingRowId) {
+    setPriceHint(null);
+    return;
+  }
+  
+  const match = findMatch(editForm.partNumber || '', editForm.text || '');
+  if (match && match.price !== editForm.price) {
+    setPriceHint({ match, currentPrice: editForm.price || 0 });
+  } else {
+    setPriceHint(null);
+  }
+}, [editForm.partNumber, editForm.text, editForm.price, editingRowId, findMatch]);
+```
+
+### 3. Samma logik för "Lägg till ny rad"
+
+Samma prishintar visas även när användaren lägger till en ny rad:
+
+```tsx
+// I "isAdding" raden, under prisfältet:
+{newRowPriceHint && newRowPriceHint.match.price !== (newRow.price || 0) && (
+  <div className="flex items-center gap-2 text-xs text-amber-600 mt-1">
+    <span>Prislistan: {newRowPriceHint.match.price.toLocaleString('sv-SE')} kr</span>
+    <Button 
+      variant="link" 
+      size="sm" 
+      className="h-auto p-0 text-xs"
+      onClick={() => setNewRow({ ...newRow, price: newRowPriceHint.match.price })}
+    >
+      Använd
+    </Button>
+  </div>
+)}
+```
 
 ---
 
@@ -71,61 +206,36 @@ Använd denna i `handleXmlSubmit` för att normalisera `plannedStart` och `plann
 
 | Fil | Ändring |
 |-----|---------|
-| `src/contexts/OrdersContext.tsx` | I `addOrder`: Flytta insättning av `order_steps` före `object_trucks` och `truck_step_status` |
-| `src/pages/CreateOrder.tsx` | I `handleXmlSubmit`: Lägg till datumnormalisering för `plannedStart` och `plannedEnd` |
-| `src/lib/xmlParser.ts` | (Valfritt) Förbättra datumparsning för att hantera fler format |
+| `src/hooks/usePriceListLookup.ts` | **NY FIL** - Lätt hook för prislistamatchning |
+| `src/components/ArticleRowsEditor.tsx` | Lägg till prishintar under prisfältet vid redigering/tillägg |
 
 ---
 
-## Tekniska detaljer
+## Visuell design
 
-### Ändring i OrdersContext.tsx (addOrder-funktionen)
+Notisen är:
+- **Diskret** - Liten text i dämpad färg (amber/gul)
+- **Icke-blockerande** - Användaren kan ignorera den helt
+- **Direkt placerad** - Under prisfältet, inte någon annanstans
+- **Enkel att agera på** - Ett klick för att använda priset
 
-Nuvarande struktur (rad 384-472):
 ```text
-1. Insert order (352-380)
-2. Insert objects if any (386-398)
-3. Insert trucks for each object (401-428)
-   - Inkluderar truck_step_status (413-427) ← PROBLEM
-4. Insert steps if any (437-453)
-5. Insert article rows if any (457-471)
+Prislistan: 1 250 kr [Använd]
 ```
 
-Ny struktur:
-```text
-1. Insert order
-2. Insert objects if any
-3. Insert steps if any ← FLYTTA UPP
-4. Insert trucks for each object
-   - Inkluderar truck_step_status ← Nu fungerar FK
-5. Insert article rows if any
-```
-
-### Ändring i CreateOrder.tsx (handleXmlSubmit)
-
-Lägg till normalisering innan order skapas:
-```typescript
-// Normalisera datum från XML
-const normalizeDate = (dateStr: string | undefined): string | undefined => {
-  if (!dateStr) return undefined;
-  const date = new Date(dateStr);
-  return !isNaN(date.getTime()) ? date.toISOString() : undefined;
-};
-
-const newOrder = {
-  // ...
-  plannedStart: normalizeDate(parsedXml.orderDate),
-  plannedEnd: normalizeDate(parsedXml.deliveryDate),
-  // ...
-};
-```
+Ingen röd varning. Ingen modal. Inget som stoppar flödet.
 
 ---
 
-## Resultat efter fix
+## Matchningslogik (förnuftig nivå)
 
-| Scenario | Före | Efter |
-|----------|------|-------|
-| XML-import med objekt + steg + arbetskort | Order skapas utan steg/artiklar | Komplett order skapas |
-| Datum från XML | Kan misslyckas beroende på format | Normaliseras till ISO 8601 |
-| Felhantering | Vilseledande "kunde inte skapa" | Korrekt beteende eller tydligt fel |
+| Matchtyp | Kriterium | Visning |
+|----------|-----------|---------|
+| Exakt artikelnummer | `part_number` matchar exakt (case-insensitive) | Visa alltid om pris skiljer |
+| Liknande beskrivning | Minst 2 ord gemensamma (>2 bokstäver) | Visa med "(liknande)" |
+
+**Aldrig:**
+- Automatisk prisändring
+- "Vi tror detta är samma sak"
+- Tvingande val
+
