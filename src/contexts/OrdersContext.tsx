@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus, TruckStatusChange, TruckStatus } from '@/types/order';
+import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus, TruckStatusChange, TruckStatus, Instruction } from '@/types/order';
 
 // Database types (manual since types.ts may not be updated yet)
 interface DbOrder {
@@ -21,6 +21,7 @@ interface DbOrder {
   comment: string | null;
   total_price: number;
   xml_data: Record<string, unknown> | null;
+  instructions: Instruction[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -165,6 +166,7 @@ function mapDbOrderToOrder(
     comment: dbOrder.comment || undefined,
     totalPrice: Number(dbOrder.total_price) || 0,
     xmlData: dbOrder.xml_data as Order['xmlData'],
+    instructions: (dbOrder.instructions as Instruction[]) || undefined,
     createdAt: dbOrder.created_at,
     updatedAt: dbOrder.updated_at,
     objects: objects.map(o => {
@@ -318,7 +320,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         const orderTruckHistory = (truckHistoryResult.data || []).filter(h => h.order_id === dbOrder.id) as DbTruckStatusHistory[];
         
         return mapDbOrderToOrder(
-          dbOrder as DbOrder,
+          dbOrder as unknown as DbOrder,
           orderObjects,
           (stepsResult.data || []).filter(s => s.order_id === dbOrder.id) as DbOrderStep[],
           (articleRowsResult.data || []).filter(r => r.order_id === dbOrder.id) as DbArticleRow[],
@@ -349,25 +351,29 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
   const addOrder = useCallback(async (order: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>): Promise<Order> => {
     // Insert order
+    const insertData = {
+      order_number: order.orderNumber,
+      customer: order.customer,
+      customer_reference: order.customerReference || null,
+      delivery_address: order.deliveryAddress || null,
+      production_status: order.productionStatus,
+      billing_status: order.billingStatus,
+      planned_start: order.plannedStart || null,
+      planned_end: order.plannedEnd || null,
+      actual_start: order.actualStart || null,
+      actual_end: order.actualEnd || null,
+      has_deviation: order.hasDeviation,
+      deviation_comment: order.deviationComment || null,
+      comment: order.comment || null,
+      total_price: order.totalPrice,
+      xml_data: order.xmlData || null,
+      instructions: order.instructions || null,
+    };
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: newOrderData, error: orderError } = await supabase
       .from('orders')
-      .insert({
-        order_number: order.orderNumber,
-        customer: order.customer,
-        customer_reference: order.customerReference || null,
-        delivery_address: order.deliveryAddress || null,
-        production_status: order.productionStatus,
-        billing_status: order.billingStatus,
-        planned_start: order.plannedStart || null,
-        planned_end: order.plannedEnd || null,
-        actual_start: order.actualStart || null,
-        actual_end: order.actualEnd || null,
-        has_deviation: order.hasDeviation,
-        deviation_comment: order.deviationComment || null,
-        comment: order.comment || null,
-        total_price: order.totalPrice,
-        xml_data: order.xmlData || null,
-      })
+      .insert(insertData as any)
       .select()
       .single();
 
@@ -496,6 +502,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     if (updates.comment !== undefined) dbUpdates.comment = updates.comment || null;
     if (updates.totalPrice !== undefined) dbUpdates.total_price = updates.totalPrice;
     if (updates.xmlData !== undefined) dbUpdates.xml_data = updates.xmlData || null;
+    if (updates.instructions !== undefined) dbUpdates.instructions = updates.instructions || null;
 
     if (Object.keys(dbUpdates).length > 0) {
       const { error } = await supabase

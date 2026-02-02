@@ -145,6 +145,8 @@ export interface Order {
   };
   // Article rows (from XML or manual entry)
   articleRows?: ArticleRow[];
+  // Instructions (from XML RowType 4)
+  instructions?: Instruction[];
 }
 
 export interface ArticleRow {
@@ -159,6 +161,12 @@ export interface ArticleRow {
   objectId?: string; // Link to OrderObject for auto work card generation
 }
 
+export interface Instruction {
+  id: string;
+  text: string;
+  rowNumber: string;
+}
+
 export interface ParsedXMLOrder {
   orderNumber: string;
   customer: string;
@@ -168,6 +176,7 @@ export interface ParsedXMLOrder {
   orderDate?: string;
   deliveryDate?: string;
   rows: ArticleRow[];
+  instructions: Instruction[];
 }
 
 // Status display helpers - administrative only

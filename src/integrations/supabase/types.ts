@@ -270,6 +270,7 @@ export type Database = {
           deviation_comment: string | null
           has_deviation: boolean
           id: string
+          instructions: Json | null
           order_number: string
           planned_end: string | null
           planned_start: string | null
@@ -290,6 +291,7 @@ export type Database = {
           deviation_comment?: string | null
           has_deviation?: boolean
           id?: string
+          instructions?: Json | null
           order_number: string
           planned_end?: string | null
           planned_start?: string | null
@@ -310,6 +312,7 @@ export type Database = {
           deviation_comment?: string | null
           has_deviation?: boolean
           id?: string
+          instructions?: Json | null
           order_number?: string
           planned_end?: string | null
           planned_start?: string | null
