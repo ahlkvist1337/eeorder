@@ -1,34 +1,246 @@
-# Plan: Förbättringar av orderhantering efter truckimplementering
 
-## ✅ STATUS: IMPLEMENTERAT
+# Plan: Dela upp Orderstatus och Truckstatus
 
-Alla fyra förbättringar har implementerats:
+## Sammanfattning
 
-1. ✅ **Optimistisk uppdatering** - Lokal state uppdateras direkt utan fetchOrders()
-2. ✅ **Behandlingssteg i rad** - Horisontell layout med pilar när truckar finns
-3. ✅ **Produktionsvyn** - Visar truckkort med stort nummer och aktuellt steg
-4. ✅ **Truckhistorik** - Ny tabell `truck_status_history` med 3-kolumns visning i OrderDetails
+Separera administrativa statusar (ordernivå) från produktionsstatusar (trucknivå) för att spegla verkligheten i verkstaden.
 
 ---
 
-## Implementerade ändringar
+## Nuvarande problem
 
-### 1. Optimistisk uppdatering (`src/contexts/OrdersContext.tsx`)
-- `updateOrder()` uppdaterar nu lokal state direkt
-- `updateTruckStepStatus()` ny funktion med optimistisk uppdatering
-- Ingen flimmer vid ändringar i orderdetaljer
+| Nivå | Nuvarande användning | Problem |
+|------|---------------------|---------|
+| Order | `productionStatus`: arrived/started/paused/completed | Används både för back-office och produktion |
+| Truck | Endast stegstatus (pending/in_progress/completed) | Saknar ankomst, paus och trucköversiktsstatus |
 
-### 2. Horisontell layout (`src/components/OrderObjectsEditor.tsx`)
-- Om truckar finns: steg visas som `Steg: Maskering → Blästring → Sprutzink`
-- Om inga truckar: behåll vertikal lista med drag-drop
+---
 
-### 3. Produktionsvyn (`src/components/ProductionOrderCard.tsx`)
-- Truckkort med stort trucknummer (#108)
-- Visar aktuellt steg och status per truck
-- Klara truckar visas kompakt på en rad
+## Ny struktur
 
-### 4. Truckhistorik
-- Ny databastabell: `truck_status_history`
-- Ny typ: `TruckStatusChange` i `src/types/order.ts`
-- 3-kolumns historikvy i `src/pages/OrderDetails.tsx`
-- Loggar varje truckstatus-ändring automatiskt
+```text
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                              ORDER (Back-office)                               │
+│ ──────────────────────────────────────────────────────────────────────────────│
+│  Orderstatus: Skapad → Avslutad → Avbruten                                    │
+│  Faktureringsstatus: Ej klar → Klar för fakturering → Fakturerad              │
+│                                                                                │
+│  (Används för: Administrativ uppföljning, fakturering, orderhistorik)         │
+└────────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                         TRUCK (Produktionens sanning)                          │
+│ ──────────────────────────────────────────────────────────────────────────────│
+│  Truckstatus: Väntande → Ankommen → Startad → Pausad → Klar                   │
+│                                                                                │
+│  + Stegstatus per truck: pending → in_progress → completed                    │
+│                                                                                │
+│  (Används för: Produktionsskärm, verkstadsöversikt, vad som faktiskt händer)  │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Nya typer
+
+### Truckstatus (ny)
+
+```typescript
+export type TruckStatus = 
+  | 'waiting'     // Väntande (inte anlänt ännu)
+  | 'arrived'     // Ankommen
+  | 'started'     // Arbete påbörjat
+  | 'paused'      // Pausad
+  | 'completed';  // Klar
+```
+
+### Förenklad orderstatus (ändring)
+
+```typescript
+export type OrderStatus = 
+  | 'created'     // Skapad (ny order)
+  | 'completed'   // Avslutad (allt klart, redo för arkiv)
+  | 'cancelled';  // Avbruten
+```
+
+**Not:** Befintliga värden `arrived`, `started`, `paused` på ordernivå kommer **migreras till trucknivå** eller behållas för bakåtkompatibilitet.
+
+---
+
+## Databasändringar
+
+### 1. Lägg till `status` i `object_trucks`
+
+```sql
+-- Lägg till truckstatus-kolumn
+ALTER TABLE object_trucks 
+ADD COLUMN status text NOT NULL DEFAULT 'waiting'
+CHECK (status IN ('waiting', 'arrived', 'started', 'paused', 'completed'));
+
+-- Index för snabb filtrering
+CREATE INDEX idx_object_trucks_status ON object_trucks(status);
+```
+
+### 2. Behåll befintliga ordrar (bakåtkompatibilitet)
+
+Ingen befintlig data raderas. Ordrar utan truckar fungerar som idag.
+
+---
+
+## UI-ändringar
+
+### Produktionsskärmen (truckfokus)
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 🏭 Produktionsvy                            Uppdaterad: 14:32:15             │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Status: [Ankommen] [Startad] [Pausad]   Steg: ○ Väntande ● Pågående ✓ Klar  │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────────────────┐  ┌─────────────────────────────┐           │
+│  │ Order 12345                 │  │ Order 12346                 │           │
+│  │ ─────────────────────────── │  │ ─────────────────────────── │           │
+│  │                             │  │                             │           │
+│  │ 📦 Motorlåda                │  │ 📦 Lagerlock                │           │
+│  │                             │  │                             │           │
+│  │   ┌───────────────────┐     │  │   ┌───────────────────┐     │           │
+│  │   │     #108          │     │  │   │     #205          │     │           │
+│  │   │ ⬤ Ankommen        │     │  │   │ 🟡 Startad        │     │           │
+│  │   │ ● Blästring       │     │  │   │ ✓ Blästring       │     │           │
+│  │   └───────────────────┘     │  │   │ ● Målning         │     │           │
+│  │                             │  │   └───────────────────┘     │           │
+│  │   ┌───────────────────┐     │  │                             │           │
+│  │   │     #109          │     │  │   ✅ #203, #204 klara      │           │
+│  │   │ 🟡 Startad        │     │  │                             │           │
+│  │   │ ● Målning         │     │  │                             │           │
+│  │   └───────────────────┘     │  └─────────────────────────────┘           │
+│  │                             │                                             │
+│  │ ⏸️ Pausade: #107            │                                             │
+│  │ ✅ Klara: #105, #106        │                                             │
+│  └─────────────────────────────┘                                             │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Filtrering baseras på truckstatus:**
+- Visa truckar med status: `arrived`, `started`, `paused`
+- Gruppera per order och objekt
+
+### Orderdetalj (truckkontroll)
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Objekt & Behandlingssteg                                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ ▼ Motorlåda                           3 truckar • 1 klar                    │
+│                                                                             │
+│   Steg: Maskering → Blästring → Sprutzink                                   │
+│                                                                             │
+│   ▼ Truckar:                                                                │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │ #108   [Ankommen ▼]  Maskering ✓  Blästring ●  Sprutzink ○          │   │
+│   │ #109   [Startad ▼]   Maskering ✓  Blästring ✓  Sprutzink ●          │   │
+│   │ #110   [Klar ▼]      Maskering ✓  Blästring ✓  Sprutzink ✓          │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│   [+ Lägg till truck]                                                       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Orderöversikt (administrativt fokus)
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ Ordernr  │ Kund      │ Orderstatus │ Truckar             │ Fakturering        │
+├──────────┼───────────┼─────────────┼─────────────────────┼────────────────────┤
+│ 12345    │ Volvo     │ Skapad      │ 3 (2 startade)      │ Ej klar            │
+│ 12346    │ Scania    │ Avslutad    │ 2 (2 klara)         │ Klar för fakt.     │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Filer som ändras
+
+| Fil | Typ av ändring |
+|-----|----------------|
+| Ny migration | Lägg till `status` kolumn i `object_trucks` |
+| `src/types/order.ts` | Lägg till `TruckStatus`, uppdatera `ObjectTruck` |
+| `src/contexts/OrdersContext.tsx` | Hantera truckstatus i CRUD-operationer |
+| `src/components/ObjectTrucksEditor.tsx` | Lägg till dropdown för truckstatus |
+| `src/components/ProductionOrderCard.tsx` | Visa truckstatus, filtrera på trucknivå |
+| `src/pages/ProductionScreen.tsx` | Filtrera ordrar baserat på truckstatus |
+| `src/components/OrdersTable.tsx` | Visa truckstatus-sammanfattning |
+| `src/components/StatusBadge.tsx` | Lägg till `TruckStatusBadge` |
+
+---
+
+## Logik för produktionsvyn
+
+```typescript
+// Visa order om den har minst en aktiv truck
+function hasActiveTrucks(order: Order): boolean {
+  const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
+  return allTrucks.some(truck => 
+    truck.status === 'arrived' || 
+    truck.status === 'started' || 
+    truck.status === 'paused'
+  );
+}
+
+// Gruppera truckar per status
+const arrivedTrucks = allTrucks.filter(t => t.status === 'arrived');
+const startedTrucks = allTrucks.filter(t => t.status === 'started');
+const pausedTrucks = allTrucks.filter(t => t.status === 'paused');
+const completedTrucks = allTrucks.filter(t => t.status === 'completed');
+```
+
+---
+
+## Bakåtkompatibilitet
+
+- **Ordrar utan truckar**: Fungerar som idag med orderstatus
+- **Befintlig orderstatus**: Behålls men används endast administrativt
+- **Befintliga truckar**: Får defaultstatus `waiting`
+- **Inga destruktiva ändringar**: Allt befintligt data bevaras
+
+---
+
+## Migreringslogik
+
+För befintliga truckar som har stegstatus:
+
+```sql
+-- Sätt truckstatus baserat på stegstatus
+UPDATE object_trucks ot
+SET status = CASE
+  WHEN EXISTS (
+    SELECT 1 FROM truck_step_status tss 
+    WHERE tss.truck_id = ot.id AND tss.status = 'completed'
+    AND NOT EXISTS (
+      SELECT 1 FROM truck_step_status tss2 
+      WHERE tss2.truck_id = ot.id AND tss2.status != 'completed'
+    )
+  ) THEN 'completed'
+  WHEN EXISTS (
+    SELECT 1 FROM truck_step_status tss 
+    WHERE tss.truck_id = ot.id 
+    AND tss.status IN ('in_progress', 'completed')
+  ) THEN 'started'
+  ELSE 'waiting'
+END;
+```
+
+---
+
+## Sammanfattning
+
+| Ansvar | Nivå | Status | Användning |
+|--------|------|--------|------------|
+| Administration | Order | Skapad/Avslutad/Avbruten | Back-office, fakturering |
+| Fakturering | Order | Ej klar/Klar/Fakturerad | Back-office |
+| Produktion | Truck | Väntande/Ankommen/Startad/Pausad/Klar | Produktionsvy, verkstad |
+| Behandling | Truck per steg | Väntande/Pågående/Klar | Detaljerad arbetsstatus |
+
