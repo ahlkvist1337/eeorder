@@ -18,6 +18,14 @@ export type StepStatus =
   | 'in_progress' // Pågående
   | 'completed';  // Klar
 
+// Truck production status (separate from order administrative status)
+export type TruckStatus = 
+  | 'waiting'     // Väntande (inte anlänt ännu)
+  | 'arrived'     // Ankommen
+  | 'started'     // Arbete påbörjat
+  | 'paused'      // Pausad
+  | 'completed';  // Klar
+
 export interface TreatmentStepTemplate {
   id: string;
   name: string;
@@ -43,6 +51,7 @@ export interface ObjectTruck {
   id: string;
   objectId: string;
   truckNumber: string;
+  status: TruckStatus; // Production status for this truck
   stepStatuses: TruckStepStatus[];
   createdAt?: string;
 }
@@ -173,5 +182,13 @@ export const billingStatusLabels: Record<BillingStatus, string> = {
 export const stepStatusLabels: Record<StepStatus, string> = {
   pending: 'Väntande',
   in_progress: 'Pågående',
+  completed: 'Klar',
+};
+
+export const truckStatusLabels: Record<TruckStatus, string> = {
+  waiting: 'Väntande',
+  arrived: 'Ankommen',
+  started: 'Startad',
+  paused: 'Pausad',
   completed: 'Klar',
 };

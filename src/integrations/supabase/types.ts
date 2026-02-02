@@ -81,18 +81,21 @@ export type Database = {
           created_at: string
           id: string
           object_id: string
+          status: Database["public"]["Enums"]["truck_status"]
           truck_number: string
         }
         Insert: {
           created_at?: string
           id?: string
           object_id: string
+          status?: Database["public"]["Enums"]["truck_status"]
           truck_number: string
         }
         Update: {
           created_at?: string
           id?: string
           object_id?: string
+          status?: Database["public"]["Enums"]["truck_status"]
           truck_number?: string
         }
         Relationships: [
@@ -589,6 +592,7 @@ export type Database = {
         | "completed"
         | "cancelled"
       step_status: "pending" | "in_progress" | "completed"
+      truck_status: "waiting" | "arrived" | "started" | "paused" | "completed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -728,6 +732,7 @@ export const Constants = {
         "cancelled",
       ],
       step_status: ["pending", "in_progress", "completed"],
+      truck_status: ["waiting", "arrived", "started", "paused", "completed"],
     },
   },
 } as const

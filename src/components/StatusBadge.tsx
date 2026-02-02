@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import type { ProductionStatus, BillingStatus, StepStatus } from '@/types/order';
-import { productionStatusLabels, billingStatusLabels, stepStatusLabels } from '@/types/order';
+import type { ProductionStatus, BillingStatus, StepStatus, TruckStatus } from '@/types/order';
+import { productionStatusLabels, billingStatusLabels, stepStatusLabels, truckStatusLabels } from '@/types/order';
 
 interface ProductionStatusBadgeProps {
   status: ProductionStatus;
@@ -77,6 +77,33 @@ export function StepStatusBadge({ status, className }: StepStatusBadgeProps) {
       )}
     >
       {stepStatusLabels[status]}
+    </Badge>
+  );
+}
+
+interface TruckStatusBadgeProps {
+  status: TruckStatus;
+  className?: string;
+}
+
+const truckStatusColors: Record<TruckStatus, string> = {
+  waiting: 'bg-muted text-muted-foreground',
+  arrived: 'bg-[hsl(var(--status-arrived))] text-white',
+  started: 'bg-[hsl(var(--status-started))] text-black',
+  paused: 'bg-[hsl(var(--status-paused))] text-white',
+  completed: 'bg-[hsl(var(--status-completed))] text-white',
+};
+
+export function TruckStatusBadge({ status, className }: TruckStatusBadgeProps) {
+  return (
+    <Badge 
+      className={cn(
+        'font-medium rounded-sm',
+        truckStatusColors[status],
+        className
+      )}
+    >
+      {truckStatusLabels[status]}
     </Badge>
   );
 }
