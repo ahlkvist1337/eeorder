@@ -1,9 +1,9 @@
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { CalendarClock, Box } from 'lucide-react';
+import { CalendarClock, Box, Truck, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import type { Order, OrderStep, StepStatus } from '@/types/order';
+import type { Order, OrderStep, StepStatus, ObjectTruck } from '@/types/order';
 import { productionStatusLabels } from '@/types/order';
 
 interface ProductionOrderCardProps {
@@ -50,6 +50,75 @@ function StepRow({ step }: { step: OrderStep }) {
       >
         {step.name}
       </span>
+    </div>
+  );
+}
+
+function getTruckCurrentStep(truck: ObjectTruck, objectSteps: OrderStep[]): { step: OrderStep | null; status: 'completed' | 'in_progress' | 'pending' } {
+  // Check if all steps are completed
+  const allCompleted = objectSteps.every(step => {
+    const truckStatus = truck.stepStatuses.find(s => s.stepId === step.id);
+    return truckStatus?.status === 'completed';
+  });
+  
+  if (allCompleted) {
+    return { step: null, status: 'completed' };
+  }
+  
+  // Find in_progress step
+  for (const step of objectSteps) {
+    const truckStatus = truck.stepStatuses.find(s => s.stepId === step.id);
+    if (truckStatus?.status === 'in_progress') {
+      return { step, status: 'in_progress' };
+    }
+  }
+  
+  // Find first pending step
+  for (const step of objectSteps) {
+    const truckStatus = truck.stepStatuses.find(s => s.stepId === step.id);
+    if (!truckStatus || truckStatus.status === 'pending') {
+      return { step, status: 'pending' };
+    }
+  }
+  
+  return { step: null, status: 'pending' };
+}
+
+function TruckCard({ truck, objectSteps }: { truck: ObjectTruck; objectSteps: OrderStep[] }) {
+  const { step, status } = getTruckCurrentStep(truck, objectSteps);
+  
+  if (status === 'completed') {
+    return null; // We'll show completed trucks separately
+  }
+  
+  return (
+    <div className={cn(
+      'rounded-lg border-2 p-3 text-center',
+      status === 'in_progress' 
+        ? 'border-[hsl(var(--status-started))] bg-[hsl(var(--status-started)/0.1)]'
+        : 'border-muted bg-muted/30'
+    )}>
+      <div className="text-2xl font-bold font-mono">
+        #{truck.truckNumber}
+      </div>
+      {step && (
+        <div className={cn(
+          'flex items-center justify-center gap-2 mt-1 text-sm',
+          status === 'in_progress' ? 'text-foreground' : 'text-muted-foreground'
+        )}>
+          <div
+            className={cn(
+              'w-3 h-3 rounded-full ring-1',
+              stepStatusIcons[status].bg,
+              stepStatusIcons[status].ring
+            )}
+          />
+          <span>{step.name}</span>
+          <span className="text-xs">
+            ({status === 'in_progress' ? 'pågående' : 'väntande'})
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -101,9 +170,26 @@ export function ProductionOrderCard({ order }: ProductionOrderCardProps) {
             </div>
           )}
 
-          {/* Objects with their steps */}
+          {/* Objects with their steps and trucks */}
           {allObjects.map(obj => {
             const objectSteps = stepsByObject.get(obj.id) || [];
+            const hasTrucks = obj.trucks && obj.trucks.length > 0;
+            
+            // Separate active and completed trucks
+            const activeTrucks = hasTrucks 
+              ? obj.trucks!.filter(truck => {
+                  const { status } = getTruckCurrentStep(truck, objectSteps);
+                  return status !== 'completed';
+                })
+              : [];
+            
+            const completedTrucks = hasTrucks
+              ? obj.trucks!.filter(truck => {
+                  const { status } = getTruckCurrentStep(truck, objectSteps);
+                  return status === 'completed';
+                })
+              : [];
+            
             const isAllReceived = obj.receivedQuantity >= obj.plannedQuantity;
             const isAllCompleted = obj.completedQuantity >= obj.plannedQuantity;
             
@@ -118,31 +204,63 @@ export function ProductionOrderCard({ order }: ProductionOrderCardProps) {
                   )}>
                     {obj.name}
                   </span>
-                  <span className={cn(
-                    "text-sm ml-auto",
-                    isAllReceived ? "text-[hsl(var(--status-completed))]" : "text-muted-foreground"
-                  )}>
-                    {obj.receivedQuantity}/{obj.plannedQuantity} mott.
-                  </span>
-                </div>
-                
-                {/* Steps for this object, indented */}
-                <div className="pl-6 space-y-2">
-                  {objectSteps.length > 0 ? (
-                    objectSteps.map(step => (
-                      <div key={step.id} className="flex items-center justify-between">
-                        <StepRow step={step} />
-                        {obj.plannedQuantity > 1 && step.status === 'completed' && (
-                          <span className="text-sm text-[hsl(var(--status-completed))] ml-2">
-                            {obj.completedQuantity}/{obj.plannedQuantity}
-                          </span>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <span className="text-sm text-muted-foreground italic">(inga steg)</span>
+                  {hasTrucks && (
+                    <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
+                      <Truck className="h-3 w-3" />
+                      {obj.trucks!.length} st
+                    </span>
+                  )}
+                  {!hasTrucks && (
+                    <span className={cn(
+                      "text-sm ml-auto",
+                      isAllReceived ? "text-[hsl(var(--status-completed))]" : "text-muted-foreground"
+                    )}>
+                      {obj.receivedQuantity}/{obj.plannedQuantity} mott.
+                    </span>
                   )}
                 </div>
+                
+                {/* Trucks display - active trucks as cards */}
+                {hasTrucks && activeTrucks.length > 0 && (
+                  <div className="pl-6 space-y-2 mb-2">
+                    {activeTrucks.map(truck => (
+                      <TruckCard key={truck.id} truck={truck} objectSteps={objectSteps} />
+                    ))}
+                  </div>
+                )}
+                
+                {/* Completed trucks - compact display */}
+                {hasTrucks && completedTrucks.length > 0 && (
+                  <div className="pl-6 flex flex-wrap items-center gap-2 mb-2">
+                    <CheckCircle2 className="h-4 w-4 text-[hsl(var(--status-completed))]" />
+                    {completedTrucks.map(truck => (
+                      <span key={truck.id} className="text-sm text-[hsl(var(--status-completed))] font-mono">
+                        #{truck.truckNumber}
+                      </span>
+                    ))}
+                    <span className="text-sm text-muted-foreground">klar{completedTrucks.length > 1 ? 'a' : ''}</span>
+                  </div>
+                )}
+                
+                {/* Steps for this object (when no trucks), indented */}
+                {!hasTrucks && (
+                  <div className="pl-6 space-y-2">
+                    {objectSteps.length > 0 ? (
+                      objectSteps.map(step => (
+                        <div key={step.id} className="flex items-center justify-between">
+                          <StepRow step={step} />
+                          {obj.plannedQuantity > 1 && step.status === 'completed' && (
+                            <span className="text-sm text-[hsl(var(--status-completed))] ml-2">
+                              {obj.completedQuantity}/{obj.plannedQuantity}
+                            </span>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <span className="text-sm text-muted-foreground italic">(inga steg)</span>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

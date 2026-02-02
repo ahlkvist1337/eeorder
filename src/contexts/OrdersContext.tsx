@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject } from '@/types/order';
+import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus } from '@/types/order';
 
 // Database types (manual since types.ts may not be updated yet)
 interface DbOrder {
@@ -48,6 +48,22 @@ interface DbOrderObject {
   received_quantity: number;
   completed_quantity: number;
   created_at: string;
+}
+
+interface DbObjectTruck {
+  id: string;
+  object_id: string;
+  truck_number: string;
+  created_at: string;
+}
+
+interface DbTruckStepStatus {
+  id: string;
+  truck_id: string;
+  step_id: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  actual_start: string | null;
+  actual_end: string | null;
 }
 
 interface DbArticleRow {
@@ -110,7 +126,9 @@ function mapDbOrderToOrder(
   steps: DbOrderStep[],
   articleRows: DbArticleRow[],
   statusHistory: DbStatusHistory[],
-  stepStatusHistory: DbStepStatusHistory[]
+  stepStatusHistory: DbStepStatusHistory[],
+  trucks: DbObjectTruck[],
+  truckStepStatuses: DbTruckStepStatus[]
 ): Order {
   return {
     id: dbOrder.id,
@@ -131,15 +149,37 @@ function mapDbOrderToOrder(
     xmlData: dbOrder.xml_data as Order['xmlData'],
     createdAt: dbOrder.created_at,
     updatedAt: dbOrder.updated_at,
-    objects: objects.map(o => ({
-      id: o.id,
-      name: o.name,
-      description: o.description || undefined,
-      plannedQuantity: o.planned_quantity ?? 1,
-      receivedQuantity: o.received_quantity ?? 0,
-      completedQuantity: o.completed_quantity ?? 0,
-      createdAt: o.created_at,
-    })),
+    objects: objects.map(o => {
+      // Get trucks for this object
+      const objectTrucks = trucks.filter(t => t.object_id === o.id);
+      const mappedTrucks: ObjectTruck[] = objectTrucks.map(t => ({
+        id: t.id,
+        objectId: t.object_id,
+        truckNumber: t.truck_number,
+        createdAt: t.created_at,
+        stepStatuses: truckStepStatuses
+          .filter(s => s.truck_id === t.id)
+          .map(s => ({
+            id: s.id,
+            truckId: s.truck_id,
+            stepId: s.step_id,
+            status: s.status,
+            actualStart: s.actual_start || undefined,
+            actualEnd: s.actual_end || undefined,
+          })),
+      }));
+      
+      return {
+        id: o.id,
+        name: o.name,
+        description: o.description || undefined,
+        plannedQuantity: o.planned_quantity ?? 1,
+        receivedQuantity: o.received_quantity ?? 0,
+        completedQuantity: o.completed_quantity ?? 0,
+        trucks: mappedTrucks.length > 0 ? mappedTrucks : undefined,
+        createdAt: o.created_at,
+      };
+    }),
     steps: steps.map(s => ({
       id: s.id,
       templateId: s.template_id,
@@ -202,7 +242,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
       const orderIds = ordersData.map(o => o.id);
 
-      // Fetch related data in parallel (including order_objects)
+      // Fetch related data in parallel (including order_objects, trucks, and truck statuses)
       const [objectsResult, stepsResult, articleRowsResult, historyResult, stepHistoryResult] = await Promise.all([
         supabase.from('order_objects').select('*').in('order_id', orderIds),
         supabase.from('order_steps').select('*').in('order_id', orderIds),
@@ -217,16 +257,43 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       if (historyResult.error) throw historyResult.error;
       if (stepHistoryResult.error) throw stepHistoryResult.error;
 
-      const mappedOrders = ordersData.map(dbOrder => 
-        mapDbOrderToOrder(
+      // Fetch trucks and their step statuses
+      const objectIds = (objectsResult.data || []).map(o => o.id);
+      
+      let trucksData: DbObjectTruck[] = [];
+      let truckStepStatusData: DbTruckStepStatus[] = [];
+      
+      if (objectIds.length > 0) {
+        const trucksResult = await supabase.from('object_trucks').select('*').in('object_id', objectIds);
+        if (trucksResult.error) throw trucksResult.error;
+        trucksData = (trucksResult.data || []) as DbObjectTruck[];
+        
+        if (trucksData.length > 0) {
+          const truckIds = trucksData.map(t => t.id);
+          const truckStatusResult = await supabase.from('truck_step_status').select('*').in('truck_id', truckIds);
+          if (truckStatusResult.error) throw truckStatusResult.error;
+          truckStepStatusData = (truckStatusResult.data || []) as DbTruckStepStatus[];
+        }
+      }
+
+      const mappedOrders = ordersData.map(dbOrder => {
+        const orderObjects = (objectsResult.data || []).filter(o => o.order_id === dbOrder.id) as DbOrderObject[];
+        const orderObjectIds = orderObjects.map(o => o.id);
+        const orderTrucks = trucksData.filter(t => orderObjectIds.includes(t.object_id));
+        const orderTruckIds = orderTrucks.map(t => t.id);
+        const orderTruckStatuses = truckStepStatusData.filter(s => orderTruckIds.includes(s.truck_id));
+        
+        return mapDbOrderToOrder(
           dbOrder as DbOrder,
-          (objectsResult.data || []).filter(o => o.order_id === dbOrder.id) as DbOrderObject[],
+          orderObjects,
           (stepsResult.data || []).filter(s => s.order_id === dbOrder.id) as DbOrderStep[],
           (articleRowsResult.data || []).filter(r => r.order_id === dbOrder.id) as DbArticleRow[],
           (historyResult.data || []).filter(h => h.order_id === dbOrder.id) as DbStatusHistory[],
-          (stepHistoryResult.data || []).filter(h => h.order_id === dbOrder.id) as DbStepStatusHistory[]
-        )
-      );
+          (stepHistoryResult.data || []).filter(h => h.order_id === dbOrder.id) as DbStepStatusHistory[],
+          orderTrucks,
+          orderTruckStatuses
+        );
+      });
 
       setOrders(mappedOrders);
     } catch (error) {
@@ -288,6 +355,37 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       
       const { error: objectsError } = await supabase.from('order_objects').insert(objectsToInsert);
       if (objectsError) throw objectsError;
+      
+      // Insert trucks for each object
+      for (const obj of order.objects) {
+        if (obj.trucks && obj.trucks.length > 0) {
+          const trucksToInsert = obj.trucks.map(t => ({
+            id: t.id,
+            object_id: obj.id,
+            truck_number: t.truckNumber,
+          }));
+          
+          const { error: trucksError } = await supabase.from('object_trucks').insert(trucksToInsert);
+          if (trucksError) throw trucksError;
+          
+          // Insert truck step statuses
+          const allStepStatuses = obj.trucks.flatMap(t =>
+            t.stepStatuses.map(s => ({
+              id: s.id,
+              truck_id: t.id,
+              step_id: s.stepId,
+              status: s.status,
+              actual_start: s.actualStart || null,
+              actual_end: s.actualEnd || null,
+            }))
+          );
+          
+          if (allStepStatuses.length > 0) {
+            const { error: statusError } = await supabase.from('truck_step_status').insert(allStepStatuses);
+            if (statusError) throw statusError;
+          }
+        }
+      }
       
       // Map old object IDs to new ones (in case they're the same, just keep track)
       order.objects.forEach(obj => {
@@ -507,33 +605,60 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Update objects if provided - use UPSERT strategy to avoid cascade-delete issues
+    // Handle trucks for objects if provided
     if (updates.objects !== undefined) {
-      const currentOrder = orders.find(o => o.id === id);
-      const currentObjectIds = new Set((currentOrder?.objects || []).map(o => o.id));
-      const newObjectIds = new Set(updates.objects.map(o => o.id));
-      
-      // Find objects that were removed
-      const removedObjectIds = [...currentObjectIds].filter(objId => !newObjectIds.has(objId));
-      
-      // UPSERT all current objects (insert new ones, update existing ones)
-      if (updates.objects.length > 0) {
-        const { error } = await supabase.from('order_objects').upsert(
-          updates.objects.map(obj => ({
-            id: obj.id,
-            order_id: id,
-            name: obj.name,
-            description: obj.description || null,
-          })),
-          { onConflict: 'id' }
-        );
-        if (error) throw error;
-      }
-      
-      // Delete removed objects (this will cascade-delete their steps, which is correct)
-      if (removedObjectIds.length > 0) {
-        const { error } = await supabase.from('order_objects').delete().in('id', removedObjectIds);
-        if (error) throw error;
+      for (const obj of updates.objects) {
+        if (obj.trucks) {
+          // Get current trucks for this object
+          const { data: existingTrucks } = await supabase
+            .from('object_trucks')
+            .select('id')
+            .eq('object_id', obj.id);
+          
+          const existingTruckIds = new Set((existingTrucks || []).map(t => t.id));
+          const newTruckIds = new Set(obj.trucks.map(t => t.id));
+          
+          // Find trucks to remove
+          const removedTruckIds = [...existingTruckIds].filter(id => !newTruckIds.has(id));
+          
+          // Delete removed trucks (cascade deletes their step statuses)
+          if (removedTruckIds.length > 0) {
+            await supabase.from('object_trucks').delete().in('id', removedTruckIds);
+          }
+          
+          // Upsert trucks
+          if (obj.trucks.length > 0) {
+            const { error: trucksError } = await supabase.from('object_trucks').upsert(
+              obj.trucks.map(t => ({
+                id: t.id,
+                object_id: obj.id,
+                truck_number: t.truckNumber,
+              })),
+              { onConflict: 'id' }
+            );
+            if (trucksError) throw trucksError;
+            
+            // Upsert truck step statuses
+            const allStepStatuses = obj.trucks.flatMap(t => 
+              t.stepStatuses.map(s => ({
+                id: s.id,
+                truck_id: t.id,
+                step_id: s.stepId,
+                status: s.status,
+                actual_start: s.actualStart || null,
+                actual_end: s.actualEnd || null,
+              }))
+            );
+            
+            if (allStepStatuses.length > 0) {
+              const { error: statusError } = await supabase.from('truck_step_status').upsert(
+                allStepStatuses,
+                { onConflict: 'id' }
+              );
+              if (statusError) throw statusError;
+            }
+          }
+        }
       }
     }
 
