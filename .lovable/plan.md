@@ -1,267 +1,250 @@
 
 
-# Plan: Trucknummerhantering per objekt
+# Plan: Förbättringar av orderhantering efter truckimplementering
 
 ## Sammanfattning
 
-Utöka orderhanteringssystemet med trucknummer som en separat entitet kopplad till objekt. Varje objekt kan ha flera truckar, och varje truck kan ha sin egen status genom behandlingsflödet.
+Fyra förbättringar för att lösa irritationsmoment och anpassa systemet efter de nya trucknummerändringarna:
+
+1. **Optimistisk uppdatering** - Sluta ladda om hela sidan efter varje ändring
+2. **Behandlingssteg i rad** - Spara plats genom horisontell layout
+3. **Produktionsvyn** - Visa truckar korrekt med status
+4. **Historik** - Logga truckstatus-ändringar
 
 ---
 
-## Ny datamodell
+## Problem 1: Sidan uppdateras hela tiden
+
+### Orsak
+Varje ändring anropar `fetchOrders()` som laddar om ALLA ordrar från databasen. Detta orsakar att komponenter omrenderas och användaren "tappar" sitt ställe.
+
+### Lösning
+Implementera **optimistisk uppdatering** - uppdatera lokal state direkt utan att hämta om alla ordrar.
 
 ```text
-Order
-  └── Objekt (t.ex. "Motorlåda")
-       ├── Truck #99  (status per steg)
-       ├── Truck #100 (status per steg)
-       └── Truck #102 (status per steg)
+Före:
+  Användare ändrar → Spara till DB → fetchOrders() → Hela listan uppdateras → UI flimrar
+
+Efter:
+  Användare ändrar → Uppdatera lokal state direkt → Spara till DB i bakgrunden
 ```
 
----
+### Tekniska ändringar
 
-## Ny design i orderdetaljer
+**Fil: `src/contexts/OrdersContext.tsx`**
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ Objekt & Behandlingssteg                                                        │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│ ▼ Motorlåda                      3 truckar • 1 klar              [✏️] [🗑️]     │
-│ ┌─────────────────────────────────────────────────────────────────────────────┐ │
-│ │ Behandlingssteg:                                                            │ │
-│ │ ● Blästring            ○ Målning                                            │ │
-│ │                                                                             │ │
-│ │ ▼ Truckar:                                                                  │ │
-│ │ ┌───────────────────────────────────────────────────────────────────────┐   │ │
-│ │ │ #99      │ Blästring ✓  │ Målning ✓   │ ✅ Klar        [✏️] [🗑️]   │   │ │
-│ │ │ #100     │ Blästring ✓  │ Målning ●   │ 🔄 Pågående    [✏️] [🗑️]   │   │ │
-│ │ │ #102     │ Blästring ○  │ Målning ○   │ ⏳ Väntande    [✏️] [🗑️]   │   │ │
-│ │ └───────────────────────────────────────────────────────────────────────┘   │ │
-│ │ [+ Lägg till truck]                                                         │ │
-│ └─────────────────────────────────────────────────────────────────────────────┘ │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│ ▶ Lagerlock                      2 truckar • 2 klara             [✏️] [🗑️]     │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Produktionsskärmen
-
-```text
-┌──────────────────────────────────────────┐
-│ 12345                                    │
-│ ┌──────────────────────────────────────┐ │
-│ │ Startad                              │ │
-│ └──────────────────────────────────────┘ │
-│                                          │
-│ 📦 Motorlåda                             │
-│                                          │
-│    ┌────────────────────────────────┐    │
-│    │        #99                     │    │  ← Stort trucknummer
-│    │  ● Målning (pågående)          │    │  ← Aktuellt steg
-│    └────────────────────────────────┘    │
-│                                          │
-│    ┌────────────────────────────────┐    │
-│    │        #100                    │    │
-│    │  ○ Blästring (väntande)        │    │
-│    └────────────────────────────────┘    │
-│                                          │
-│    ✅ #102 klar                          │  ← Klara truckar kompakt
-│                                          │
-└──────────────────────────────────────────┘
-```
-
----
-
-## Sök och filter i orderöversikten
-
-```text
-┌────────────────────────────────────────────────────────────────────────────────┐
-│ 🔍 [Sök ordernummer, kund, truck...                                      ]     │
-├────────────────────────────────────────────────────────────────────────────────┤
-│ Ordernr   │ Kund          │ Status    │ Truckar        │ ...                   │
-├───────────┼───────────────┼───────────┼────────────────┼───────────────────────┤
-│ 12345     │ Volvo         │ Startad   │ #99, #100, ... │                       │
-│ 12346     │ Scania        │ Ankommen  │ #105, #106     │                       │
-└────────────────────────────────────────────────────────────────────────────────┘
-```
-
-Sökning på "99" visar alla ordrar med truck #99.
-
----
-
-## Tekniska ändringar
-
-### 1. Ny databastabell: `object_trucks`
-
-```sql
-CREATE TABLE object_trucks (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  object_id uuid NOT NULL REFERENCES order_objects(id) ON DELETE CASCADE,
-  truck_number text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-```
-
-### 2. Ny tabell för truckstatus: `truck_step_status`
-
-Spårar varje trucks status per behandlingssteg.
-
-```sql
-CREATE TABLE truck_step_status (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  truck_id uuid NOT NULL REFERENCES object_trucks(id) ON DELETE CASCADE,
-  step_id uuid NOT NULL REFERENCES order_steps(id) ON DELETE CASCADE,
-  status step_status NOT NULL DEFAULT 'pending',
-  actual_start timestamptz,
-  actual_end timestamptz,
-  UNIQUE(truck_id, step_id)
-);
-```
-
-### 3. RLS-policies
-
-Samma mönster som övriga tabeller:
-- SELECT: Alla autentiserade användare
-- INSERT/UPDATE: Editors och admins
-- DELETE: Endast admins
-
----
-
-## Typuppdateringar
-
-### `src/types/order.ts`
+| Ändring | Beskrivning |
+|---------|-------------|
+| `updateOrder` | Uppdatera `orders` state lokalt istället för att anropa `fetchOrders()` |
+| `updateOrderStep` | Samma optimistiska uppdatering |
+| Truck-ändringar | Uppdatera lokalt när truckstatus ändras |
 
 ```typescript
-export interface ObjectTruck {
-  id: string;
-  objectId: string;
-  truckNumber: string;
-  stepStatuses: TruckStepStatus[];
-  createdAt?: string;
-}
-
-export interface TruckStepStatus {
-  id: string;
-  truckId: string;
-  stepId: string;
-  status: StepStatus;
-  actualStart?: string;
-  actualEnd?: string;
-}
-
-// Utöka OrderObject
-export interface OrderObject {
-  id: string;
-  name: string;
-  description?: string;
-  plannedQuantity: number;
-  receivedQuantity: number;
-  completedQuantity: number;
-  trucks?: ObjectTruck[];  // Nytt
-  createdAt?: string;
-}
+// Exempel på optimistisk uppdatering
+const updateOrder = async (id, updates) => {
+  // Uppdatera state direkt
+  setOrders(prev => prev.map(o => 
+    o.id === id ? { ...o, ...updates, updatedAt: new Date().toISOString() } : o
+  ));
+  
+  // Spara till DB i bakgrunden
+  await supabase.from('orders').update(dbUpdates).eq('id', id);
+  // Ingen fetchOrders() i slutet!
+};
 ```
 
 ---
 
-## Kontextuppdateringar
+## Problem 2: Behandlingssteg tar för mycket plats
 
-### `src/contexts/OrdersContext.tsx`
-
-| Ändring | Beskrivning |
-|---------|-------------|
-| Ny interface `DbObjectTruck` | Databastypning för truckar |
-| Ny interface `DbTruckStepStatus` | Databastypning för truckstegstatus |
-| Uppdatera `fetchOrders` | Hämta truckar och truckstegstatus parallellt |
-| Uppdatera `mapDbOrderToOrder` | Inkludera truckar i objektmappning |
-| Uppdatera `addOrder` | Hantera insert av truckar och deras statusar |
-| Uppdatera `updateOrder` | Upsert-strategi för truckar och statusar |
-| Ny funktion `updateTruckStepStatus` | Uppdatera enskild trucks stegstatus |
-
----
-
-## UI-komponenter
-
-### Ny: `src/components/ObjectTrucksEditor.tsx`
-
-Hanterar trucklistan inom ett objekt:
-- Visa truckar i kollapsbar lista
-- Lägg till/ta bort truck
-- Redigera trucknummer
-- Visa stegstatus per truck med klickbara statusbrickor
-
-### Uppdatera: `src/components/OrderObjectsEditor.tsx`
-
-| Ändring | Beskrivning |
-|---------|-------------|
-| Importera ObjectTrucksEditor | Integrera truckeditor |
-| Visa trucksammanfattning | "3 truckar • 1 klar" i objekthuvudet |
-| Kollapsbar trucksektion | Visa/dölj truckar med expanderknapp |
-| Antal anpassning | Om truckar används, beräkna antal automatiskt |
-
-### Uppdatera: `src/components/ProductionOrderCard.tsx`
-
-| Ändring | Beskrivning |
-|---------|-------------|
-| Visa truckar per objekt | Lista truckar med stort trucknummer |
-| Stegstatus per truck | Visa aktuellt steg för varje truck |
-| Visuell gruppering | Truckar grupperade under objektnamn |
-| Kompakt vy för klara | Klara truckar visas på en rad |
-
-### Uppdatera: `src/components/OrdersTable.tsx`
-
-| Ändring | Beskrivning |
-|---------|-------------|
-| Ny kolumn "Truckar" | Visa trucknummer som kommaseparerad lista |
-| Utökad sökning | Inkludera trucknummer i sökfilter |
-
----
-
-## Dataflöde
-
+### Nuvarande layout (vertikal lista)
 ```text
-1. Skapa objekt (t.ex. "Motorlåda")
-2. Lägg till behandlingssteg (Blästring, Målning)
-3. Lägg till truckar (#99, #100, #102)
-   → Systemet skapar automatiskt truck_step_status för varje steg
-4. Uppdatera status per truck genom behandlingen
-   → Varje truck kan vara på olika steg
-5. Produktionsskärmen visar exakt var varje truck befinner sig
-6. Sökning på trucknummer visar rätt order
+┌──────────────────────────────────────┐
+│ Monteringsdetaljer                   │
+│   ● Maskering    [Väntande ▼] [🗑️]  │
+│   ● Blästring    [Väntande ▼] [🗑️]  │
+│   ● Sprutzink    [Väntande ▼] [🗑️]  │
+└──────────────────────────────────────┘
+```
+
+### Ny layout (horisontell rad - när truckar finns)
+```text
+┌──────────────────────────────────────────────────────┐
+│ Monteringsdetaljer           3 truckar • 1 klar      │
+│ Steg: Maskering → Blästring → Sprutzink              │
+│                                                      │
+│ Truckar: (expanderbar)                               │
+│   #108  Maskering ✓  Blästring ○  Sprutzink ○        │
+└──────────────────────────────────────────────────────┘
+```
+
+### Tekniska ändringar
+
+**Fil: `src/components/OrderObjectsEditor.tsx`**
+
+| Ändring | Beskrivning |
+|---------|-------------|
+| Villkorlig layout | Om truckar finns: visa steg som horisontell rad utan status-kontroller |
+| Kompakt visning | Stegen visas med pilar mellan (→) |
+| Flytta fokus | Statushantering sker på trucknivå istället |
+
+**Fil: `src/components/ObjectTrucksEditor.tsx`**
+
+| Ändring | Beskrivning |
+|---------|-------------|
+| Ta bort trunkering | Visa hela stegnamnet (rad 233) |
+| Flexibel layout | Använd `flex-wrap` för långa namn |
+
+---
+
+## Problem 3: Produktionsvyn behöver anpassas
+
+### Nuvarande visning
+Visar objekt med stegstatus, men tar inte hänsyn till truckar korrekt.
+
+### Ny visning med truckar
+```text
+┌──────────────────────────────────────┐
+│ 12345                                │
+│ ┌──────────────────────────────────┐ │
+│ │ Startad                          │ │
+│ └──────────────────────────────────┘ │
+│                                      │
+│ 📦 Monteringsdetaljer                │
+│                                      │
+│    ┌─────────────────────────────┐   │
+│    │        #108                 │   │  ← Stort, lättläst
+│    │   Maskering ✓               │   │
+│    │   Blästring ● (pågående)    │   │  ← Aktuellt steg tydligt
+│    │   Sprutzink ○               │   │
+│    └─────────────────────────────┘   │
+│                                      │
+│    ┌─────────────────────────────┐   │
+│    │        #109                 │   │
+│    │   ○ Maskering (väntande)    │   │
+│    └─────────────────────────────┘   │
+│                                      │
+│    ✅ #110, #111 klara              │  ← Klara truckar kompakt
+│                                      │
+│ ─────────────────────────────────────│
+│ Volvo                                │
+│ 📅 Leveransredo: 15 feb 2026         │
+└──────────────────────────────────────┘
+```
+
+### Tekniska ändringar
+
+**Fil: `src/components/ProductionOrderCard.tsx`**
+
+| Ändring | Beskrivning |
+|---------|-------------|
+| Truckkort per objekt | Visa aktiva truckar som separata kort |
+| Trucknummer stort | Använd `text-2xl font-bold font-mono` |
+| Stegstatus per truck | Lista stegen med status-ikoner |
+| Aktuellt steg markerat | Visa vilket steg trucken är på |
+| Klara truckar kompakt | Klara truckar på en rad |
+
+Logik för att hitta "aktuellt steg" per truck:
+```typescript
+function getCurrentStep(truck: ObjectTruck, objectSteps: OrderStep[]) {
+  // Hitta första steget som är in_progress
+  const inProgress = objectSteps.find(step => {
+    const status = truck.stepStatuses.find(s => s.stepId === step.id);
+    return status?.status === 'in_progress';
+  });
+  if (inProgress) return { step: inProgress, status: 'in_progress' };
+  
+  // Annars hitta första pending
+  const pending = objectSteps.find(step => {
+    const status = truck.stepStatuses.find(s => s.stepId === step.id);
+    return !status || status.status === 'pending';
+  });
+  if (pending) return { step: pending, status: 'pending' };
+  
+  return { step: null, status: 'completed' };
+}
 ```
 
 ---
 
-## Bakåtkompatibilitet
+## Problem 4: Historiken loggar inte truckändringar
 
-- Befintliga ordrar utan truckar fungerar som tidigare
-- Antal-fälten (planned/received/completed) kan fortfarande användas
-- Truckar är ett tillägg, inte en ersättning
+### Nuvarande historik
+Visar endast:
+- Orderstatusändringar (Skapad → Startad)
+- Stegstatusändringar (Blästring: Väntande → Pågående)
+
+### Ny historik med truckar
+```text
+Orderstatus              │ Truck- och steghistorik
+─────────────────────────┼──────────────────────────────────────
+12 feb 14:32 Skapad →    │ 12 feb 15:01 #108 Maskering: Klar
+             Startad     │ 12 feb 15:05 #108 Blästring: Pågående
+                         │ 12 feb 15:10 #109 Maskering: Pågående
+```
+
+### Tekniska ändringar
+
+**Ny databastabell: `truck_status_history`**
+```sql
+CREATE TABLE truck_status_history (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  truck_id uuid NOT NULL REFERENCES object_trucks(id) ON DELETE CASCADE,
+  truck_number text NOT NULL,
+  step_id uuid NOT NULL REFERENCES order_steps(id) ON DELETE CASCADE,
+  step_name text NOT NULL,
+  from_status step_status NOT NULL,
+  to_status step_status NOT NULL,
+  timestamp timestamptz NOT NULL DEFAULT now()
+);
+```
+
+**Fil: `src/types/order.ts`**
+```typescript
+export interface TruckStatusChange {
+  id: string;
+  timestamp: string;
+  truckId: string;
+  truckNumber: string;
+  stepId: string;
+  stepName: string;
+  fromStatus: StepStatus;
+  toStatus: StepStatus;
+}
+
+// Lägg till i Order interface
+truckStatusHistory: TruckStatusChange[];
+```
+
+**Fil: `src/contexts/OrdersContext.tsx`**
+- Hämta `truck_status_history` i `fetchOrders`
+- Logga ändringar när truck step status ändras
+
+**Fil: `src/pages/OrderDetails.tsx`**
+- Visa truckstatushistorik i höger kolumn
+- Inkludera trucknummer i visningen
 
 ---
 
-## Filer som påverkas
+## Sammanfattning av filer som ändras
 
 | Fil | Typ av ändring |
 |-----|----------------|
-| Ny migration | Skapa `object_trucks` och `truck_step_status` tabeller med RLS |
-| `src/types/order.ts` | Lägg till `ObjectTruck` och `TruckStepStatus` interfaces |
-| `src/contexts/OrdersContext.tsx` | Uppdatera fetch, add och update för truckar |
-| `src/components/ObjectTrucksEditor.tsx` | **Ny komponent** för truckhantering |
-| `src/components/OrderObjectsEditor.tsx` | Integrera truckvisning och -editor |
-| `src/components/ProductionOrderCard.tsx` | Visa truckar i produktionsvyn |
-| `src/components/OrdersTable.tsx` | Lägg till truckkolumn och sökstöd |
-| `src/components/OrderFilters.tsx` | Uppdatera söklogik för trucknummer |
+| Ny migration | Skapa `truck_status_history` tabell med RLS |
+| `src/types/order.ts` | Lägg till `TruckStatusChange` interface |
+| `src/contexts/OrdersContext.tsx` | Optimistisk uppdatering + logga truckhistorik |
+| `src/components/OrderObjectsEditor.tsx` | Horisontell layout för steg när truckar finns |
+| `src/components/ObjectTrucksEditor.tsx` | Ta bort trunkering av stegnamn |
+| `src/components/ProductionOrderCard.tsx` | Visa truckar med stegstatus |
+| `src/pages/OrderDetails.tsx` | Visa truckstatushistorik |
 
 ---
 
-## Fördelar
+## Prioritetsordning
 
-- Tydlig spårning: Exakt var varje truck befinner sig
-- Flexibelt: Truckar kan läggas till/tas bort utan att ändra objekt
-- Sökbart: Hitta ordrar baserat på trucknummer
-- Visuellt: Stora trucknummer i produktionsvyn för snabb identifiering
-- Minimalt klickande: Kollapsbar vy visar sammanfattning, detaljer vid behov
+1. **Optimistisk uppdatering** - Löser det mest irriterande problemet direkt
+2. **Behandlingssteg i rad** - Gör UI snyggare och mer kompakt
+3. **Produktionsvyn** - Anpassa för truckar
+4. **Historik** - Fullständig spårbarhet
 
