@@ -116,25 +116,34 @@ export type Database = {
       }
       order_objects: {
         Row: {
+          completed_quantity: number
           created_at: string
           description: string | null
           id: string
           name: string
           order_id: string
+          planned_quantity: number
+          received_quantity: number
         }
         Insert: {
+          completed_quantity?: number
           created_at?: string
           description?: string | null
           id?: string
           name: string
           order_id: string
+          planned_quantity?: number
+          received_quantity?: number
         }
         Update: {
+          completed_quantity?: number
           created_at?: string
           description?: string | null
           id?: string
           name?: string
           order_id?: string
+          planned_quantity?: number
+          received_quantity?: number
         }
         Relationships: [
           {
