@@ -1017,6 +1017,49 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       }).eq('id', objectId);
     }
 
+    // Ensure truck_step_status records exist when truck becomes active
+    // This creates step status records if they're missing (handles legacy data)
+    if (order && objectId && (newStatus === 'arrived' || newStatus === 'started')) {
+      const truck = order.objects?.flatMap(obj => obj.trucks || []).find(t => t.id === truckId);
+      if (truck && (!truck.stepStatuses || truck.stepStatuses.length === 0)) {
+        // Get steps for this object
+        const objectSteps = order.steps.filter(s => s.objectId === objectId);
+        if (objectSteps.length > 0) {
+          const stepStatusesToInsert = objectSteps.map(step => ({
+            id: crypto.randomUUID(),
+            truck_id: truckId,
+            step_id: step.id,
+            status: 'pending' as const,
+          }));
+          
+          await supabase.from('truck_step_status').insert(stepStatusesToInsert);
+          
+          // Update local state optimistically
+          setOrders(prev => prev.map(o => {
+            if (o.id !== orderId) return o;
+            return {
+              ...o,
+              objects: o.objects?.map(obj => ({
+                ...obj,
+                trucks: obj.trucks?.map(t => {
+                  if (t.id !== truckId) return t;
+                  return {
+                    ...t,
+                    stepStatuses: stepStatusesToInsert.map(ss => ({
+                      id: ss.id,
+                      truckId: ss.truck_id,
+                      stepId: ss.step_id,
+                      status: ss.status,
+                    })),
+                  };
+                }),
+              })),
+            };
+          }));
+        }
+      }
+    }
+
     // Log lifecycle event - find truck number first
     const truck = order?.objects?.flatMap(obj => obj.trucks || []).find(t => t.id === truckId);
     if (truck) {

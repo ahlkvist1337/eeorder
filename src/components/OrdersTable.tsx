@@ -143,6 +143,21 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
       return 'Alla klara';
     }
     
+    // Fallback: If active work cards exist but no stepStatuses, show object's first step
+    const activeTrucks = (order.objects || [])
+      .flatMap(obj => (obj.trucks || [])
+        .filter(t => t.status === 'arrived' || t.status === 'started')
+        .map(t => ({ truck: t, objectId: obj.id }))
+      );
+    
+    if (activeTrucks.length > 0) {
+      const firstActive = activeTrucks[0];
+      const objectStep = order.steps.find(s => s.objectId === firstActive.objectId);
+      if (objectStep) {
+        return `Nästa: ${objectStep.name}`;
+      }
+    }
+    
     return '-';
   };
 
