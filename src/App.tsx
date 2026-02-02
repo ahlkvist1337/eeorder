@@ -19,6 +19,7 @@ import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 
 const App = () => {
+  // Initialize QueryClient with stable reference
   const [queryClient] = useState(() => new QueryClient());
 
   return (
