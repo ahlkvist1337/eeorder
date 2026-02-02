@@ -53,7 +53,7 @@ interface DbOrderObject {
 interface DbObjectTruck {
   id: string;
   object_id: string;
-  truck_number: string;
+  truck_number: string | null; // Now nullable for work units without truck numbers
   status: 'waiting' | 'arrived' | 'started' | 'paused' | 'completed';
   sort_order: number | null;
   created_at: string;

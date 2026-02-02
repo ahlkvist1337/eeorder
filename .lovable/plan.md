@@ -1,13 +1,13 @@
 
 # Plan: Från truck-centrerat till arbetsenhet-centrerat system
 
-## Sammanfattning
+## Status: ✅ IMPLEMENTERAT
 
-Systemet fungerar idag, men är helt baserat på att varje arbetsenhet (truck) har ett trucknummer. Denna plan generaliserar konceptet till **arbetsenheter** där trucknummer blir valfritt.
+Systemet har generaliserats från "truckar med obligatoriskt nummer" till "arbetsenheter där nummer är valfritt".
 
 ---
 
-## Vad som behöver ändras
+## Vad som har ändrats
 
 ### 1. Databas: Gör truck_number valfritt
 

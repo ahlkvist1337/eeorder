@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, Pencil, Check, X, ChevronDown, ChevronRight, Truck } from 'lucide-react';
+import { Plus, Trash2, Pencil, Check, X, ChevronDown, ChevronRight, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -7,11 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import type { ObjectTruck, OrderStep, StepStatus, TruckStatus } from '@/types/order';
-import { truckStatusLabels } from '@/types/order';
+import { truckStatusLabels, getWorkUnitDisplayName } from '@/types/order';
 
 interface ObjectTrucksEditorProps {
   trucks: ObjectTruck[];
   objectId: string;
+  objectName: string; // Added for fallback display
   objectSteps: OrderStep[];
   onTrucksChange: (trucks: ObjectTruck[]) => void;
   onTruckStepStatusChange?: (truckId: string, stepId: string, status: StepStatus) => void;
@@ -54,6 +55,7 @@ function getTruckOverallStatus(truck: ObjectTruck, objectSteps: OrderStep[]): { 
 export function ObjectTrucksEditor({
   trucks,
   objectId,
+  objectName,
   objectSteps,
   onTrucksChange,
   onTruckStepStatusChange,
@@ -72,14 +74,13 @@ export function ObjectTrucksEditor({
     });
   });
 
-  const handleAddTruck = () => {
-    if (!newTruckNumber.trim()) return;
-    
+  // Add work unit (truck number is now optional)
+  const handleAddWorkUnit = () => {
     const truckId = crypto.randomUUID();
     const newTruck: ObjectTruck = {
       id: truckId,
       objectId,
-      truckNumber: newTruckNumber.trim(),
+      truckNumber: newTruckNumber.trim(), // Can be empty string
       status: 'waiting',
       stepStatuses: objectSteps.map(step => ({
         id: crypto.randomUUID(),
@@ -182,25 +183,24 @@ export function ObjectTrucksEditor({
     return (
       <div className="mt-3 pt-3 border-t">
         <div className="flex items-center gap-2">
-          <Truck className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">Inga truckar</span>
+          <Package className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Inga arbetsenheter</span>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
             <Input
-              placeholder="Trucknummer..."
+              placeholder="Nummer (valfritt)..."
               value={newTruckNumber}
               onChange={(e) => setNewTruckNumber(e.target.value)}
               className="h-8 w-28 text-sm"
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleAddTruck();
+                if (e.key === 'Enter') handleAddWorkUnit();
               }}
             />
             <Button
               variant="outline"
               size="sm"
               className="h-8"
-              onClick={handleAddTruck}
-              disabled={!newTruckNumber.trim()}
+              onClick={handleAddWorkUnit}
             >
               <Plus className="h-4 w-4 mr-1" />
               Lägg till
@@ -218,10 +218,10 @@ export function ObjectTrucksEditor({
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="h-7 px-2 -ml-2">
               {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              <Truck className="h-4 w-4 ml-1" />
+              <Package className="h-4 w-4 ml-1" />
             </Button>
           </CollapsibleTrigger>
-          <span className="text-sm font-medium">Truckar:</span>
+          <span className="text-sm font-medium">Arbetsenheter:</span>
           <Badge variant="secondary" className="text-xs">
             {trucks.length} st • {completedTrucks.length} klar{completedTrucks.length !== 1 ? 'a' : ''}
           </Badge>
@@ -257,9 +257,11 @@ export function ObjectTrucksEditor({
                     </>
                   ) : (
                     <>
-                      <span className="font-mono font-bold text-sm w-20">#{truck.truckNumber}</span>
+                      <span className="font-mono font-bold text-sm w-24 truncate" title={getWorkUnitDisplayName(truck.truckNumber, objectName, truck.id)}>
+                        {getWorkUnitDisplayName(truck.truckNumber, objectName, truck.id)}
+                      </span>
                       
-                      {/* Truck production status dropdown */}
+                      {/* Work unit status dropdown */}
                       <Select
                         value={truck.status}
                         onValueChange={(value: TruckStatus) => {
@@ -328,26 +330,25 @@ export function ObjectTrucksEditor({
               );
             })}
 
-            {/* Add new truck */}
+            {/* Add new work unit */}
             <div className="flex items-center gap-2 pt-2">
               <Input
-                placeholder="Trucknummer..."
+                placeholder="Nummer (valfritt)..."
                 value={newTruckNumber}
                 onChange={(e) => setNewTruckNumber(e.target.value)}
                 className="h-8 w-28 text-sm"
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAddTruck();
+                  if (e.key === 'Enter') handleAddWorkUnit();
                 }}
               />
               <Button
                 variant="outline"
                 size="sm"
                 className="h-8"
-                onClick={handleAddTruck}
-                disabled={!newTruckNumber.trim()}
+                onClick={handleAddWorkUnit}
               >
                 <Plus className="h-4 w-4 mr-1" />
-                Lägg till truck
+                Lägg till
               </Button>
             </div>
           </div>

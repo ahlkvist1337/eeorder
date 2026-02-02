@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { Order, OrderObject, OrderStep, ObjectTruck, StepStatus, TruckStatus } from '@/types/order';
-import { truckStatusLabels } from '@/types/order';
+import { truckStatusLabels, getWorkUnitDisplayName } from '@/types/order';
 
 interface ProductionTruckCardProps {
   truck: ObjectTruck;
@@ -95,9 +95,9 @@ export function ProductionTruckCard({
           )}
           
           <div className="flex-1 min-w-0">
-            {/* Large truck number */}
+            {/* Display name (truck number or fallback) */}
             <div className={cn('text-4xl font-bold font-mono leading-none', colors.text)}>
-              #{truck.truckNumber}
+              {getWorkUnitDisplayName(truck.truckNumber, object.name, truck.id)}
             </div>
             
             {/* Truck status badge */}
