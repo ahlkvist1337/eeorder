@@ -1,4 +1,4 @@
-import type { Order, ArticleRow } from '@/types/order';
+import type { Order, ArticleRow, Instruction } from '@/types/order';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
 
@@ -15,7 +15,7 @@ export interface InvoiceExportOrder {
   customer: string;
   customerReference?: string;
   completedDate?: string;
-  comment?: string;
+  instructions?: string[]; // Changed from comment to instructions
   articleRows: InvoiceExportArticleRow[];
   orderTotal: number;
 }
@@ -73,7 +73,9 @@ export function prepareInvoiceExportData(orders: Order[]): InvoiceExportData {
     customer: order.customer,
     customerReference: order.customerReference,
     completedDate: getCompletedDate(order),
-    comment: order.comment || undefined,
+    instructions: order.instructions?.length 
+      ? order.instructions.map(inst => inst.text) 
+      : undefined,
     articleRows: convertArticleRows(order.articleRows),
     orderTotal: calculateOrderTotal(order.articleRows),
   }));
