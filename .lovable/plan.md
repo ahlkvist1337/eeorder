@@ -1,78 +1,69 @@
 
-# Plan: Fixa "Nästa steg" genom att skapa truck_step_status-poster
+# Plan: Fixa XML-import av ordrar
 
-## Problemanalys
+## Identifierade problem
 
-Jag har undersökt databasen och hittat rotorsaken:
+### Problem 1: Foreign key-fel vid skapande av arbetskort
+**Rotorsak:** I `addOrder` skapas `truck_step_status` (rad 413-427) **innan** `order_steps` skapas (rad 437-453). Detta orsakar ett "foreign key constraint violation" eftersom `truck_step_status.step_id` refererar till `order_steps.id`.
 
-### Vad som händer
-1. När ett arbetskort läggs till i UI:t, genereras `stepStatuses` korrekt i minnet
-2. När användaren ändrar arbetskortets status (t.ex. till "Ankommen"), uppdateras **endast `object_trucks`-tabellen**
-3. **`truck_step_status`-posterna skapas aldrig** i databasen för detta arbetskort
-4. `getNextStep` hittar arbetskort med status "arrived", men deras `stepStatuses`-array är tom (ingen data i DB)
+**Konsekvens:** 
+- Ordern skapas framgångsrikt
+- Objekt och trucks skapas framgångsrikt
+- truck_step_status misslyckas → exception kastas
+- Steps och article rows skapas aldrig
+- Användaren ser "kunde inte skapa ordern" men ordern finns redan i databasen
 
-### Databas-bevis
-För order 21345:
-- Arbetskort finns i `object_trucks` med status `waiting` (inte ens "arrived" - kan vara synkfel)
-- `truck_step_status`-tabellen har **inga poster** för detta arbetskort
-- Steget "Målning" finns i `order_steps` med rätt `object_id`
+### Problem 2: Datum parsas inte korrekt från XML
+**Rotorsak:** XML-parsern läser `orderDate` och `deliveryDate` som råtext från XML-filen. Dessa datum skickas direkt till databasen utan formatkonvertering.
+
+Monitor ERP kan använda olika datumformat som kanske inte är kompatibla med PostgreSQL `timestamp with time zone`.
 
 ---
 
 ## Lösning
 
-### Ändring 1: Skapa truck_step_status vid första status-ändring
+### Fix 1: Ändra ordningen i addOrder
 
-När arbetskortets status ändras från "waiting" till något annat (t.ex. "arrived"), ska `truck_step_status`-poster skapas automatiskt om de saknas.
+Flytta insättning av `order_steps` **FÖRE** insättning av `truck_step_status`:
 
-**I `updateTruckStatus`-funktionen:**
+```text
+Nuvarande ordning:
+1. orders ✓
+2. order_objects ✓
+3. object_trucks ✓
+4. truck_step_status ❌ (step_id finns inte ännu)
+5. order_steps (körs aldrig)
+6. article_rows (körs aldrig)
+
+Ny ordning:
+1. orders
+2. order_objects
+3. order_steps ← FLYTTA UPP
+4. object_trucks
+5. truck_step_status ← Nu finns step_id
+6. article_rows
+```
+
+### Fix 2: Normalisera datumformat
+
+Skapa en hjälpfunktion som konverterar datum från XML till ISO 8601-format:
+
 ```typescript
-// Efter att ha uppdaterat truck status...
-// Säkerställ att truck_step_status-poster finns för detta arbetskort
-const objectSteps = order.steps.filter(s => s.objectId === objectId);
-if (objectSteps.length > 0) {
-  const truck = obj.trucks?.find(t => t.id === truckId);
-  if (truck && truck.stepStatuses.length === 0) {
-    // Skapa step statuses i databasen
-    const stepStatuses = objectSteps.map(step => ({
-      id: crypto.randomUUID(),
-      truck_id: truckId,
-      step_id: step.id,
-      status: 'pending',
-    }));
-    await supabase.from('truck_step_status').insert(stepStatuses);
+function normalizeDate(dateString: string | undefined): string | null {
+  if (!dateString) return null;
+  
+  // Försök tolka olika format
+  const date = new Date(dateString);
+  if (!isNaN(date.getTime())) {
+    return date.toISOString();
   }
+  
+  // Om det inte går att tolka, returnera null
+  return null;
 }
 ```
 
-### Ändring 2: Uppdatera getNextStep för fallback
-
-Lägg till fallback-logik som letar efter objektets steg om inga `stepStatuses` finns:
-
-```typescript
-const getNextStep = (order: Order): string => {
-  // ... befintlig logik ...
-  
-  // Fallback: Om arbetskort finns men inga stepStatuses, 
-  // visa objektets första steg som "Nästa"
-  const activeTrucks = (order.objects || [])
-    .flatMap(obj => (obj.trucks || [])
-      .filter(t => t.status === 'arrived' || t.status === 'started')
-      .map(t => ({ truck: t, objectId: obj.id }))
-    );
-  
-  if (activeTrucks.length > 0) {
-    // Hitta första steget för första aktiva arbetskortet
-    const firstActive = activeTrucks[0];
-    const objectStep = order.steps.find(s => s.objectId === firstActive.objectId);
-    if (objectStep) {
-      return `Nästa: ${objectStep.name}`;
-    }
-  }
-  
-  return '-';
-};
-```
+Använd denna i `handleXmlSubmit` för att normalisera `plannedStart` och `plannedEnd`.
 
 ---
 
@@ -80,13 +71,61 @@ const getNextStep = (order: Order): string => {
 
 | Fil | Ändring |
 |-----|---------|
-| `src/contexts/OrdersContext.tsx` | I `updateTruckStatus`: Skapa `truck_step_status`-poster automatiskt om de saknas |
-| `src/components/OrdersTable.tsx` | I `getNextStep`: Lägg till fallback för att hitta objektets steg om `stepStatuses` är tom |
+| `src/contexts/OrdersContext.tsx` | I `addOrder`: Flytta insättning av `order_steps` före `object_trucks` och `truck_step_status` |
+| `src/pages/CreateOrder.tsx` | I `handleXmlSubmit`: Lägg till datumnormalisering för `plannedStart` och `plannedEnd` |
+| `src/lib/xmlParser.ts` | (Valfritt) Förbättra datumparsning för att hantera fler format |
+
+---
+
+## Tekniska detaljer
+
+### Ändring i OrdersContext.tsx (addOrder-funktionen)
+
+Nuvarande struktur (rad 384-472):
+```text
+1. Insert order (352-380)
+2. Insert objects if any (386-398)
+3. Insert trucks for each object (401-428)
+   - Inkluderar truck_step_status (413-427) ← PROBLEM
+4. Insert steps if any (437-453)
+5. Insert article rows if any (457-471)
+```
+
+Ny struktur:
+```text
+1. Insert order
+2. Insert objects if any
+3. Insert steps if any ← FLYTTA UPP
+4. Insert trucks for each object
+   - Inkluderar truck_step_status ← Nu fungerar FK
+5. Insert article rows if any
+```
+
+### Ändring i CreateOrder.tsx (handleXmlSubmit)
+
+Lägg till normalisering innan order skapas:
+```typescript
+// Normalisera datum från XML
+const normalizeDate = (dateStr: string | undefined): string | undefined => {
+  if (!dateStr) return undefined;
+  const date = new Date(dateStr);
+  return !isNaN(date.getTime()) ? date.toISOString() : undefined;
+};
+
+const newOrder = {
+  // ...
+  plannedStart: normalizeDate(parsedXml.orderDate),
+  plannedEnd: normalizeDate(parsedXml.deliveryDate),
+  // ...
+};
+```
 
 ---
 
 ## Resultat efter fix
 
-| Ordernr | Arbetskort | Nästa steg (före) | Nästa steg (efter) |
-|---------|------------|-------------------|-------------------|
-| 21345 | Toyota Parts (Ankommen) | - | Nästa: Målning |
+| Scenario | Före | Efter |
+|----------|------|-------|
+| XML-import med objekt + steg + arbetskort | Order skapas utan steg/artiklar | Komplett order skapas |
+| Datum från XML | Kan misslyckas beroende på format | Normaliseras till ISO 8601 |
+| Felhantering | Vilseledande "kunde inte skapa" | Korrekt beteende eller tydligt fel |
