@@ -17,6 +17,7 @@ export type Database = {
       article_rows: {
         Row: {
           id: string
+          object_id: string | null
           order_id: string
           part_number: string
           price: number
@@ -28,6 +29,7 @@ export type Database = {
         }
         Insert: {
           id?: string
+          object_id?: string | null
           order_id: string
           part_number: string
           price?: number
@@ -39,6 +41,7 @@ export type Database = {
         }
         Update: {
           id?: string
+          object_id?: string | null
           order_id?: string
           part_number?: string
           price?: number
@@ -49,6 +52,13 @@ export type Database = {
           unit?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "article_rows_object_id_fkey"
+            columns: ["object_id"]
+            isOneToOne: false
+            referencedRelation: "order_objects"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "article_rows_order_id_fkey"
             columns: ["order_id"]

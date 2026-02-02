@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronRight, Pencil, Check, X, Package, ClipboardList } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, Pencil, Check, X, Package, ClipboardList, Link2 } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -30,8 +30,9 @@ import { ObjectTrucksEditor } from '@/components/ObjectTrucksEditor';
 import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
 import { useObjectTemplates } from '@/hooks/useObjectTemplates';
 import { calculateObjectQuantities } from '@/types/order';
-import type { OrderStep, StepStatus, OrderObject, ObjectTruck, TruckStatus } from '@/types/order';
+import type { OrderStep, StepStatus, OrderObject, ObjectTruck, TruckStatus, ArticleRow } from '@/types/order';
 import { SortableStep } from '@/components/SortableStep';
+import { getLinkedArticlesSummary } from '@/lib/workCardSync';
 
 interface OrderObjectsEditorProps {
   objects: OrderObject[];
@@ -40,6 +41,7 @@ interface OrderObjectsEditorProps {
   onStepsChange: (steps: OrderStep[]) => void;
   onTruckStatusChange?: (truckId: string, status: TruckStatus) => void;
   onTruckStepStatusChange?: (truckId: string, stepId: string, status: StepStatus) => void;
+  articleRows?: ArticleRow[];
 }
 
 export function OrderObjectsEditor({ 
@@ -49,6 +51,7 @@ export function OrderObjectsEditor({
   onStepsChange,
   onTruckStatusChange,
   onTruckStepStatusChange,
+  articleRows = [],
 }: OrderObjectsEditorProps) {
   const { steps: treatmentTemplates, isLoading: treatmentLoading } = useTreatmentSteps();
   const { templates: objectTemplates, isLoading: objectLoading } = useObjectTemplates();
@@ -300,6 +303,18 @@ export function OrderObjectsEditor({
                     <>
                         <span className="font-medium">{obj.name}</span>
                         
+                        {/* Linked article rows indicator */}
+                        {(() => {
+                          const linkedSummary = getLinkedArticlesSummary(obj.id, articleRows);
+                          if (linkedSummary.rowCount === 0) return null;
+                          return (
+                            <Badge variant="secondary" className="ml-2 gap-1">
+                              <Link2 className="h-3 w-3" />
+                              {linkedSummary.totalQuantity} st
+                            </Badge>
+                          );
+                        })()}
+                        
                         {/* Work card summary badge - auto-calculated */}
                         {(() => {
                           const quantities = calculateObjectQuantities(obj.trucks);
@@ -307,7 +322,7 @@ export function OrderObjectsEditor({
                           return (
                             <Badge variant="outline" className="ml-2 gap-1">
                               <ClipboardList className="h-3 w-3" />
-                              {quantities.planned} st
+                              {quantities.planned} arbetskort
                             </Badge>
                           );
                         })()}
