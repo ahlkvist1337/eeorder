@@ -1,60 +1,77 @@
 
-# Plan: Fixa "Nästa steg" och kolumnnamn i orderöversikten
+# Plan: Fixa "Nästa steg" genom att skapa truck_step_status-poster
 
 ## Problemanalys
 
-### Problem 1: "Nästa steg" visar fel
-Funktionen `getNextStep()` i `OrdersTable.tsx` tittar på `order.steps` som är steg på ordernivå. Men i nuvarande datamodell:
-- Behandlingssteg är kopplade till **objekt** (via `objectId`)
-- Status spåras på **arbetskortsnivå** (via `truck.stepStatuses`)
-- `order.steps[].status` uppdateras inte längre korrekt
+Jag har undersökt databasen och hittat rotorsaken:
 
-### Problem 2: Fel kolumnrubrik
-Kolumnen heter "Truckar" men ska heta **"Arbetskort"** enligt systemets terminologi.
+### Vad som händer
+1. När ett arbetskort läggs till i UI:t, genereras `stepStatuses` korrekt i minnet
+2. När användaren ändrar arbetskortets status (t.ex. till "Ankommen"), uppdateras **endast `object_trucks`-tabellen**
+3. **`truck_step_status`-posterna skapas aldrig** i databasen för detta arbetskort
+4. `getNextStep` hittar arbetskort med status "arrived", men deras `stepStatuses`-array är tom (ingen data i DB)
+
+### Databas-bevis
+För order 21345:
+- Arbetskort finns i `object_trucks` med status `waiting` (inte ens "arrived" - kan vara synkfel)
+- `truck_step_status`-tabellen har **inga poster** för detta arbetskort
+- Steget "Målning" finns i `order_steps` med rätt `object_id`
 
 ---
 
 ## Lösning
 
-### Ändring 1: Uppdatera `getNextStep()` för att läsa från arbetskort
+### Ändring 1: Skapa truck_step_status vid första status-ändring
 
-Ny logik som läser från objektens arbetskort:
+När arbetskortets status ändras från "waiting" till något annat (t.ex. "arrived"), ska `truck_step_status`-poster skapas automatiskt om de saknas.
+
+**I `updateTruckStatus`-funktionen:**
+```typescript
+// Efter att ha uppdaterat truck status...
+// Säkerställ att truck_step_status-poster finns för detta arbetskort
+const objectSteps = order.steps.filter(s => s.objectId === objectId);
+if (objectSteps.length > 0) {
+  const truck = obj.trucks?.find(t => t.id === truckId);
+  if (truck && truck.stepStatuses.length === 0) {
+    // Skapa step statuses i databasen
+    const stepStatuses = objectSteps.map(step => ({
+      id: crypto.randomUUID(),
+      truck_id: truckId,
+      step_id: step.id,
+      status: 'pending',
+    }));
+    await supabase.from('truck_step_status').insert(stepStatuses);
+  }
+}
+```
+
+### Ändring 2: Uppdatera getNextStep för fallback
+
+Lägg till fallback-logik som letar efter objektets steg om inga `stepStatuses` finns:
 
 ```typescript
 const getNextStep = (order: Order): string => {
-  // Samla alla stegstatusar från alla arbetskort
-  const allStepStatuses = (order.objects || [])
+  // ... befintlig logik ...
+  
+  // Fallback: Om arbetskort finns men inga stepStatuses, 
+  // visa objektets första steg som "Nästa"
+  const activeTrucks = (order.objects || [])
     .flatMap(obj => (obj.trucks || [])
       .filter(t => t.status === 'arrived' || t.status === 'started')
-      .flatMap(t => t.stepStatuses.map(ss => ({
-        ...ss,
-        stepName: order.steps.find(s => s.id === ss.stepId)?.name || 'Okänt steg'
-      })))
+      .map(t => ({ truck: t, objectId: obj.id }))
     );
   
-  // Hitta pågående steg
-  const inProgress = allStepStatuses.find(ss => ss.status === 'in_progress');
-  if (inProgress) return `Pågår: ${inProgress.stepName}`;
-  
-  // Hitta nästa väntande steg
-  const pending = allStepStatuses.find(ss => ss.status === 'pending');
-  if (pending) return `Nästa: ${pending.stepName}`;
-  
-  // Kolla om alla arbetskort är klara
-  const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
-  if (allTrucks.length > 0 && allTrucks.every(t => t.status === 'completed')) {
-    return 'Alla klara';
+  if (activeTrucks.length > 0) {
+    // Hitta första steget för första aktiva arbetskortet
+    const firstActive = activeTrucks[0];
+    const objectStep = order.steps.find(s => s.objectId === firstActive.objectId);
+    if (objectStep) {
+      return `Nästa: ${objectStep.name}`;
+    }
   }
   
   return '-';
 };
-```
-
-### Ändring 2: Byt kolumnrubrik från "Truckar" till "Arbetskort"
-
-```typescript
-// Rad 229
-<TableHead className="w-[140px]">Arbetskort</TableHead>
 ```
 
 ---
@@ -63,19 +80,13 @@ const getNextStep = (order: Order): string => {
 
 | Fil | Ändring |
 |-----|---------|
-| `src/components/OrdersTable.tsx` | Uppdatera `getNextStep()` för att läsa från arbetskort. Byt rubrik "Truckar" → "Arbetskort". |
+| `src/contexts/OrdersContext.tsx` | I `updateTruckStatus`: Skapa `truck_step_status`-poster automatiskt om de saknas |
+| `src/components/OrdersTable.tsx` | I `getNextStep`: Lägg till fallback för att hitta objektets steg om `stepStatuses` är tom |
 
 ---
 
-## Visuellt resultat
+## Resultat efter fix
 
-### Före
-| Nästa steg | Truckar |
-|------------|---------|
-| -          | 🚛 1    |
-
-### Efter
-| Nästa steg       | Arbetskort |
-|------------------|------------|
-| Nästa: Målning RAL7040 | 📋 1 (1 klar) |
-
+| Ordernr | Arbetskort | Nästa steg (före) | Nästa steg (efter) |
+|---------|------------|-------------------|-------------------|
+| 21345 | Toyota Parts (Ankommen) | - | Nästa: Målning |
