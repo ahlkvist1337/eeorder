@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { X, FileDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -12,17 +12,21 @@ import type { ProductionStatus, BillingStatus } from '@/types/order';
 
 interface BulkEditToolbarProps {
   selectedCount: number;
+  canExportInvoice: boolean;
   onProductionStatusChange: (status: ProductionStatus) => void;
   onBillingStatusChange: (status: BillingStatus) => void;
   onDeviationChange: (hasDeviation: boolean) => void;
+  onExportInvoice: () => void;
   onClearSelection: () => void;
 }
 
 export function BulkEditToolbar({
   selectedCount,
+  canExportInvoice,
   onProductionStatusChange,
   onBillingStatusChange,
   onDeviationChange,
+  onExportInvoice,
   onClearSelection,
 }: BulkEditToolbarProps) {
   return (
@@ -77,6 +81,18 @@ export function BulkEditToolbar({
             Nej
           </Button>
         </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onExportInvoice}
+          disabled={!canExportInvoice}
+          className="w-full sm:w-auto"
+          title={canExportInvoice ? 'Exportera fakturaunderlag' : 'Alla valda ordrar måste ha status "Klar för fakturering"'}
+        >
+          <FileDown className="h-4 w-4 mr-1" />
+          Fakturaunderlag
+        </Button>
 
         <Button
           variant="ghost"

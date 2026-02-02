@@ -7,6 +7,7 @@ import { OrdersTable } from '@/components/OrdersTable';
 import { OrderFilters } from '@/components/OrderFilters';
 import { BulkEditToolbar } from '@/components/BulkEditToolbar';
 import { BulkEditConfirmDialog, type BulkEditType } from '@/components/BulkEditConfirmDialog';
+import { InvoiceExportDialog } from '@/components/InvoiceExportDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,6 +15,7 @@ import { useOrders } from '@/contexts/OrdersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { ProductionStatus, BillingStatus } from '@/types/order';
+import { canExportOrders } from '@/lib/invoiceExport';
 
 const Index = () => {
   useDocumentTitle('Ordrar');
@@ -49,6 +51,17 @@ const Index = () => {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [pendingEditType, setPendingEditType] = useState<BulkEditType | null>(null);
   const [pendingEditValue, setPendingEditValue] = useState<ProductionStatus | BillingStatus | boolean | null>(null);
+  const [invoiceExportDialogOpen, setInvoiceExportDialogOpen] = useState(false);
+
+  // Get selected orders and check if they can be exported
+  const selectedOrders = useMemo(() => 
+    orders.filter(o => selectedOrderIds.has(o.id)), 
+    [orders, selectedOrderIds]
+  );
+  const canExportSelectedOrders = useMemo(() => 
+    canExportOrders(selectedOrders), 
+    [selectedOrders]
+  );
 
   const handleProductionStatusChange = (status: ProductionStatus) => {
     setPendingEditType('productionStatus');
@@ -96,6 +109,10 @@ const Index = () => {
 
   const handleClearSelection = () => {
     setSelectedOrderIds(new Set());
+  };
+
+  const handleExportInvoice = () => {
+    setInvoiceExportDialogOpen(true);
   };
 
   // No filters for archived orders - just pass 'all' values
@@ -169,7 +186,9 @@ const Index = () => {
             {canEdit && selectedOrderIds.size > 0 && (
               <BulkEditToolbar
                 selectedCount={selectedOrderIds.size}
+                canExportInvoice={canExportSelectedOrders}
                 onProductionStatusChange={handleProductionStatusChange}
+                onExportInvoice={handleExportInvoice}
                 onBillingStatusChange={handleBillingStatusChange}
                 onDeviationChange={handleDeviationChange}
                 onClearSelection={handleClearSelection}
@@ -227,6 +246,13 @@ const Index = () => {
         newValue={pendingEditValue}
         orderCount={selectedOrderIds.size}
         onConfirm={handleConfirmBulkEdit}
+      />
+
+      {/* Invoice export dialog */}
+      <InvoiceExportDialog
+        open={invoiceExportDialogOpen}
+        onOpenChange={setInvoiceExportDialogOpen}
+        orders={selectedOrders}
       />
     </Layout>
   );
