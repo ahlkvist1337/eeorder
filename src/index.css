@@ -44,6 +44,10 @@
     --status-completed: 145 60% 40%;
     --status-cancelled: 0 60% 50%;
 
+    /* Warning color for hints/notifications */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
     /* Billing status colors */
     --billing-not-ready: 210 15% 60%;
     --billing-ready: 45 85% 50%;
@@ -84,6 +88,8 @@
     --destructive: 0 60% 45%;
     --destructive-foreground: 0 0% 100%;
 
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
     --border: 215 20% 25%;
     --input: 215 20% 25%;
     --ring: 200 70% 55%;

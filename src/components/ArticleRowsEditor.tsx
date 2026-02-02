@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { usePriceListLookup, type PriceMatch } from '@/hooks/usePriceListLookup';
 import type { ArticleRow, OrderObject } from '@/types/order';
 
 interface ArticleRowsEditorProps {
@@ -41,6 +42,41 @@ export function ArticleRowsEditor({
     price: 0,
   });
 
+  // Price list lookup
+  const { findMatch } = usePriceListLookup();
+  const [editPriceHint, setEditPriceHint] = useState<PriceMatch | null>(null);
+  const [newRowPriceHint, setNewRowPriceHint] = useState<PriceMatch | null>(null);
+
+  // Update price hint when editing a row
+  useEffect(() => {
+    if (!editingRowId) {
+      setEditPriceHint(null);
+      return;
+    }
+
+    const match = findMatch(editForm.partNumber || '', editForm.text || '');
+    if (match && match.price !== editForm.price) {
+      setEditPriceHint(match);
+    } else {
+      setEditPriceHint(null);
+    }
+  }, [editForm.partNumber, editForm.text, editForm.price, editingRowId, findMatch]);
+
+  // Update price hint when adding a new row
+  useEffect(() => {
+    if (!isAdding) {
+      setNewRowPriceHint(null);
+      return;
+    }
+
+    const match = findMatch(newRow.partNumber || '', newRow.text || '');
+    if (match && match.price !== (newRow.price || 0)) {
+      setNewRowPriceHint(match);
+    } else {
+      setNewRowPriceHint(null);
+    }
+  }, [newRow.partNumber, newRow.text, newRow.price, isAdding, findMatch]);
+
   const handleAddRow = () => {
     if (!newRow.text?.trim()) return;
     
@@ -64,6 +100,7 @@ export function ArticleRowsEditor({
       price: 0,
     });
     setIsAdding(false);
+    setNewRowPriceHint(null);
   };
 
   const handleDeleteRow = (rowId: string) => {
@@ -82,11 +119,13 @@ export function ArticleRowsEditor({
     ));
     setEditingRowId(null);
     setEditForm({});
+    setEditPriceHint(null);
   };
 
   const handleCancelEdit = () => {
     setEditingRowId(null);
     setEditForm({});
+    setEditPriceHint(null);
   };
 
   const handleObjectChange = (rowId: string, value: string) => {
@@ -103,10 +142,38 @@ export function ArticleRowsEditor({
     }
   };
 
+  const handleUsePriceFromList = (price: number) => {
+    setEditForm({ ...editForm, price });
+    setEditPriceHint(null);
+  };
+
+  const handleUseNewRowPriceFromList = (price: number) => {
+    setNewRow({ ...newRow, price });
+    setNewRowPriceHint(null);
+  };
+
   const total = rows.reduce((sum, row) => sum + (row.price * row.quantity), 0);
 
   // Show object column only if objects are available
   const showObjectColumn = objects.length > 0 && !readOnly;
+
+  // Price hint component
+  const PriceHint = ({ match, onUsePrice }: { match: PriceMatch; onUsePrice: (price: number) => void }) => (
+    <div className="flex items-center gap-2 text-xs text-warning mt-1">
+      <span>
+        Prislistan: {match.price.toLocaleString('sv-SE')} kr
+        {match.matchType === 'similar_desc' && ' (liknande)'}
+      </span>
+      <Button 
+        variant="link" 
+        size="sm" 
+        className="h-auto p-0 text-xs text-warning hover:text-warning/80"
+        onClick={() => onUsePrice(match.price)}
+      >
+        Använd
+      </Button>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -174,12 +241,17 @@ export function ArticleRowsEditor({
                       />
                     </td>
                     <td className="py-2 pr-2">
-                      <Input
-                        type="number"
-                        value={editForm.price || ''}
-                        onChange={(e) => setEditForm({ ...editForm, price: parseFloat(e.target.value) || 0 })}
-                        className="h-8 w-full text-right"
-                      />
+                      <div>
+                        <Input
+                          type="number"
+                          value={editForm.price || ''}
+                          onChange={(e) => setEditForm({ ...editForm, price: parseFloat(e.target.value) || 0 })}
+                          className="h-8 w-full text-right"
+                        />
+                        {editPriceHint && (
+                          <PriceHint match={editPriceHint} onUsePrice={handleUsePriceFromList} />
+                        )}
+                      </div>
                     </td>
                     <td className="py-2 pr-2 text-right font-medium">
                       {((editForm.price || 0) * (editForm.quantity || 0)).toLocaleString('sv-SE')} kr
@@ -299,12 +371,17 @@ export function ArticleRowsEditor({
                   />
                 </td>
                 <td className="py-2 pr-2">
-                  <Input
-                    type="number"
-                    value={newRow.price || ''}
-                    onChange={(e) => setNewRow({ ...newRow, price: parseFloat(e.target.value) || 0 })}
-                    className="h-8 w-full text-right"
-                  />
+                  <div>
+                    <Input
+                      type="number"
+                      value={newRow.price || ''}
+                      onChange={(e) => setNewRow({ ...newRow, price: parseFloat(e.target.value) || 0 })}
+                      className="h-8 w-full text-right"
+                    />
+                    {newRowPriceHint && (
+                      <PriceHint match={newRowPriceHint} onUsePrice={handleUseNewRowPriceFromList} />
+                    )}
+                  </div>
                 </td>
                 <td className="py-2 pr-2 text-right font-medium">
                   {((newRow.price || 0) * (newRow.quantity || 0)).toLocaleString('sv-SE')} kr
