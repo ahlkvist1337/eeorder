@@ -1,327 +1,168 @@
 
-# Plan: Arbetskort-centrerat produktionssystem
+# Plan: Förtydliga steg vs arbetskort i objektvyn
 
-## Status: ✅ IMPLEMENTERAD
+## Problemanalys
 
----
+### Nuvarande beteende
+1. **Utan arbetskort**: Steg visas med status-dropdown per steg (förvirrande)
+2. **Med arbetskort**: Steg visas horisontellt som kedja, status hanteras per arbetskort (korrekt)
 
-## Sammanfattning av ändringar
-
-| Område | Ändring | Status |
-|--------|---------|--------|
-| Terminologi | "Arbetsenhet" → "Arbetskort" | ✅ Klar |
-| Orderstatus | 6 val → 3 val i UI (Aktiv/Avslutad/Avbruten) | ✅ Klar |
-| Quantity | Manuell → Automatisk beräkning | ✅ Klar |
-| Rollfördelning | Tydligare separation Order/Arbetskort | ✅ Klar |
-
-### Grundprincip
-- **Order = affär och administration**
-- **Arbetskort = verklighet i verkstaden**
+### Problemet
+- Status-dropdown på stegnivå (bild 1) skapar förväntning att stegstatus hanteras där
+- Men enligt modellen är steg bara en *mall* - verklig status spåras per arbetskort
+- Blandningen av två UI-mönster är förvirrande
 
 ---
 
-## Implementerade ändringar
+## Lösning
 
-### Del 1: Terminologiändring ✅
-- `truckLifecycleEventLabels` uppdaterad med "Arbetskort planerat", "Arbetskort ankommet" osv.
-- ObjectTrucksEditor: "Inga arbetsenheter" → "Inga arbetskort"
-- ProductionScreen: "Pausade arbetsenheter" → "Pausade arbetskort"
-- OrderDetails: "Historik per arbetsenhet" → "Historik per arbetskort"
-- TruckTimeline: "Tidslinje för arbetsenhet" → "Tidslinje för arbetskort"
+### Ny princip
 
-### Del 2: Orderstatus förenklad till back-office ✅
-- `productionStatusLabels` mappat alla produktionsstatusar till "Aktiv"
-- Ny `orderAdminStatusLabels` med endast 3 val: Aktiv, Avslutad, Avbruten
-- Ny `toAdminStatus()` funktion för mappning
-- OrderDetails, BulkEditToolbar, BulkEditConfirmDialog uppdaterade
+Steg på objektnivå = **definition av arbetsflöde** (ingen status)
 
-### Del 3: Automatisk beräkning av Plan/Mott/Klart ✅
-- Ny `calculateObjectQuantities()` funktion i types/order.ts
-- OrderObjectsEditor: Manuella input-fält borttagna
-- Visar nu "X planerade • Y ankomna • Z klara" automatiskt baserat på arbetskortsstatus
-- Ikon bytt från `Truck` till `ClipboardList`
+Arbetskort = **verklig produktion** (status per steg)
 
----
+### UI-förändringar
 
-## Ej ändrat (för bakåtkompatibilitet)
-
-- Databasstruktur (tabellnamn `object_trucks` etc. behålls)
-- TypeScript-typnamn i kod (ObjectTruck, TruckStatus etc.)
-- Befintlig steglogik och historikloggning
-- Fakturaexport
-
----
-
-## Del 1: Terminologiändring
-
-### UI-texter att ändra
-
-| Nuvarande | Ny text |
-|-----------|---------|
-| Arbetsenheter | Arbetskort |
-| Arbetsenhet | Arbetskort |
-| Lägg till arbetsenhet | Lägg till arbetskort |
-| Inga arbetsenheter | Inga arbetskort |
-| Historik per arbetsenhet | Historik per arbetskort |
-| Arbetsenheter med status... | Arbetskort med status... |
-
-### Berörda filer
-
-- `src/types/order.ts` - Etiketter
-- `src/components/ObjectTrucksEditor.tsx` - UI-texter
-- `src/components/ProductionTruckCard.tsx` - Rubriker
-- `src/pages/ProductionScreen.tsx` - Rubriker och meddelanden
-- `src/pages/OrderDetails.tsx` - Sammanfattning och historik
-- `src/components/TruckTimeline.tsx` - Tidslinje-etiketter
-
-### Exempel på ändring i types/order.ts
-
-```typescript
-// Nuvarande
-export const truckLifecycleEventLabels: Record<TruckLifecycleEventType, string> = {
-  planned: 'Arbetsenhet planerad',
-  arrived: 'Arbetsenhet ankommen',
-  ...
-};
-
-// Ny
-export const truckLifecycleEventLabels: Record<TruckLifecycleEventType, string> = {
-  planned: 'Arbetskort planerat',
-  arrived: 'Arbetskort ankommet',
-  started: 'Arbete påbörjat',
-  paused: 'Pausat',
-  completed: 'Arbetskort klart',
-  step_started: 'Steg påbörjat',
-  step_completed: 'Steg klart',
-};
+**Före (bild 1):**
+```text
+⋮ Maskering     [Väntande] [Väntande ▼] 🗑
+⋮ Blästring     [Väntande] [Väntande ▼] 🗑
+⋮ Sprutzink     [Väntande] [Väntande ▼] 🗑
 ```
 
----
+**Efter:**
+```text
+Behandlingssteg:
+⋮ Maskering  🗑
+⋮ Blästring  🗑
+⋮ Sprutzink  🗑
+[Välj steg...] [+ Lägg till]
 
-## Del 2: Orderstatus renodlas till back-office
-
-### Nuvarande ProductionStatus
-
-```typescript
-export type ProductionStatus = 
-  | 'created'      // Skapad
-  | 'started'      // Startad ← produktionslogik, bör bort
-  | 'paused'       // Pausad ← produktionslogik, bör bort
-  | 'arrived'      // Ankommen ← produktionslogik, bör bort
-  | 'completed'    // Avslutad
-  | 'cancelled';   // Avbruten
+Arbetskort: Inga arbetskort
+[ID (valfritt)...] [+ Lägg till]
 ```
 
-### Förenklad ProductionStatus (administrativ)
-
-```typescript
-export type OrderStatus = 
-  | 'active'       // Aktiv (ny order, arbete pågår)
-  | 'completed'    // Avslutad
-  | 'cancelled';   // Avbruten
-```
-
-### Migreringsplan
-
-1. Lägg till `active` som ny status
-2. Mappa befintliga `created`, `started`, `paused`, `arrived` → `active`
-3. Behåll `completed` och `cancelled`
-4. Uppdatera UI för att endast visa tre val
-
-### Databasmigration
-
-```sql
--- Konsolidera produktionsstatus till administrativ
-UPDATE orders 
-SET production_status = 'active'
-WHERE production_status IN ('created', 'started', 'paused', 'arrived');
-```
+### Ändringen
+1. **Ta bort** status-badge och status-dropdown från `SortableStep`
+2. Steg visas endast som en ordnad lista (drag-and-drop för sortering)
+3. Status hanteras **endast** på arbetskortsnivå
 
 ---
 
-## Del 3: Automatisk beräkning av Plan/Mott/Klart
+## Tekniska ändringar
 
-### Nuvarande problem
+### 1. `SortableStep.tsx`
 
-Objektets quantity-fält (plannedQuantity, receivedQuantity, completedQuantity) är manuellt inmatade och kan komma ur synk med arbetskortsdata.
+Ta bort:
+- `StepStatusBadge`
+- Status-dropdown (`Select`)
+- `onStatusChange`-prop
 
-### Ny beräkningslogik
+Behåll:
+- Drag-handle (för omordning)
+- Stegnamn
+- Ta bort-knapp
 
-```typescript
-// I OrderObjectsEditor eller OrderDetails
-function calculateObjectQuantities(obj: OrderObject): {
-  planned: number;
-  received: number;
-  completed: number;
-} {
-  const trucks = obj.trucks || [];
-  
-  return {
-    planned: trucks.length,
-    received: trucks.filter(t => 
-      t.status === 'arrived' || 
-      t.status === 'started' || 
-      t.status === 'paused' || 
-      t.status === 'completed'
-    ).length,
-    completed: trucks.filter(t => t.status === 'completed').length,
-  };
+**Ny kod:**
+```tsx
+export function SortableStep({ step, onRemove }: SortableStepProps) {
+  // ...sortable hooks...
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2">
+      <button className="cursor-grab" {...attributes} {...listeners}>
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <span className="flex-1 text-sm">{step.name}</span>
+      <Button onClick={() => onRemove(step.id)}>
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  );
 }
 ```
 
-### UI-ändring
+### 2. `OrderObjectsEditor.tsx`
 
-Istället för manuella input-fält visar vi beräknade värden:
+Ta bort:
+- `handleStepStatusChange`-funktionen
+- Status-relaterade props till `SortableStep`
 
-```text
-Före:
-[Plan: ___] [Mott: ___] [Klart: ___]
+Behåll villkoret för horisontell/vertikal visning, men utan status.
 
-Efter:
-Arbetskort: 3 planerade • 2 ankomna • 1 klart
-```
+### 3. `OrderStepsEditor.tsx` (legacy)
+
+Används för unassigned steps. Ta bort status-hantering även här.
+
+### 4. Typändringar
+
+`OrderStep.status` behålls i typen (för bakåtkompatibilitet och legacy-data), men används inte i UI för nya objekt.
 
 ---
 
-## Del 4: Förtydliga Order vs Arbetskort i UI
+## Visuellt resultat
 
-### Orderdetaljvy
-
-Strukturera om för att tydliggöra:
-
+### Objektvy utan arbetskort
 ```text
 ┌─────────────────────────────────────────────────┐
-│ ORDER 12345                                     │
-│ Kund: Volvo AB • Referens: REF-001             │
-│                                                 │
-│ [Aktiv ▼]  [Klar för fakturering ▼]            │
+│ ▼ Monteringsdetaljer              Inga arbetskort│
 ├─────────────────────────────────────────────────┤
-│ OBJEKT & ARBETSKORT                             │
+│ Behandlingssteg:                                │
+│ ⋮ Maskering                              🗑     │
+│ ⋮ Blästring                              🗑     │
+│ ⋮ Sprutzink                              🗑     │
 │                                                 │
-│ ▼ Motorlåda                                     │
-│   Steg: Blästring → Lackering → Montering       │
-│   Arbetskort:                                   │
-│   ┌──────────────────────────────────────────┐  │
-│   │ #135  [Ankommen ▼] [Blästring ●] [Lack ○]│  │
-│   │ #136  [Väntande ▼] [Blästring ○] [Lack ○]│  │
-│   │ Reserv A7B2 [Klar ▼] [✓] [✓] [✓]         │  │
-│   └──────────────────────────────────────────┘  │
-│   Sammanfattning: 3 planerade • 2 ankomna • 1 klar│
+│ [Välj behandlingssteg...]  [+ Lägg till]       │
+│ ─────────────────────────────────────────────── │
+│ 📋 Inga arbetskort                              │
+│ [ID (valfritt)...]  [+ Lägg till]              │
 └─────────────────────────────────────────────────┘
 ```
 
-### Produktionsvy
-
-Behålls som idag - visar endast arbetskort, inte ordrar:
-
+### Objektvy med arbetskort
 ```text
-┌───────────┐ ┌───────────┐ ┌───────────┐
-│ #135      │ │ #136      │ │ Reserv    │
-│ Motorlåda │ │ Motorlåda │ │ A7B2      │
-│ [Blästr ●]│ │ [Väntar] │ │ [Klar ✓] │
-│ [Lack ○] │ │           │ │           │
-│ 12345     │ │ 12345     │ │ 12345     │
-│ Volvo     │ │ Volvo     │ │ Volvo     │
-└───────────┘ └───────────┘ └───────────┘
+┌─────────────────────────────────────────────────┐
+│ ▼ Monteringsdetaljer   📋 1 st    1 plan • 0 klar│
+├─────────────────────────────────────────────────┤
+│ Steg: Maskering → Blästring → Sprutzink         │
+│                                                 │
+│ [Välj behandlingssteg...]  [+ Lägg till]       │
+│ ─────────────────────────────────────────────── │
+│ ▼ 📋 Arbetskort: 1 st • 0 klara                 │
+│   #130  [Väntande ▼]  Maskering ○  Blästring ○  │
+│                                                 │
+│   [ID (valfritt)...]  [+ Lägg till]            │
+└─────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Del 5: Filändringar i detalj
+## Filer som ändras
 
-### 1. `src/types/order.ts`
-
-**Ändringar:**
-- Byt `ProductionStatus` till `OrderStatus` med endast `active`, `completed`, `cancelled`
-- Uppdatera alla labels till "Arbetskort"
-- Lägg till hjälpfunktion för quantity-beräkning
-
-### 2. `src/components/ObjectTrucksEditor.tsx`
-
-**Ändringar:**
-- Byt alla "arbetsenhet"-texter till "arbetskort"
-- Byt placeholder från "Nummer (valfritt)..." till "Arbetskort-ID (valfritt)..."
-
-### 3. `src/components/OrderObjectsEditor.tsx`
-
-**Ändringar:**
-- Ta bort manuella quantity-inputfält
-- Visa beräknad sammanfattning istället
-- Byt "Truck"-ikon mot "ClipboardList" eller liknande
-
-### 4. `src/pages/ProductionScreen.tsx`
-
-**Ändringar:**
-- Byt rubriker till "Arbetskort"
-- Behåll funktionalitet
-
-### 5. `src/pages/OrderDetails.tsx`
-
-**Ändringar:**
-- Uppdatera arbetskortssammanfattning
-- Byt historikrubrik
-- Uppdatera produktionsstatus-dropdown till 3 val
-
-### 6. `src/components/TruckTimeline.tsx`
-
-**Ändringar:**
-- Byt rubrik till "Tidslinje för arbetskort"
-
-### 7. `src/contexts/OrdersContext.tsx`
-
-**Ändringar:**
-- Hantera mappning av gamla statusar till `active`
+| Fil | Ändring |
+|-----|---------|
+| `src/components/SortableStep.tsx` | Ta bort status-badge och dropdown |
+| `src/components/OrderObjectsEditor.tsx` | Ta bort `handleStepStatusChange`, uppdatera props |
+| `src/components/OrderStepsEditor.tsx` | Ta bort status-hantering (legacy) |
 
 ---
 
-## Migreringar
+## Ingen databasändring
 
-### Databasmigration
-
-```sql
--- 1. Konsolidera status
-UPDATE orders 
-SET production_status = 'active'
-WHERE production_status IN ('created', 'started', 'paused', 'arrived');
-```
-
-### Inga strukturella databasändringar
-
-Tabellnamn (`object_trucks`, `truck_step_status`, etc.) behålls för bakåtkompatibilitet.
-
----
-
-## Validering efter implementation
-
-1. **Skapa nytt arbetskort utan nummer** → Visas som "Objektnamn XXXX"
-2. **Skapa arbetskort med nummer** → Visas som "#123"
-3. **Ändra arbetskortsstatus** → Objektets sammanfattning uppdateras automatiskt
-4. **Alla steg klara** → Arbetskort markeras automatiskt som klart
-5. **Produktionsvyn** → Visar endast ankomna/startade arbetskort
-6. **Orderstatus** → Endast 3 val: Aktiv, Avslutad, Avbruten
-
----
-
-## Vad som INTE ändras
-
-- Databasstruktur (tabellnamn behålls)
-- TypeScript-typnamn i kod (behålls för bakåtkompatibilitet)
-- Befintlig steglogik
-- Befintlig historikloggning
-- Fakturaexport
+- `order_steps.status` behålls i databasen
+- Befintliga värden används inte aktivt
+- Nya steg skapas alltid med `status: 'pending'`
 
 ---
 
 ## Sammanfattning
 
-| Område | Ändring |
-|--------|---------|
-| Terminologi | "Arbetsenhet" → "Arbetskort" |
-| Orderstatus | 6 val → 3 val (aktiv/avslutad/avbruten) |
-| Quantity | Manuell → Automatisk beräkning |
-| Rollfördelning | Tydligare separation Order/Arbetskort |
+| Före | Efter |
+|------|-------|
+| Steg har status-dropdown | Steg är bara en ordnad lista |
+| Förvirrande rollfördelning | Tydlig separation: steg = mall, arbetskort = verklighet |
+| Dubbel statushantering | Status endast på arbetskortsnivå |
 
-Grundprincipen:
-- **Order = affär och administration**
-- **Arbetskort = verklighet i verkstaden**
-
+Grundprincipen förstärks:
+- **Steg** = vad som ska göras (definieras på objektnivå)
+- **Arbetskort** = vad som faktiskt görs (status per enhet)
