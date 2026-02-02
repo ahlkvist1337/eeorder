@@ -248,12 +248,12 @@ export default function ProductionScreen() {
         </div>
       </header>
 
-      {/* Paused work units section */}
+      {/* Paused work cards section */}
       {pausedTrucks.length > 0 && (
         <section className="mb-6">
           <h2 className="text-lg font-semibold text-muted-foreground mb-3 flex items-center gap-2">
             <Pause className="h-4 w-4" />
-            Pausade arbetsenheter
+            Pausade arbetskort
           </h2>
           <div className="flex flex-wrap gap-3">
             {pausedTrucks.map(({ truck, object, order }) => (
@@ -270,7 +270,7 @@ export default function ProductionScreen() {
         </section>
       )}
 
-      {/* Active work units grid */}
+      {/* Active work cards grid */}
       {isLoading && sortedActiveTrucks.length === 0 ? (
         <div className="flex items-center justify-center h-64">
           <p className="text-2xl text-muted-foreground">Laddar...</p>
@@ -280,10 +280,10 @@ export default function ProductionScreen() {
           <div className="text-center">
             <Package className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
             <p className="text-2xl text-muted-foreground">
-              Inga aktiva arbetsenheter
+              Inga aktiva arbetskort
             </p>
             <p className="text-muted-foreground mt-2">
-              Arbetsenheter med status "Ankommen" eller "Startad" visas här
+              Arbetskort med status "Ankommen" eller "Startad" visas här
             </p>
           </div>
         </div>

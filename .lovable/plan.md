@@ -1,34 +1,54 @@
 
 # Plan: Arbetskort-centrerat produktionssystem
 
-## Sammanfattning
-
-Systemet fungerar idag bra men har kvar terminologi och vissa koncept som skapar förvirring. Denna plan rensar upp terminologin och förtydligar rollfördelningen mellan **Order** (affär) och **Arbetskort** (produktion).
+## Status: ✅ IMPLEMENTERAD
 
 ---
 
-## Nuläge
+## Sammanfattning av ändringar
 
-### Vad som redan fungerar korrekt
+| Område | Ändring | Status |
+|--------|---------|--------|
+| Terminologi | "Arbetsenhet" → "Arbetskort" | ✅ Klar |
+| Orderstatus | 6 val → 3 val i UI (Aktiv/Avslutad/Avbruten) | ✅ Klar |
+| Quantity | Manuell → Automatisk beräkning | ✅ Klar |
+| Rollfördelning | Tydligare separation Order/Arbetskort | ✅ Klar |
 
-| Komponent | Status |
-|-----------|--------|
-| `ObjectTruck` som arbetsenhet | Fungerar |
-| Valfritt trucknummer | Implementerat (truck_number nullable) |
-| Stegstatus per arbetsenhet | Fungerar |
-| Automatisk "klar" när alla steg klara | Fungerar |
-| Produktionsvy visar arbetsenheter | Fungerar |
-| Historik per arbetsenhet | Fungerar |
-| Fallback-identifiering utan trucknummer | Fungerar |
+### Grundprincip
+- **Order = affär och administration**
+- **Arbetskort = verklighet i verkstaden**
 
-### Vad som behöver förfinas
+---
 
-| Problem | Åtgärd |
-|---------|--------|
-| "Truck"-terminologi överallt i kod och UI | Byt till "Arbetskort" |
-| Orderstatus (ProductionStatus) har för många val | Begränsa till back-office |
-| Objektets quantity-fält (Plan/Mott/Klart) är manuella | Beräkna automatiskt från arbetskort |
-| Otydlig rollfördelning Order vs Arbetskort | Förtydliga i UI |
+## Implementerade ändringar
+
+### Del 1: Terminologiändring ✅
+- `truckLifecycleEventLabels` uppdaterad med "Arbetskort planerat", "Arbetskort ankommet" osv.
+- ObjectTrucksEditor: "Inga arbetsenheter" → "Inga arbetskort"
+- ProductionScreen: "Pausade arbetsenheter" → "Pausade arbetskort"
+- OrderDetails: "Historik per arbetsenhet" → "Historik per arbetskort"
+- TruckTimeline: "Tidslinje för arbetsenhet" → "Tidslinje för arbetskort"
+
+### Del 2: Orderstatus förenklad till back-office ✅
+- `productionStatusLabels` mappat alla produktionsstatusar till "Aktiv"
+- Ny `orderAdminStatusLabels` med endast 3 val: Aktiv, Avslutad, Avbruten
+- Ny `toAdminStatus()` funktion för mappning
+- OrderDetails, BulkEditToolbar, BulkEditConfirmDialog uppdaterade
+
+### Del 3: Automatisk beräkning av Plan/Mott/Klart ✅
+- Ny `calculateObjectQuantities()` funktion i types/order.ts
+- OrderObjectsEditor: Manuella input-fält borttagna
+- Visar nu "X planerade • Y ankomna • Z klara" automatiskt baserat på arbetskortsstatus
+- Ikon bytt från `Truck` till `ClipboardList`
+
+---
+
+## Ej ändrat (för bakåtkompatibilitet)
+
+- Databasstruktur (tabellnamn `object_trucks` etc. behålls)
+- TypeScript-typnamn i kod (ObjectTruck, TruckStatus etc.)
+- Befintlig steglogik och historikloggning
+- Fakturaexport
 
 ---
 

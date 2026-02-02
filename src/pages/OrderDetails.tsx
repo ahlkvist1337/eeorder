@@ -26,8 +26,8 @@ import { OrderAttachments } from '@/components/OrderAttachments';
 import { useOrders } from '@/hooks/useOrders';
 import { useOrderAttachments } from '@/hooks/useOrderAttachments';
 import { useAuth } from '@/contexts/AuthContext';
-import { productionStatusLabels, billingStatusLabels, stepStatusLabels, getWorkUnitDisplayName } from '@/types/order';
-import type { ProductionStatus, BillingStatus, OrderStep, OrderObject, TruckStatus, StepStatus } from '@/types/order';
+import { orderAdminStatusLabels, billingStatusLabels, stepStatusLabels, getWorkUnitDisplayName, toAdminStatus } from '@/types/order';
+import type { ProductionStatus, BillingStatus, OrderStep, OrderObject, TruckStatus, StepStatus, OrderAdminStatus } from '@/types/order';
 import { StepStatusBadge } from '@/components/StatusBadge';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -221,7 +221,7 @@ export default function OrderDetails() {
             <BillingStatusBadge status={order.billingStatus} />
           </div>
           
-          {/* Work unit summary */}
+          {/* Work card summary */}
           {(() => {
             const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
             if (allTrucks.length === 0) return null;
@@ -232,7 +232,7 @@ export default function OrderDetails() {
             
             return (
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">Arbetsenheter:</span>
+                <span className="font-medium text-foreground">Arbetskort:</span>
                 <span>{planned} planerade</span>
                 <span>•</span>
                 <span>{arrived} ankomna</span>
@@ -422,17 +422,17 @@ export default function OrderDetails() {
               </CardContent>
             </Card>
 
-            {/* Work Unit Timeline History */}
+            {/* Work Card Timeline History */}
             <Card>
               <CardHeader className="pb-3 sm:pb-6">
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                   <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
-                  Historik per arbetsenhet
+                  Historik per arbetskort
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 sm:pt-0">
                 {(() => {
-                  // Get all work units from all objects
+                  // Get all work cards from all objects
                   const allTrucks = (order.objects || []).flatMap(obj => 
                     (obj.trucks || []).map(truck => ({
                       ...truck,
@@ -441,7 +441,7 @@ export default function OrderDetails() {
                   );
                   
                   if (allTrucks.length === 0) {
-                    return <p className="text-muted-foreground text-sm">Inga arbetsenheter finns på denna order.</p>;
+                    return <p className="text-muted-foreground text-sm">Inga arbetskort finns på denna order.</p>;
                   }
                   
                   return (
@@ -510,16 +510,16 @@ export default function OrderDetails() {
               </CardHeader>
               <CardContent className="space-y-3 sm:space-y-4 pt-0 sm:pt-0">
                 <div className="space-y-1.5 sm:space-y-2">
-                  <Label className="text-xs sm:text-sm">Produktionsstatus</Label>
+                  <Label className="text-xs sm:text-sm">Orderstatus</Label>
                   <Select 
-                    value={order.productionStatus} 
+                    value={toAdminStatus(order.productionStatus)} 
                     onValueChange={handleProductionStatusChange}
                   >
                     <SelectTrigger className="bg-background text-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-popover">
-                      {Object.entries(productionStatusLabels).map(([value, label]) => (
+                      {Object.entries(orderAdminStatusLabels).map(([value, label]) => (
                         <SelectItem key={value} value={value}>{label}</SelectItem>
                       ))}
                     </SelectContent>
