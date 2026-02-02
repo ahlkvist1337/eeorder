@@ -254,6 +254,12 @@ export default function PriceList() {
           </div>
           <div className="flex gap-2">
             {canEdit && (
+              <Button onClick={() => openAddDialog()}>
+                <Plus className="h-4 w-4 mr-2" />
+                Lägg till pris
+              </Button>
+            )}
+            {canEdit && (
               <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
                 <Upload className="h-4 w-4 mr-2" />
                 Importera från ordrar
@@ -479,13 +485,6 @@ export default function PriceList() {
           </div>
         )}
 
-        {/* Add button */}
-        {canEdit && (
-          <Button onClick={() => openAddDialog()}>
-            <Plus className="h-4 w-4 mr-2" />
-            Lägg till ny artikel
-          </Button>
-        )}
 
         {/* Edit/Add Dialog */}
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
