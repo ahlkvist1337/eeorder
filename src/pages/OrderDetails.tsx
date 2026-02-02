@@ -220,6 +220,27 @@ export default function OrderDetails() {
             <ProductionStatusBadge status={order.productionStatus} />
             <BillingStatusBadge status={order.billingStatus} />
           </div>
+          
+          {/* Truck summary */}
+          {(() => {
+            const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
+            if (allTrucks.length === 0) return null;
+            
+            const planned = allTrucks.length;
+            const arrived = allTrucks.filter(t => t.status === 'arrived' || t.status === 'started' || t.status === 'paused' || t.status === 'completed').length;
+            const completed = allTrucks.filter(t => t.status === 'completed').length;
+            
+            return (
+              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Truckar:</span>
+                <span>{planned} planerade</span>
+                <span>•</span>
+                <span>{arrived} ankomna</span>
+                <span>•</span>
+                <span>{completed} klara</span>
+              </div>
+            );
+          })()}
         </div>
 
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
@@ -401,78 +422,81 @@ export default function OrderDetails() {
               </CardContent>
             </Card>
 
-            {/* Status history */}
+            {/* Truck Timeline History */}
             <Card>
               <CardHeader className="pb-3 sm:pb-6">
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                   <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
-                  Statushistorik
+                  Truckhistorik
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 sm:pt-0">
-                <div className="grid gap-4 sm:gap-6 md:grid-cols-3">
-                  {/* Order status history - left column */}
-                  <div>
-                    <h4 className="font-medium text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">Orderstatus</h4>
-                    {order.statusHistory.length === 0 ? (
-                      <p className="text-muted-foreground text-xs sm:text-sm">Ingen historik ännu.</p>
-                    ) : (
-                      <div className="space-y-1.5 sm:space-y-2">
-                        {[...order.statusHistory].reverse().map(change => (
-                          <div key={change.id} className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm">
-                            <span className="text-muted-foreground min-w-[70px] sm:min-w-[100px]">
-                              {format(new Date(change.timestamp), 'd MMM HH:mm', { locale: sv })}
-                            </span>
-                            <ProductionStatusBadge status={change.fromStatus} className="text-xs" />
-                            <span className="text-muted-foreground">→</span>
-                            <ProductionStatusBadge status={change.toStatus} className="text-xs" />
+                {(() => {
+                  // Get all trucks from all objects
+                  const allTrucks = (order.objects || []).flatMap(obj => 
+                    (obj.trucks || []).map(truck => ({
+                      ...truck,
+                      objectName: obj.name,
+                    }))
+                  );
+                  
+                  if (allTrucks.length === 0) {
+                    return <p className="text-muted-foreground text-sm">Inga truckar finns på denna order.</p>;
+                  }
+                  
+                  return (
+                    <div className="space-y-6">
+                      {allTrucks.map(truck => {
+                        // Collect events for this truck from truckStatusHistory
+                        const truckEvents = (order.truckStatusHistory || [])
+                          .filter(h => h.truckId === truck.id)
+                          .map(h => ({
+                            id: h.id,
+                            timestamp: h.timestamp,
+                            type: h.toStatus === 'in_progress' ? 'step_started' : h.toStatus === 'completed' ? 'step_completed' : h.toStatus,
+                            stepName: h.stepName,
+                            label: h.toStatus === 'in_progress' 
+                              ? `${h.stepName}: Pågående`
+                              : h.toStatus === 'completed'
+                                ? `${h.stepName}: Klar`
+                                : h.stepName,
+                          }));
+                        
+                        // Sort by timestamp
+                        const sortedEvents = truckEvents.sort((a, b) => 
+                          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                        );
+                        
+                        return (
+                          <div key={truck.id} className="border-b pb-4 last:border-0 last:pb-0">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-lg font-bold font-mono">#{truck.truckNumber}</span>
+                              <span className="text-sm text-muted-foreground">• {truck.objectName}</span>
+                            </div>
+                            
+                            {sortedEvents.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">Ingen historik ännu</p>
+                            ) : (
+                              <div className="relative pl-4 border-l-2 border-muted space-y-2">
+                                {sortedEvents.map(event => (
+                                  <div key={event.id} className="relative">
+                                    <div className="absolute -left-[9px] top-1.5 w-2 h-2 rounded-full bg-primary" />
+                                    <div className="flex items-center gap-2 text-sm">
+                                      <span className="text-muted-foreground min-w-[80px]">
+                                        {format(new Date(event.timestamp), 'd MMM HH:mm', { locale: sv })}
+                                      </span>
+                                      <span>{event.label}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Step status history - middle column */}
-                  <div>
-                    <h4 className="font-medium text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">Steghistorik</h4>
-                    {order.stepStatusHistory.length === 0 ? (
-                      <p className="text-muted-foreground text-xs sm:text-sm">Ingen historik ännu.</p>
-                    ) : (
-                      <div className="space-y-1.5 sm:space-y-2">
-                        {[...order.stepStatusHistory].reverse().slice(0, 10).map(change => (
-                          <div key={change.id} className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm">
-                            <span className="text-muted-foreground min-w-[70px] sm:min-w-[100px]">
-                              {format(new Date(change.timestamp), 'd MMM HH:mm', { locale: sv })}
-                            </span>
-                            <span className="font-medium">{change.stepName}:</span>
-                            <StepStatusBadge status={change.toStatus} className="text-xs" />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Truck status history - right column */}
-                  <div>
-                    <h4 className="font-medium text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">Truckhistorik</h4>
-                    {(!order.truckStatusHistory || order.truckStatusHistory.length === 0) ? (
-                      <p className="text-muted-foreground text-xs sm:text-sm">Ingen historik ännu.</p>
-                    ) : (
-                      <div className="space-y-1.5 sm:space-y-2">
-                        {[...order.truckStatusHistory].reverse().slice(0, 10).map(change => (
-                          <div key={change.id} className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm">
-                            <span className="text-muted-foreground min-w-[70px] sm:min-w-[100px]">
-                              {format(new Date(change.timestamp), 'd MMM HH:mm', { locale: sv })}
-                            </span>
-                            <span className="font-mono font-bold">#{change.truckNumber}</span>
-                            <span>{change.stepName}:</span>
-                            <StepStatusBadge status={change.toStatus} className="text-xs" />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>

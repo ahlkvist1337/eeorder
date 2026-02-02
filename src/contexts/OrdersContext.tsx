@@ -995,6 +995,17 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         completed_quantity: newCompletedQuantity,
       }).eq('id', objectId);
     }
+
+    // Log lifecycle event - find truck number first
+    const truck = order?.objects?.flatMap(obj => obj.trucks || []).find(t => t.id === truckId);
+    if (truck) {
+      await supabase.from('truck_lifecycle_events').insert({
+        order_id: orderId,
+        truck_id: truckId,
+        truck_number: truck.truckNumber,
+        event_type: newStatus, // 'arrived', 'started', 'paused', 'completed'
+      });
+    }
   }, [orders]);
 
   const bulkUpdateOrders = useCallback(async (orderIds: string[], updates: BulkOrderUpdates) => {
