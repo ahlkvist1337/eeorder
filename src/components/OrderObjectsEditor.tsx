@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronRight, Pencil, Check, X, Package, Truck } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, Pencil, Check, X, Package, ClipboardList } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -30,7 +30,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ObjectTrucksEditor } from '@/components/ObjectTrucksEditor';
 import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
 import { useObjectTemplates } from '@/hooks/useObjectTemplates';
-import { stepStatusLabels } from '@/types/order';
+import { stepStatusLabels, calculateObjectQuantities } from '@/types/order';
 import type { OrderStep, StepStatus, OrderObject, ObjectTruck, TruckStatus } from '@/types/order';
 import { SortableStep } from '@/components/SortableStep';
 
@@ -316,75 +316,37 @@ export function OrderObjectsEditor({
                         </Button>
                       </div>
                     ) : (
-                      <>
+                    <>
                         <span className="font-medium">{obj.name}</span>
                         
-                        {/* Truck summary badge */}
-                        {obj.trucks && obj.trucks.length > 0 && (
-                          <Badge variant="outline" className="ml-2 gap-1">
-                            <Truck className="h-3 w-3" />
-                            {obj.trucks.length} st
-                          </Badge>
-                        )}
+                        {/* Work card summary badge - auto-calculated */}
+                        {(() => {
+                          const quantities = calculateObjectQuantities(obj.trucks);
+                          if (quantities.planned === 0) return null;
+                          return (
+                            <Badge variant="outline" className="ml-2 gap-1">
+                              <ClipboardList className="h-3 w-3" />
+                              {quantities.planned} st
+                            </Badge>
+                          );
+                        })()}
                         
-                        {/* Quantity inputs */}
-                        <div className="flex items-center gap-2 ml-2">
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-muted-foreground">Plan:</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={obj.plannedQuantity}
-                              onChange={(e) => {
-                                const val = Math.max(0, parseInt(e.target.value) || 0);
-                                onObjectsChange(objects.map(o => 
-                                  o.id === obj.id ? { ...o, plannedQuantity: val } : o
-                                ));
-                              }}
-                              className="h-7 w-14 text-xs text-center px-1"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-muted-foreground">Mott:</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={obj.plannedQuantity}
-                              value={obj.receivedQuantity}
-                              onChange={(e) => {
-                                const val = Math.min(obj.plannedQuantity, Math.max(0, parseInt(e.target.value) || 0));
-                                onObjectsChange(objects.map(o => 
-                                  o.id === obj.id ? { ...o, receivedQuantity: val } : o
-                                ));
-                              }}
-                              className="h-7 w-14 text-xs text-center px-1"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-muted-foreground">Klart:</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={obj.receivedQuantity}
-                              value={obj.completedQuantity}
-                              onChange={(e) => {
-                                const val = Math.min(obj.receivedQuantity, Math.max(0, parseInt(e.target.value) || 0));
-                                onObjectsChange(objects.map(o => 
-                                  o.id === obj.id ? { ...o, completedQuantity: val } : o
-                                ));
-                              }}
-                              className="h-7 w-14 text-xs text-center px-1"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                        </div>
-                        
-                        {/* Summary */}
-                        <span className="text-xs text-muted-foreground ml-auto">
-                          {obj.completedQuantity} av {obj.plannedQuantity} klara
-                        </span>
+                        {/* Auto-calculated summary */}
+                        {(() => {
+                          const quantities = calculateObjectQuantities(obj.trucks);
+                          if (quantities.planned === 0) {
+                            return (
+                              <span className="text-xs text-muted-foreground ml-auto">
+                                Inga arbetskort
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="text-xs text-muted-foreground ml-auto">
+                              {quantities.planned} planerade • {quantities.received} ankomna • {quantities.completed} klara
+                            </span>
+                          );
+                        })()}
                         
                         <Button
                           variant="ghost"

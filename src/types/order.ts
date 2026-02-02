@@ -1,12 +1,17 @@
 // Order Management System Types
 
+// Administrative order status (back-office only)
+// Note: Database enum has these values. In UI we show simplified labels.
 export type ProductionStatus = 
-  | 'created'      // Skapad
-  | 'started'      // Startad
-  | 'paused'       // Pausad
-  | 'arrived'      // Ankommen
+  | 'created'      // Skapad → visas som "Aktiv" 
+  | 'started'      // Startad → visas som "Aktiv"
+  | 'paused'       // Pausad → visas som "Aktiv"
+  | 'arrived'      // Ankommen → visas som "Aktiv"
   | 'completed'    // Avslutad
   | 'cancelled';   // Avbruten
+
+// Simplified administrative statuses for UI dropdowns (maps to ProductionStatus)
+export type OrderAdminStatus = 'created' | 'completed' | 'cancelled';
 
 export type BillingStatus = 
   | 'not_ready'           // Ej klar
@@ -164,15 +169,31 @@ export interface ParsedXMLOrder {
   rows: ArticleRow[];
 }
 
-// Status display helpers - in chronological order
+// Status display helpers - administrative only
+// All "active" states (created, started, paused, arrived) display as "Aktiv"
 export const productionStatusLabels: Record<ProductionStatus, string> = {
-  created: 'Skapad',
-  arrived: 'Ankommen',
-  started: 'Startad',
-  paused: 'Pausad',
+  created: 'Aktiv',
+  arrived: 'Aktiv',
+  started: 'Aktiv',
+  paused: 'Aktiv',
   completed: 'Avslutad',
   cancelled: 'Avbruten',
 };
+
+// Simplified labels for UI dropdowns (only 3 options)
+// Uses 'created' as the "active" state since it's the default in DB
+export const orderAdminStatusLabels: Record<OrderAdminStatus, string> = {
+  created: 'Aktiv',
+  completed: 'Avslutad',
+  cancelled: 'Avbruten',
+};
+
+// Map any ProductionStatus to the simplified admin status for UI selection
+export function toAdminStatus(status: ProductionStatus): OrderAdminStatus {
+  if (status === 'completed') return 'completed';
+  if (status === 'cancelled') return 'cancelled';
+  return 'created'; // All other statuses map to 'created' (displayed as "Aktiv")
+}
 
 export const billingStatusLabels: Record<BillingStatus, string> = {
   not_ready: 'Ej klar',
@@ -216,20 +237,39 @@ export interface TruckLifecycleEvent {
 }
 
 export const truckLifecycleEventLabels: Record<TruckLifecycleEventType, string> = {
-  planned: 'Arbetsenhet planerad',
-  arrived: 'Arbetsenhet ankommen',
+  planned: 'Arbetskort planerat',
+  arrived: 'Arbetskort ankommet',
   started: 'Arbete påbörjat',
-  paused: 'Pausad',
-  completed: 'Arbetsenhet klar',
+  paused: 'Pausat',
+  completed: 'Arbetskort klart',
   step_started: 'Steg påbörjat',
   step_completed: 'Steg klart',
 };
 
-// Helper to get display name for work units (supports optional truck numbers)
+// Helper to get display name for work cards (supports optional identification numbers)
 export function getWorkUnitDisplayName(truckNumber: string | null | undefined, objectName: string, truckId: string): string {
   if (truckNumber && truckNumber.trim()) {
     return `#${truckNumber}`;
   }
   // Fallback: object name + short ID
   return `${objectName.substring(0, 12)} ${truckId.slice(-4).toUpperCase()}`;
+}
+
+// Calculate object quantities automatically from work cards
+export function calculateObjectQuantities(trucks: ObjectTruck[] | undefined): {
+  planned: number;
+  received: number;
+  completed: number;
+} {
+  const allTrucks = trucks || [];
+  return {
+    planned: allTrucks.length,
+    received: allTrucks.filter(t => 
+      t.status === 'arrived' || 
+      t.status === 'started' || 
+      t.status === 'paused' || 
+      t.status === 'completed'
+    ).length,
+    completed: allTrucks.filter(t => t.status === 'completed').length,
+  };
 }

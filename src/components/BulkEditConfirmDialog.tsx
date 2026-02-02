@@ -8,8 +8,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { productionStatusLabels, billingStatusLabels } from '@/types/order';
-import type { ProductionStatus, BillingStatus } from '@/types/order';
+import { orderAdminStatusLabels, billingStatusLabels } from '@/types/order';
+import type { ProductionStatus, BillingStatus, OrderAdminStatus } from '@/types/order';
 
 export type BulkEditType = 'productionStatus' | 'billingStatus' | 'deviation';
 
@@ -17,7 +17,7 @@ interface BulkEditConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editType: BulkEditType | null;
-  newValue: ProductionStatus | BillingStatus | boolean | null;
+  newValue: OrderAdminStatus | BillingStatus | boolean | null;
   orderCount: number;
   onConfirm: () => void;
 }
@@ -48,7 +48,7 @@ export function BulkEditConfirmDialog({
     
     switch (editType) {
       case 'productionStatus':
-        return `Du är på väg att ändra produktionsstatus till "${productionStatusLabels[newValue as ProductionStatus]}" för ${orderText}.`;
+        return `Du är på väg att ändra orderstatus till "${orderAdminStatusLabels[newValue as OrderAdminStatus]}" för ${orderText}.`;
       case 'billingStatus':
         return `Du är på väg att ändra faktureringsstatus till "${billingStatusLabels[newValue as BillingStatus]}" för ${orderText}.`;
       case 'deviation':

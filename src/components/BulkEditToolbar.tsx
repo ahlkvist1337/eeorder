@@ -7,8 +7,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { productionStatusLabels, billingStatusLabels } from '@/types/order';
-import type { ProductionStatus, BillingStatus } from '@/types/order';
+import { orderAdminStatusLabels, billingStatusLabels } from '@/types/order';
+import type { ProductionStatus, BillingStatus, OrderAdminStatus } from '@/types/order';
 
 interface BulkEditToolbarProps {
   selectedCount: number;
@@ -38,10 +38,10 @@ export function BulkEditToolbar({
       <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-2 w-full sm:w-auto">
         <Select onValueChange={(value) => onProductionStatusChange(value as ProductionStatus)}>
           <SelectTrigger className="w-full sm:w-[160px] bg-background">
-            <SelectValue placeholder="Produktionsstatus" />
+            <SelectValue placeholder="Orderstatus" />
           </SelectTrigger>
           <SelectContent className="bg-background z-50">
-            {Object.entries(productionStatusLabels).map(([value, label]) => (
+            {Object.entries(orderAdminStatusLabels).map(([value, label]) => (
               <SelectItem key={value} value={value}>
                 {label}
               </SelectItem>

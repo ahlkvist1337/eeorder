@@ -89,7 +89,7 @@ export function TruckTimeline({ events, truckNumber, compact = false }: TruckTim
   return (
     <div className="space-y-0">
       <h4 className="text-sm font-medium text-muted-foreground mb-3">
-        Tidslinje för arbetsenhet {truckNumber ? `#${truckNumber}` : ''}
+        Tidslinje för arbetskort {truckNumber ? `#${truckNumber}` : ''}
       </h4>
       <div className="relative">
         {/* Timeline line */}

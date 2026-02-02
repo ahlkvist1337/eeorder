@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useOrders } from '@/contexts/OrdersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import type { ProductionStatus, BillingStatus } from '@/types/order';
+import type { ProductionStatus, BillingStatus, OrderAdminStatus } from '@/types/order';
 import { canExportOrders } from '@/lib/invoiceExport';
 
 const Index = () => {
@@ -50,7 +50,7 @@ const Index = () => {
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [pendingEditType, setPendingEditType] = useState<BulkEditType | null>(null);
-  const [pendingEditValue, setPendingEditValue] = useState<ProductionStatus | BillingStatus | boolean | null>(null);
+  const [pendingEditValue, setPendingEditValue] = useState<OrderAdminStatus | BillingStatus | boolean | null>(null);
   const [invoiceExportDialogOpen, setInvoiceExportDialogOpen] = useState(false);
 
   // Get selected orders and check if they can be exported
@@ -65,7 +65,7 @@ const Index = () => {
 
   const handleProductionStatusChange = (status: ProductionStatus) => {
     setPendingEditType('productionStatus');
-    setPendingEditValue(status);
+    setPendingEditValue(status as OrderAdminStatus);
     setConfirmDialogOpen(true);
   };
 

@@ -184,11 +184,11 @@ export function ObjectTrucksEditor({
       <div className="mt-3 pt-3 border-t">
         <div className="flex items-center gap-2">
           <Package className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">Inga arbetsenheter</span>
+          <span className="text-sm text-muted-foreground">Inga arbetskort</span>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
             <Input
-              placeholder="Nummer (valfritt)..."
+              placeholder="ID (valfritt)..."
               value={newTruckNumber}
               onChange={(e) => setNewTruckNumber(e.target.value)}
               className="h-8 w-28 text-sm"
@@ -221,7 +221,7 @@ export function ObjectTrucksEditor({
               <Package className="h-4 w-4 ml-1" />
             </Button>
           </CollapsibleTrigger>
-          <span className="text-sm font-medium">Arbetsenheter:</span>
+          <span className="text-sm font-medium">Arbetskort:</span>
           <Badge variant="secondary" className="text-xs">
             {trucks.length} st • {completedTrucks.length} klar{completedTrucks.length !== 1 ? 'a' : ''}
           </Badge>
@@ -330,10 +330,10 @@ export function ObjectTrucksEditor({
               );
             })}
 
-            {/* Add new work unit */}
+            {/* Add new work card */}
             <div className="flex items-center gap-2 pt-2">
               <Input
-                placeholder="Nummer (valfritt)..."
+                placeholder="ID (valfritt)..."
                 value={newTruckNumber}
                 onChange={(e) => setNewTruckNumber(e.target.value)}
                 className="h-8 w-28 text-sm"
