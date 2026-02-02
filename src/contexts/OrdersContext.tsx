@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus } from '@/types/order';
+import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus, TruckStatusChange } from '@/types/order';
 
 // Database types (manual since types.ts may not be updated yet)
 interface DbOrder {
@@ -96,6 +96,18 @@ interface DbStepStatusHistory {
   timestamp: string;
 }
 
+interface DbTruckStatusHistory {
+  id: string;
+  order_id: string;
+  truck_id: string;
+  truck_number: string;
+  step_id: string;
+  step_name: string;
+  from_status: StepStatus;
+  to_status: StepStatus;
+  timestamp: string;
+}
+
 interface BulkOrderUpdates {
   productionStatus?: ProductionStatus;
   billingStatus?: BillingStatus;
@@ -115,6 +127,7 @@ interface OrdersContextType {
   getOrderById: (id: string) => Order | undefined;
   orderNumberExists: (orderNumber: string) => boolean;
   refreshOrders: () => Promise<void>;
+  updateTruckStepStatus: (orderId: string, truckId: string, stepId: string, newStatus: StepStatus, truckNumber: string, stepName: string) => Promise<void>;
   bulkUpdateOrders: (orderIds: string[], updates: BulkOrderUpdates) => Promise<void>;
 }
 
@@ -128,7 +141,8 @@ function mapDbOrderToOrder(
   statusHistory: DbStatusHistory[],
   stepStatusHistory: DbStepStatusHistory[],
   trucks: DbObjectTruck[],
-  truckStepStatuses: DbTruckStepStatus[]
+  truckStepStatuses: DbTruckStepStatus[],
+  truckStatusHistory: DbTruckStatusHistory[]
 ): Order {
   return {
     id: dbOrder.id,
@@ -216,6 +230,16 @@ function mapDbOrderToOrder(
       fromStatus: h.from_status,
       toStatus: h.to_status,
     })),
+    truckStatusHistory: truckStatusHistory.map(h => ({
+      id: h.id,
+      timestamp: h.timestamp,
+      truckId: h.truck_id,
+      truckNumber: h.truck_number,
+      stepId: h.step_id,
+      stepName: h.step_name,
+      fromStatus: h.from_status,
+      toStatus: h.to_status,
+    })),
   };
 }
 
@@ -243,12 +267,13 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       const orderIds = ordersData.map(o => o.id);
 
       // Fetch related data in parallel (including order_objects, trucks, and truck statuses)
-      const [objectsResult, stepsResult, articleRowsResult, historyResult, stepHistoryResult] = await Promise.all([
+      const [objectsResult, stepsResult, articleRowsResult, historyResult, stepHistoryResult, truckHistoryResult] = await Promise.all([
         supabase.from('order_objects').select('*').in('order_id', orderIds),
         supabase.from('order_steps').select('*').in('order_id', orderIds),
         supabase.from('article_rows').select('*').in('order_id', orderIds),
         supabase.from('status_history').select('*').in('order_id', orderIds),
         supabase.from('step_status_history').select('*').in('order_id', orderIds),
+        supabase.from('truck_status_history').select('*').in('order_id', orderIds),
       ]);
 
       if (objectsResult.error) throw objectsResult.error;
@@ -256,6 +281,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       if (articleRowsResult.error) throw articleRowsResult.error;
       if (historyResult.error) throw historyResult.error;
       if (stepHistoryResult.error) throw stepHistoryResult.error;
+      if (truckHistoryResult.error) throw truckHistoryResult.error;
 
       // Fetch trucks and their step statuses
       const objectIds = (objectsResult.data || []).map(o => o.id);
@@ -282,6 +308,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         const orderTrucks = trucksData.filter(t => orderObjectIds.includes(t.object_id));
         const orderTruckIds = orderTrucks.map(t => t.id);
         const orderTruckStatuses = truckStepStatusData.filter(s => orderTruckIds.includes(s.truck_id));
+        const orderTruckHistory = (truckHistoryResult.data || []).filter(h => h.order_id === dbOrder.id) as DbTruckStatusHistory[];
         
         return mapDbOrderToOrder(
           dbOrder as DbOrder,
@@ -291,7 +318,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           (historyResult.data || []).filter(h => h.order_id === dbOrder.id) as DbStatusHistory[],
           (stepHistoryResult.data || []).filter(h => h.order_id === dbOrder.id) as DbStepStatusHistory[],
           orderTrucks,
-          orderTruckStatuses
+          orderTruckStatuses,
+          orderTruckHistory
         );
       });
 
@@ -684,8 +712,20 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    await fetchOrders();
-  }, [fetchOrders, orders]);
+    // Optimistic update - update local state immediately
+    setOrders(prev => prev.map(o => {
+      if (o.id !== id) return o;
+      const updatedOrder = { ...o, ...updates, updatedAt: new Date().toISOString() };
+      // Handle objects update specifically if provided
+      if (updates.objects !== undefined) {
+        updatedOrder.objects = updates.objects;
+      }
+      if (updates.steps !== undefined) {
+        updatedOrder.steps = updates.steps;
+      }
+      return updatedOrder;
+    }));
+  }, [orders]);
 
   const updateProductionStatus = useCallback(async (id: string, newStatus: ProductionStatus) => {
     const order = orders.find(o => o.id === id);
@@ -808,6 +848,80 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     return orders.some(o => o.orderNumber === orderNumber);
   }, [orders]);
 
+  const updateTruckStepStatus = useCallback(async (
+    orderId: string,
+    truckId: string,
+    stepId: string,
+    newStatus: StepStatus,
+    truckNumber: string,
+    stepName: string
+  ) => {
+    // Find current status
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    
+    let currentStatus: StepStatus = 'pending';
+    for (const obj of order.objects || []) {
+      for (const truck of obj.trucks || []) {
+        if (truck.id === truckId) {
+          const stepStatus = truck.stepStatuses.find(s => s.stepId === stepId);
+          currentStatus = stepStatus?.status || 'pending';
+          break;
+        }
+      }
+    }
+    
+    // Skip if no actual change
+    if (currentStatus === newStatus) return;
+
+    // Optimistic update - update local state immediately
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      return {
+        ...o,
+        objects: o.objects?.map(obj => ({
+          ...obj,
+          trucks: obj.trucks?.map(t => {
+            if (t.id !== truckId) return t;
+            return {
+              ...t,
+              stepStatuses: t.stepStatuses.map(s =>
+                s.stepId === stepId ? { ...s, status: newStatus } : s
+              ),
+            };
+          }),
+        })),
+        truckStatusHistory: [
+          ...(o.truckStatusHistory || []),
+          {
+            id: crypto.randomUUID(),
+            timestamp: new Date().toISOString(),
+            truckId,
+            truckNumber,
+            stepId,
+            stepName,
+            fromStatus: currentStatus,
+            toStatus: newStatus,
+          },
+        ],
+      };
+    }));
+
+    // Save to DB in background
+    await supabase.from('truck_step_status').update({ status: newStatus }).eq('truck_id', truckId).eq('step_id', stepId);
+    
+    // Log to history
+    await supabase.from('truck_status_history').insert({
+      order_id: orderId,
+      truck_id: truckId,
+      truck_number: truckNumber,
+      step_id: stepId,
+      step_name: stepName,
+      from_status: currentStatus,
+      to_status: newStatus,
+    });
+  }, [orders]);
+
   const bulkUpdateOrders = useCallback(async (orderIds: string[], updates: BulkOrderUpdates) => {
     if (orderIds.length === 0) return;
 
@@ -867,6 +981,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       getOrderById,
       orderNumberExists,
       refreshOrders: fetchOrders,
+      updateTruckStepStatus,
       bulkUpdateOrders,
     }}>
       {children}

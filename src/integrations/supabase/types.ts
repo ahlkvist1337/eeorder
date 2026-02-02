@@ -446,6 +446,64 @@ export type Database = {
         }
         Relationships: []
       }
+      truck_status_history: {
+        Row: {
+          from_status: Database["public"]["Enums"]["step_status"]
+          id: string
+          order_id: string
+          step_id: string
+          step_name: string
+          timestamp: string
+          to_status: Database["public"]["Enums"]["step_status"]
+          truck_id: string
+          truck_number: string
+        }
+        Insert: {
+          from_status: Database["public"]["Enums"]["step_status"]
+          id?: string
+          order_id: string
+          step_id: string
+          step_name: string
+          timestamp?: string
+          to_status: Database["public"]["Enums"]["step_status"]
+          truck_id: string
+          truck_number: string
+        }
+        Update: {
+          from_status?: Database["public"]["Enums"]["step_status"]
+          id?: string
+          order_id?: string
+          step_id?: string
+          step_name?: string
+          timestamp?: string
+          to_status?: Database["public"]["Enums"]["step_status"]
+          truck_id?: string
+          truck_number?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "truck_status_history_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "truck_status_history_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "order_steps"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "truck_status_history_truck_id_fkey"
+            columns: ["truck_id"]
+            isOneToOne: false
+            referencedRelation: "object_trucks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       truck_step_status: {
         Row: {
           actual_end: string | null
