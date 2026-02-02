@@ -1,262 +1,218 @@
 
-# Plan: Från truck-centrerat till arbetsenhet-centrerat system
+# Plan: Bulk-export av fakturaunderlag
 
-## Status: ✅ IMPLEMENTERAT
+## Sammanfattning
 
-Systemet har generaliserats från "truckar med obligatoriskt nummer" till "arbetsenheter där nummer är valfritt".
-
----
-
-## Vad som har ändrats
-
-### 1. Databas: Gör truck_number valfritt
-
-**Nuvarande:**
-```sql
-object_trucks.truck_number text NOT NULL
-```
-
-**Ny:**
-```sql
-object_trucks.truck_number text NULL
-```
-
-**Migration:**
-```sql
-ALTER TABLE object_trucks ALTER COLUMN truck_number DROP NOT NULL;
-```
+Bygger ut det befintliga bulk-urvalet med möjlighet att exportera fakturaunderlag i PDF och/eller Excel för ordrar som är "Klar för fakturering".
 
 ---
 
-### 2. Terminologiändring: "Truck" → "Arbetsenhet"
+## Nuvarande system (bevaras)
 
-Byt ut "truck"-terminologi i användargränssnittet:
-
-| Före | Efter |
-|------|-------|
-| Truckar | Arbetsenheter |
-| Trucknummer | Nummer/ID |
-| Inga truckar | Inga arbetsenheter |
-| Lägg till truck | Lägg till arbetsenhet |
-
-**Berörda filer:**
-- `ObjectTrucksEditor.tsx` → byt etiketter
-- `ProductionTruckCard.tsx` → visa nummer eller fallback
-- `ProductionScreen.tsx` → byt rubriker
-- `OrderDetails.tsx` → byt etiketter
-- `types/order.ts` → kommentarer (typnamn behålls för bakåtkompatibilitet)
+| Komponent | Funktion |
+|-----------|----------|
+| `Index.tsx` | Hanterar bulk-urval med `selectedOrderIds` |
+| `BulkEditToolbar.tsx` | Visar åtgärder för valda ordrar |
+| `OrdersTable.tsx` | Checkbox-urval och filtrering |
+| `exportExcel.ts` | Befintlig CSV-export för prislistan |
 
 ---
 
-### 3. Visningslogik för arbetsenheter utan nummer
+## Nya komponenter och filer
 
-När trucknummer saknas behöver systemet visa något annat istället:
+### 1. Export-funktion i `BulkEditToolbar.tsx`
 
-**Fallback-logik:**
+Lägg till en "Exportera fakturaunderlag"-knapp som:
+- Endast är aktiv när **alla valda ordrar** har `billingStatus === 'ready_for_billing'`
+- Öppnar en dialog för formatval
+
+### 2. Ny dialog: `InvoiceExportDialog.tsx`
+
+Formatval och bekräftelse:
+
+```text
+┌─────────────────────────────────────────┐
+│ Exportera fakturaunderlag               │
+│                                         │
+│ 3 ordrar valda                          │
+│ Totalt: 45 600 kr                       │
+│                                         │
+│ Format:                                 │
+│ ☑ PDF (för granskning och utskick)      │
+│ ☑ Excel (för ekonomi/import)            │
+│                                         │
+│        [Avbryt]  [Exportera]            │
+└─────────────────────────────────────────┘
+```
+
+### 3. Ny lib: `src/lib/invoiceExport.ts`
+
+Logik för att generera fakturaunderlag:
+
+**Interface:**
 ```typescript
-function getWorkUnitDisplayName(truck: ObjectTruck, objectName: string): string {
-  if (truck.truckNumber) {
-    return `#${truck.truckNumber}`;
-  }
-  // Generera stabilt ID baserat på truck.id (sista 4 tecken)
-  return `${objectName} ${truck.id.slice(-4).toUpperCase()}`;
+interface InvoiceExportOrder {
+  orderNumber: string;
+  customer: string;
+  customerReference?: string;
+  completedDate?: string;  // actualEnd eller plannedEnd
+  articleRows: {
+    partNumber: string;
+    text: string;
+    quantity: number;
+    price: number;
+    total: number;
+  }[];
+  orderTotal: number;
+}
+
+interface InvoiceExportData {
+  exportId: string;           // Ex: "EXP-20260202-001"
+  exportDate: string;
+  orders: InvoiceExportOrder[];
+  grandTotal: number;
 }
 ```
 
-**Exempel:**
-- Med trucknummer: `#135`
-- Utan trucknummer: `Motorlåda A7B2` (objektnamn + kort ID)
+### 4. Excel-export
 
----
+Maskinvänlig enradsformat per artikelrad:
 
-### 4. ObjectTrucksEditor: Trucknummer blir valfritt
+| Ordernummer | Kund | Kundreferens | Artikelnr | Benämning | Antal | Pris | Summa |
+|-------------|------|--------------|-----------|-----------|-------|------|-------|
+| 12345 | Volvo | REF-001 | 100-200 | Blästring motorlåda | 3 | 450 | 1350 |
+| 12345 | Volvo | REF-001 | 100-201 | Lackering | 3 | 800 | 2400 |
+| 12346 | Scania | SC-2024 | 100-200 | Blästring | 1 | 450 | 450 |
 
-**Nuvarande:**
-- Kräver att användaren skriver in trucknummer
-- `disabled={!newTruckNumber.trim()}` blockerar tom input
+Sista raden innehåller totalsumma.
 
-**Ny logik:**
-```typescript
-// Tillåt att lägga till utan nummer
-const handleAddWorkUnit = () => {
-  const newTruck: ObjectTruck = {
-    id: crypto.randomUUID(),
-    objectId,
-    truckNumber: newTruckNumber.trim() || '', // Tom sträng om inget nummer
-    status: 'waiting',
-    stepStatuses: objectSteps.map(step => ({...})),
-  };
-  onTrucksChange([...trucks, newTruck]);
-  setNewTruckNumber('');
-};
+### 5. PDF-export med jsPDF
 
-// Knappen ska alltid vara klickbar
-<Button onClick={handleAddWorkUnit}>
-  Lägg till arbetsenhet
-</Button>
+Installera `jspdf` och `jspdf-autotable` för tabellrendering.
+
+**PDF-layout:**
+
+```text
+┌────────────────────────────────────────────────────┐
+│                 FAKTURAUNDERLAG                     │
+│                                                     │
+│ Export-ID: EXP-20260202-001                        │
+│ Exportdatum: 2 feb 2026                            │
+│                                                     │
+│ ═══════════════════════════════════════════════════│
+│                                                     │
+│ Order: 12345                                        │
+│ Kund: Volvo AB                                      │
+│ Referens: REF-001                                   │
+│ Klart: 28 jan 2026                                 │
+│                                                     │
+│ Artikel     Benämning           Antal   Pris   Sum │
+│ ─────────────────────────────────────────────────  │
+│ 100-200     Blästring motorlåda    3    450  1350  │
+│ 100-201     Lackering motorlåda    3    800  2400  │
+│                                                     │
+│                          Ordersumma:     3 750 kr   │
+│                                                     │
+│ ═══════════════════════════════════════════════════│
+│                                                     │
+│ Order: 12346                                        │
+│ ...                                                 │
+│                                                     │
+│ ═══════════════════════════════════════════════════│
+│                                                     │
+│                     TOTALT: 45 600 kr              │
+│                                                     │
+└────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### 5. ProductionTruckCard: Anpassad visning
+## Tekniska ändringar
 
-**Nuvarande rad 99-101:**
-```tsx
-<div className="text-4xl font-bold font-mono">
-  #{truck.truckNumber}
-</div>
-```
+### Nya filer
 
-**Ny logik:**
-```tsx
-const displayName = truck.truckNumber 
-  ? `#${truck.truckNumber}` 
-  : object.name.substring(0, 8);
+| Fil | Beskrivning |
+|-----|-------------|
+| `src/lib/invoiceExport.ts` | Dataförberedelse och export-ID-generering |
+| `src/lib/invoiceExportPdf.ts` | PDF-generering med jsPDF |
+| `src/lib/invoiceExportExcel.ts` | Excel/CSV-generering |
+| `src/components/InvoiceExportDialog.tsx` | Dialog för formatval |
 
-const displayId = !truck.truckNumber 
-  ? truck.id.slice(-4).toUpperCase() 
-  : null;
-
-// I JSX:
-<div className="text-4xl font-bold font-mono">
-  {displayName}
-  {displayId && <span className="text-lg ml-2 opacity-60">{displayId}</span>}
-</div>
-```
-
----
-
-### 6. ProductionScreen: Anpassade etiketter
-
-**Nuvarande rad 280-285:**
-```tsx
-<Truck className="h-16 w-16..." />
-<p>Inga aktiva truckar</p>
-<p>Truckar med status "Ankommen"...</p>
-```
-
-**Ny:**
-```tsx
-<Package className="h-16 w-16..." />
-<p>Inga aktiva arbetsenheter</p>
-<p>Arbetsenheter med status "Ankommen" eller "Startad" visas här</p>
-```
-
----
-
-### 7. Planerat antal = antal arbetsenheter
-
-**Nuvarande logik i OrderObjectsEditor:**
-- Plan visas som manuellt input-fält
-- Räknas inte automatiskt från antal truckar
-
-**Ny automatisk beräkning:**
-```typescript
-// I OrderObjectsEditor eller OrderDetails
-const calculatePlannedQuantity = (obj: OrderObject): number => {
-  // Om truckar finns: antal truckar
-  if (obj.trucks && obj.trucks.length > 0) {
-    return obj.trucks.length;
-  }
-  // Fallback: manuellt värde
-  return obj.plannedQuantity;
-};
-```
-
----
-
-### 8. TruckTimeline och TruckLifecycleEvent
-
-Terminologin i historiken ändras också:
-
-**Före:**
-```
-Truck planerad
-Truck ankommen
-Truck klar
-```
-
-**Efter:**
-```
-Arbetsenhet planerad
-Arbetsenhet ankommen
-Arbetsenhet klar
-```
-
-**I types/order.ts:**
-```typescript
-export const truckLifecycleEventLabels: Record<TruckLifecycleEventType, string> = {
-  planned: 'Arbetsenhet planerad',
-  arrived: 'Arbetsenhet ankommen',
-  started: 'Arbete påbörjat',
-  paused: 'Pausad',
-  completed: 'Arbetsenhet klar',
-  step_started: 'Steg påbörjat',
-  step_completed: 'Steg klart',
-};
-```
-
----
-
-## Tekniska ändringar sammanfattat
+### Ändrade filer
 
 | Fil | Ändring |
 |-----|---------|
-| **Migration** | `ALTER TABLE object_trucks ALTER COLUMN truck_number DROP NOT NULL` |
-| `src/types/order.ts` | Uppdatera etiketter, lägg till `truckNumber?: string` |
-| `src/components/ObjectTrucksEditor.tsx` | Gör trucknummer valfritt, byt etiketter |
-| `src/components/ProductionTruckCard.tsx` | Fallback-visning för arbetsenheter utan nummer |
-| `src/pages/ProductionScreen.tsx` | Byt terminologi |
-| `src/pages/OrderDetails.tsx` | Byt terminologi i sammanfattning |
-| `src/components/TruckTimeline.tsx` | Byt terminologi |
+| `src/components/BulkEditToolbar.tsx` | Lägg till export-knapp och props |
+| `src/pages/Index.tsx` | Koppla export-funktionen till state |
+| `package.json` | Lägg till `jspdf` och `jspdf-autotable` |
 
 ---
 
-## Dataflöde efter ändring
+## Flöde
 
 ```text
-Order skapas
+Användare markerar 3 ordrar med status "Klar för fakturering"
     ↓
-Objekt läggs till: "Motorlåda"
+Klickar "Exportera fakturaunderlag" i toolbar
     ↓
-Arbetsenheter skapas:
-  - #135 (med trucknummer)
-  - #136 (med trucknummer)
-  - Motorlåda 7A2B (utan trucknummer, reservdelar)
+Dialog öppnas med sammanfattning och formatval
     ↓
-Plan = 3 arbetsenheter (automatiskt)
+Väljer PDF + Excel → klickar "Exportera"
     ↓
-#135 markeras "Ankommen" → Mott = 1
-Motorlåda 7A2B markeras "Ankommen" → Mott = 2
+1. Generera export-ID: "EXP-20260202-001"
+2. Hämta artikelrader för valda ordrar
+3. Filtrera bort: trucknummer, steg, historik, kommentarer
+4. Generera PDF och ladda ner
+5. Generera Excel och ladda ner
     ↓
-Alla steg klara för #135 → Klar = 1, automatisk "completed"
+Toast: "Fakturaunderlag exporterat (3 ordrar)"
 ```
 
 ---
 
-## Vad som INTE ändras
+## Validering och begränsningar
 
-- Databasstruktur (tabellnamn behålls: `object_trucks`, `truck_step_status`, etc.)
-- TypeScript-typnamn (behålls för bakåtkompatibilitet)
-- API-logik i OrdersContext
-- Befintlig funktionalitet för truckar med nummer
+**Kontroller vid export:**
+1. Minst en order måste vara vald
+2. Alla valda ordrar måste ha `billingStatus === 'ready_for_billing'`
+3. Ordrar utan artikelrader inkluderas men markeras tydligt
+
+**Vad som INTE inkluderas:**
+- Trucknummer / arbetsenheter
+- Produktionsstatus
+- Behandlingssteg och historik
+- Interna kommentarer
+- Avvikelsedetaljer
 
 ---
 
-## Risker och migreringsplan
+## Beroenden
 
-**Risk:** Befintliga data med tomma trucknummer kan orsaka problem.
+Nya npm-paket:
+- `jspdf` - PDF-generering
+- `jspdf-autotable` - Tabeller i PDF
 
-**Mitigering:** Innan DROP NOT NULL, verifiera att ingen befintlig rad har NULL-värden som kan skapa problem. Systemet använder `truck.truckNumber || ''` som default.
+---
+
+## Exempeldata Excel
+
+```csv
+Export-ID;Exportdatum;Ordernummer;Kund;Kundreferens;Artikelnr;Benämning;Antal;Pris;Summa
+EXP-20260202-001;2026-02-02;12345;Volvo AB;REF-001;100-200;Blästring motorlåda;3;450;1350
+EXP-20260202-001;2026-02-02;12345;Volvo AB;REF-001;100-201;Lackering;3;800;2400
+EXP-20260202-001;2026-02-02;12346;Scania;SC-2024;100-200;Blästring;1;450;450
+;;;;;;;;TOTALT:;4200
+```
 
 ---
 
 ## Sammanfattning
 
-Denna plan generaliserar systemet från "truckar med obligatoriskt nummer" till "arbetsenheter där nummer är valfritt". Detta gör att:
-
-1. Reservdelar och annat arbete utan truck fungerar
-2. Planerat antal beräknas automatiskt från arbetsenheter
-3. Status och historik fungerar lika för alla arbetsenheter
-4. Produktionsvyn visar alla arbetsenheter tydligt
-5. Befintlig funktionalitet bevaras
+| Vad | Hur |
+|-----|-----|
+| Urval | Befintligt checkbox-system i `OrdersTable` |
+| Validering | Endast "Klar för fakturering" kan exporteras |
+| PDF | jsPDF med sammanfattning + per order |
+| Excel | En rad per artikelrad, maskinvänlig |
+| Spårbarhet | Export-ID + datum i varje fil |
+| Avgränsningar | Endast ekonomiskt relevant data |
