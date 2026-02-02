@@ -59,6 +59,11 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
       yPosition += 5;
     }
     
+    if (order.comment) {
+      doc.text(`Kommentar: ${order.comment}`, 14, yPosition);
+      yPosition += 5;
+    }
+    
     yPosition += 3;
     
     // Article rows table

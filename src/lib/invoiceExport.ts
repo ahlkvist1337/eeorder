@@ -15,6 +15,7 @@ export interface InvoiceExportOrder {
   customer: string;
   customerReference?: string;
   completedDate?: string;
+  comment?: string;
   articleRows: InvoiceExportArticleRow[];
   orderTotal: number;
 }
@@ -72,6 +73,7 @@ export function prepareInvoiceExportData(orders: Order[]): InvoiceExportData {
     customer: order.customer,
     customerReference: order.customerReference,
     completedDate: getCompletedDate(order),
+    comment: order.comment || undefined,
     articleRows: convertArticleRows(order.articleRows),
     orderTotal: calculateOrderTotal(order.articleRows),
   }));
