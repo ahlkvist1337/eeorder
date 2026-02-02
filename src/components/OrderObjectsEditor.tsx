@@ -505,10 +505,11 @@ export function OrderObjectsEditor({
                         </Button>
                       </div>
                       
-                      {/* Truck editor section */}
+                      {/* Work unit editor section */}
                       <ObjectTrucksEditor
                         trucks={obj.trucks || []}
                         objectId={obj.id}
+                        objectName={obj.name}
                         objectSteps={objectSteps}
                         onTrucksChange={(newTrucks) => {
                           onObjectsChange(objects.map(o =>

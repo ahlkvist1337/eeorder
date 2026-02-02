@@ -6,10 +6,11 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { SortableProductionTruckCard } from '@/components/SortableProductionTruckCard';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { Pause, Truck, RotateCcw } from 'lucide-react';
+import { Pause, Package, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import eeLogo from '@/assets/ee_logga.png';
 import type { Order, OrderObject, OrderStep, ObjectTruck, TruckStatus } from '@/types/order';
+import { getWorkUnitDisplayName } from '@/types/order';
 import { supabase } from '@/integrations/supabase/client';
 
 // Flat truck structure for display
@@ -214,7 +215,7 @@ export default function ProductionScreen() {
         
         {/* Legend and controls */}
         <div className="flex flex-wrap items-center gap-4 text-sm">
-          <span className="text-muted-foreground">Truckstatus:</span>
+          <span className="text-muted-foreground">Status:</span>
           <span className="inline-block px-2 py-0.5 rounded-sm bg-[hsl(var(--status-arrived))] text-white text-xs font-medium">
             Ankommen
           </span>
@@ -247,21 +248,21 @@ export default function ProductionScreen() {
         </div>
       </header>
 
-      {/* Paused trucks section */}
+      {/* Paused work units section */}
       {pausedTrucks.length > 0 && (
         <section className="mb-6">
           <h2 className="text-lg font-semibold text-muted-foreground mb-3 flex items-center gap-2">
             <Pause className="h-4 w-4" />
-            Pausade truckar
+            Pausade arbetsenheter
           </h2>
           <div className="flex flex-wrap gap-3">
-            {pausedTrucks.map(({ truck, order }) => (
+            {pausedTrucks.map(({ truck, object, order }) => (
               <div
                 key={truck.id}
                 className="flex items-center gap-3 px-4 py-2 rounded-md bg-[hsl(var(--status-paused))] text-white"
               >
                 <Pause className="h-4 w-4" />
-                <span className="font-mono font-bold">#{truck.truckNumber}</span>
+                <span className="font-mono font-bold">{getWorkUnitDisplayName(truck.truckNumber, object.name, truck.id)}</span>
                 <span className="text-sm opacity-90">{order.orderNumber}</span>
               </div>
             ))}
@@ -269,7 +270,7 @@ export default function ProductionScreen() {
         </section>
       )}
 
-      {/* Active trucks grid */}
+      {/* Active work units grid */}
       {isLoading && sortedActiveTrucks.length === 0 ? (
         <div className="flex items-center justify-center h-64">
           <p className="text-2xl text-muted-foreground">Laddar...</p>
@@ -277,12 +278,12 @@ export default function ProductionScreen() {
       ) : sortedActiveTrucks.length === 0 ? (
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <Truck className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+            <Package className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
             <p className="text-2xl text-muted-foreground">
-              Inga aktiva truckar
+              Inga aktiva arbetsenheter
             </p>
             <p className="text-muted-foreground mt-2">
-              Truckar med status "Ankommen" eller "Startad" visas här
+              Arbetsenheter med status "Ankommen" eller "Startad" visas här
             </p>
           </div>
         </div>

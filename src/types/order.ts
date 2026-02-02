@@ -216,11 +216,20 @@ export interface TruckLifecycleEvent {
 }
 
 export const truckLifecycleEventLabels: Record<TruckLifecycleEventType, string> = {
-  planned: 'Truck planerad',
-  arrived: 'Truck ankommen',
+  planned: 'Arbetsenhet planerad',
+  arrived: 'Arbetsenhet ankommen',
   started: 'Arbete påbörjat',
   paused: 'Pausad',
-  completed: 'Truck klar',
+  completed: 'Arbetsenhet klar',
   step_started: 'Steg påbörjat',
   step_completed: 'Steg klart',
 };
+
+// Helper to get display name for work units (supports optional truck numbers)
+export function getWorkUnitDisplayName(truckNumber: string | null | undefined, objectName: string, truckId: string): string {
+  if (truckNumber && truckNumber.trim()) {
+    return `#${truckNumber}`;
+  }
+  // Fallback: object name + short ID
+  return `${objectName.substring(0, 12)} ${truckId.slice(-4).toUpperCase()}`;
+}

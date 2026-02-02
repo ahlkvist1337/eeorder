@@ -83,7 +83,7 @@ export type Database = {
           object_id: string
           sort_order: number | null
           status: Database["public"]["Enums"]["truck_status"]
-          truck_number: string
+          truck_number: string | null
         }
         Insert: {
           created_at?: string
@@ -91,7 +91,7 @@ export type Database = {
           object_id: string
           sort_order?: number | null
           status?: Database["public"]["Enums"]["truck_status"]
-          truck_number: string
+          truck_number?: string | null
         }
         Update: {
           created_at?: string
@@ -99,7 +99,7 @@ export type Database = {
           object_id?: string
           sort_order?: number | null
           status?: Database["public"]["Enums"]["truck_status"]
-          truck_number?: string
+          truck_number?: string | null
         }
         Relationships: [
           {
@@ -461,7 +461,7 @@ export type Database = {
           step_name: string | null
           timestamp: string
           truck_id: string
-          truck_number: string
+          truck_number: string | null
         }
         Insert: {
           event_type: string
@@ -471,7 +471,7 @@ export type Database = {
           step_name?: string | null
           timestamp?: string
           truck_id: string
-          truck_number: string
+          truck_number?: string | null
         }
         Update: {
           event_type?: string
@@ -481,7 +481,7 @@ export type Database = {
           step_name?: string | null
           timestamp?: string
           truck_id?: string
-          truck_number?: string
+          truck_number?: string | null
         }
         Relationships: [
           {
