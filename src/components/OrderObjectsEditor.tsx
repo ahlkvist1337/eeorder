@@ -25,12 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { StepStatusBadge } from '@/components/StatusBadge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ObjectTrucksEditor } from '@/components/ObjectTrucksEditor';
 import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
 import { useObjectTemplates } from '@/hooks/useObjectTemplates';
-import { stepStatusLabels, calculateObjectQuantities } from '@/types/order';
+import { calculateObjectQuantities } from '@/types/order';
 import type { OrderStep, StepStatus, OrderObject, ObjectTruck, TruckStatus } from '@/types/order';
 import { SortableStep } from '@/components/SortableStep';
 
@@ -185,11 +184,7 @@ export function OrderObjectsEditor({
     onStepsChange(steps.filter(s => s.id !== stepId));
   };
 
-  const handleStepStatusChange = (stepId: string, status: StepStatus) => {
-    onStepsChange(steps.map(step => 
-      step.id === stepId ? { ...step, status } : step
-    ));
-  };
+  // Note: Step status is now only managed at the work card level
 
   // Drag end handler for reordering steps within an object
   const handleDragEnd = (objectId: string) => (event: DragEndEvent) => {
@@ -223,24 +218,10 @@ export function OrderObjectsEditor({
               Steg utan objekt (legacy)
             </span>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {unassignedSteps.map(step => (
-              <div key={step.id} className="flex items-center gap-2 pl-6">
+              <div key={step.id} className="flex items-center gap-2 pl-6 py-1">
                 <span className="flex-1 text-sm">{step.name}</span>
-                <StepStatusBadge status={step.status} />
-                <Select 
-                  value={step.status} 
-                  onValueChange={(v) => handleStepStatusChange(step.id, v as StepStatus)}
-                >
-                  <SelectTrigger className="w-[130px] h-8 text-xs bg-background">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover">
-                    {Object.entries(stepStatusLabels).map(([value, label]) => (
-                      <SelectItem key={value} value={value} className="text-xs">{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -420,7 +401,6 @@ export function OrderObjectsEditor({
                                 <SortableStep
                                   key={step.id}
                                   step={step}
-                                  onStatusChange={handleStepStatusChange}
                                   onRemove={handleRemoveStep}
                                 />
                               ))}

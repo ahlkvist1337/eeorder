@@ -2,24 +2,14 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { StepStatusBadge } from '@/components/StatusBadge';
-import { stepStatusLabels } from '@/types/order';
-import type { OrderStep, StepStatus } from '@/types/order';
+import type { OrderStep } from '@/types/order';
 
 interface SortableStepProps {
   step: OrderStep;
-  onStatusChange: (stepId: string, status: StepStatus) => void;
   onRemove: (stepId: string) => void;
 }
 
-export function SortableStep({ step, onStatusChange, onRemove }: SortableStepProps) {
+export function SortableStep({ step, onRemove }: SortableStepProps) {
   const {
     attributes,
     listeners,
@@ -39,7 +29,7 @@ export function SortableStep({ step, onStatusChange, onRemove }: SortableStepPro
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-2 bg-background rounded-md"
+      className="flex items-center gap-2 bg-background rounded-md py-1"
     >
       <button
         type="button"
@@ -50,20 +40,6 @@ export function SortableStep({ step, onStatusChange, onRemove }: SortableStepPro
         <GripVertical className="h-4 w-4" />
       </button>
       <span className="flex-1 text-sm">{step.name}</span>
-      <StepStatusBadge status={step.status} />
-      <Select 
-        value={step.status} 
-        onValueChange={(v) => onStatusChange(step.id, v as StepStatus)}
-      >
-        <SelectTrigger className="w-[130px] h-8 text-xs bg-background">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent className="bg-popover">
-          {Object.entries(stepStatusLabels).map(([value, label]) => (
-            <SelectItem key={value} value={value} className="text-xs">{label}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
       <Button
         variant="ghost"
         size="icon"

@@ -8,11 +8,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { StepStatusBadge } from '@/components/StatusBadge';
 import { Separator } from '@/components/ui/separator';
 import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
-import { stepStatusLabels } from '@/types/order';
-import type { OrderStep, StepStatus } from '@/types/order';
+import type { OrderStep } from '@/types/order';
 
 interface OrderStepsEditorProps {
   steps: OrderStep[];
@@ -42,12 +40,6 @@ export function OrderStepsEditor({ steps, onStepsChange }: OrderStepsEditorProps
 
   const handleRemoveStep = (stepId: string) => {
     onStepsChange(steps.filter(s => s.id !== stepId));
-  };
-
-  const handleStatusChange = (stepId: string, status: StepStatus) => {
-    onStepsChange(steps.map(step => 
-      step.id === stepId ? { ...step, status } : step
-    ));
   };
 
   const moveStep = (index: number, direction: 'up' | 'down') => {
@@ -99,27 +91,11 @@ export function OrderStepsEditor({ steps, onStepsChange }: OrderStepsEditorProps
                   </Button>
                 </div>
 
-                {/* Step name and badge */}
+                {/* Step name */}
                 <div className="flex-1 flex items-center gap-2">
                   <GripVertical className="h-4 w-4 text-muted-foreground" />
                   <span className="font-medium">{step.name}</span>
-                  <StepStatusBadge status={step.status} />
                 </div>
-
-                {/* Status select */}
-                <Select 
-                  value={step.status} 
-                  onValueChange={(v) => handleStatusChange(step.id, v as StepStatus)}
-                >
-                  <SelectTrigger className="w-[140px] h-9 bg-background">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover">
-                    {Object.entries(stepStatusLabels).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
 
                 {/* Delete button */}
                 <Button
