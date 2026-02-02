@@ -87,6 +87,17 @@ export interface StepStatusChange {
   toStatus: StepStatus;
 }
 
+export interface TruckStatusChange {
+  id: string;
+  timestamp: string;
+  truckId: string;
+  truckNumber: string;
+  stepId: string;
+  stepName: string;
+  fromStatus: StepStatus;
+  toStatus: StepStatus;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -103,6 +114,7 @@ export interface Order {
   steps: OrderStep[];
   statusHistory: StatusChange[];
   stepStatusHistory: StepStatusChange[];
+  truckStatusHistory?: TruckStatusChange[];
   hasDeviation: boolean;
   deviationComment?: string;
   comment?: string;

@@ -380,7 +380,7 @@ export default function OrderDetails() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 sm:pt-0">
-                <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
+                <div className="grid gap-4 sm:gap-6 md:grid-cols-3">
                   {/* Order status history - left column */}
                   <div>
                     <h4 className="font-medium text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">Orderstatus</h4>
@@ -402,19 +402,40 @@ export default function OrderDetails() {
                     )}
                   </div>
 
-                  {/* Step status history - right column */}
+                  {/* Step status history - middle column */}
                   <div>
                     <h4 className="font-medium text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">Steghistorik</h4>
                     {order.stepStatusHistory.length === 0 ? (
                       <p className="text-muted-foreground text-xs sm:text-sm">Ingen historik ännu.</p>
                     ) : (
                       <div className="space-y-1.5 sm:space-y-2">
-                        {[...order.stepStatusHistory].reverse().map(change => (
+                        {[...order.stepStatusHistory].reverse().slice(0, 10).map(change => (
                           <div key={change.id} className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm">
                             <span className="text-muted-foreground min-w-[70px] sm:min-w-[100px]">
                               {format(new Date(change.timestamp), 'd MMM HH:mm', { locale: sv })}
                             </span>
                             <span className="font-medium">{change.stepName}:</span>
+                            <StepStatusBadge status={change.toStatus} className="text-xs" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Truck status history - right column */}
+                  <div>
+                    <h4 className="font-medium text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">Truckhistorik</h4>
+                    {(!order.truckStatusHistory || order.truckStatusHistory.length === 0) ? (
+                      <p className="text-muted-foreground text-xs sm:text-sm">Ingen historik ännu.</p>
+                    ) : (
+                      <div className="space-y-1.5 sm:space-y-2">
+                        {[...order.truckStatusHistory].reverse().slice(0, 10).map(change => (
+                          <div key={change.id} className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm">
+                            <span className="text-muted-foreground min-w-[70px] sm:min-w-[100px]">
+                              {format(new Date(change.timestamp), 'd MMM HH:mm', { locale: sv })}
+                            </span>
+                            <span className="font-mono font-bold">#{change.truckNumber}</span>
+                            <span>{change.stepName}:</span>
                             <StepStatusBadge status={change.toStatus} className="text-xs" />
                           </div>
                         ))}

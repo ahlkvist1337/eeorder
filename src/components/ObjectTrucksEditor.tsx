@@ -215,7 +215,7 @@ export function ObjectTrucksEditor({
                       <span className="font-mono font-bold text-sm w-20">#{truck.truckNumber}</span>
                       
                       {/* Step status badges */}
-                      <div className="flex items-center gap-1 flex-1">
+                      <div className="flex items-center gap-1 flex-1 flex-wrap">
                         {objectSteps.map(step => {
                           const status = getStepStatusForTruck(truck, step.id);
                           const colors = stepStatusColors[status];
@@ -224,13 +224,13 @@ export function ObjectTrucksEditor({
                               key={step.id}
                               onClick={() => handleStepStatusClick(truck.id, step.id, status)}
                               className={cn(
-                                'px-2 py-0.5 rounded text-xs font-medium transition-colors hover:opacity-80',
+                                'px-2 py-0.5 rounded text-xs font-medium transition-colors hover:opacity-80 whitespace-nowrap',
                                 colors.bg,
                                 colors.text
                               )}
                               title={`${step.name}: Klicka för att ändra status`}
                             >
-                              {step.name.substring(0, 8)}{step.name.length > 8 ? '…' : ''} {colors.label}
+                              {step.name} {colors.label}
                             </button>
                           );
                         })}
