@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Upload, X, FileIcon, Download, Loader2, FileText } from 'lucide-react';
+import { Upload, X, FileIcon, Download, Loader2, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,9 +20,12 @@ interface OrderAttachmentsProps {
   onAttachmentsChange: () => void;
 }
 
+const MAX_VISIBLE_ATTACHMENTS = 3;
+
 export function OrderAttachments({ orderId, attachments, onAttachmentsChange }: OrderAttachmentsProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const { toast } = useToast();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -232,7 +235,7 @@ export function OrderAttachments({ orderId, attachments, onAttachmentsChange }: 
         {/* Attached files list */}
         {attachments.length > 0 && (
           <div className="space-y-2">
-            {attachments.map((attachment) => (
+            {(isExpanded ? attachments : attachments.slice(0, MAX_VISIBLE_ATTACHMENTS)).map((attachment) => (
               <div
                 key={attachment.id}
                 className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30"
@@ -294,6 +297,28 @@ export function OrderAttachments({ orderId, attachments, onAttachmentsChange }: 
                 </div>
               </div>
             ))}
+            
+            {/* Expand/collapse button */}
+            {attachments.length > MAX_VISIBLE_ATTACHMENTS && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full mt-2"
+                onClick={() => setIsExpanded(!isExpanded)}
+              >
+                {isExpanded ? (
+                  <>
+                    <ChevronUp className="h-4 w-4 mr-2" />
+                    Visa färre
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-4 w-4 mr-2" />
+                    Visa alla ({attachments.length - MAX_VISIBLE_ATTACHMENTS} till)
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         )}
       </CardContent>
