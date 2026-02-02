@@ -106,6 +106,9 @@ export function OrderObjectsEditor({
     const newObject: OrderObject = {
       id: crypto.randomUUID(),
       name,
+      plannedQuantity: 1,
+      receivedQuantity: 0,
+      completedQuantity: 0,
     };
     
     onObjectsChange([...objects, newObject]);
@@ -308,10 +311,67 @@ export function OrderObjectsEditor({
                       </div>
                     ) : (
                       <>
-                        <span className="flex-1 font-medium">{obj.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {objectSteps.length} steg
+                        <span className="font-medium">{obj.name}</span>
+                        
+                        {/* Quantity inputs */}
+                        <div className="flex items-center gap-2 ml-2">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">Plan:</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={obj.plannedQuantity}
+                              onChange={(e) => {
+                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                onObjectsChange(objects.map(o => 
+                                  o.id === obj.id ? { ...o, plannedQuantity: val } : o
+                                ));
+                              }}
+                              className="h-7 w-14 text-xs text-center px-1"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">Mott:</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={obj.plannedQuantity}
+                              value={obj.receivedQuantity}
+                              onChange={(e) => {
+                                const val = Math.min(obj.plannedQuantity, Math.max(0, parseInt(e.target.value) || 0));
+                                onObjectsChange(objects.map(o => 
+                                  o.id === obj.id ? { ...o, receivedQuantity: val } : o
+                                ));
+                              }}
+                              className="h-7 w-14 text-xs text-center px-1"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">Klart:</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={obj.receivedQuantity}
+                              value={obj.completedQuantity}
+                              onChange={(e) => {
+                                const val = Math.min(obj.receivedQuantity, Math.max(0, parseInt(e.target.value) || 0));
+                                onObjectsChange(objects.map(o => 
+                                  o.id === obj.id ? { ...o, completedQuantity: val } : o
+                                ));
+                              }}
+                              className="h-7 w-14 text-xs text-center px-1"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Summary */}
+                        <span className="text-xs text-muted-foreground ml-auto">
+                          {obj.completedQuantity} av {obj.plannedQuantity} klara
                         </span>
+                        
                         <Button
                           variant="ghost"
                           size="icon"

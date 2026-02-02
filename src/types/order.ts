@@ -34,6 +34,9 @@ export interface OrderObject {
   id: string;
   name: string;
   description?: string;
+  plannedQuantity: number;
+  receivedQuantity: number;
+  completedQuantity: number;
   createdAt?: string;
 }
 

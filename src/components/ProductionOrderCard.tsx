@@ -104,19 +104,40 @@ export function ProductionOrderCard({ order }: ProductionOrderCardProps) {
           {/* Objects with their steps */}
           {allObjects.map(obj => {
             const objectSteps = stepsByObject.get(obj.id) || [];
+            const isAllReceived = obj.receivedQuantity >= obj.plannedQuantity;
+            const isAllCompleted = obj.completedQuantity >= obj.plannedQuantity;
+            
             return (
               <div key={obj.id}>
-                {/* Object name as header */}
+                {/* Object name as header with quantity info */}
                 <div className="flex items-center gap-2 mb-2">
                   <Box className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <span className="font-semibold text-foreground">{obj.name}</span>
+                  <span className={cn(
+                    "font-semibold",
+                    isAllCompleted ? "text-[hsl(var(--status-completed))]" : "text-foreground"
+                  )}>
+                    {obj.name}
+                  </span>
+                  <span className={cn(
+                    "text-sm ml-auto",
+                    isAllReceived ? "text-[hsl(var(--status-completed))]" : "text-muted-foreground"
+                  )}>
+                    {obj.receivedQuantity}/{obj.plannedQuantity} mott.
+                  </span>
                 </div>
                 
                 {/* Steps for this object, indented */}
                 <div className="pl-6 space-y-2">
                   {objectSteps.length > 0 ? (
                     objectSteps.map(step => (
-                      <StepRow key={step.id} step={step} />
+                      <div key={step.id} className="flex items-center justify-between">
+                        <StepRow step={step} />
+                        {obj.plannedQuantity > 1 && step.status === 'completed' && (
+                          <span className="text-sm text-[hsl(var(--status-completed))] ml-2">
+                            {obj.completedQuantity}/{obj.plannedQuantity}
+                          </span>
+                        )}
+                      </div>
                     ))
                   ) : (
                     <span className="text-sm text-muted-foreground italic">(inga steg)</span>

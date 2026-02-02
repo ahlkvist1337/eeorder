@@ -44,6 +44,9 @@ interface DbOrderObject {
   order_id: string;
   name: string;
   description: string | null;
+  planned_quantity: number;
+  received_quantity: number;
+  completed_quantity: number;
   created_at: string;
 }
 
@@ -132,6 +135,9 @@ function mapDbOrderToOrder(
       id: o.id,
       name: o.name,
       description: o.description || undefined,
+      plannedQuantity: o.planned_quantity ?? 1,
+      receivedQuantity: o.received_quantity ?? 0,
+      completedQuantity: o.completed_quantity ?? 0,
       createdAt: o.created_at,
     })),
     steps: steps.map(s => ({
@@ -275,6 +281,9 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         order_id: orderId,
         name: obj.name,
         description: obj.description || null,
+        planned_quantity: obj.plannedQuantity ?? 1,
+        received_quantity: obj.receivedQuantity ?? 0,
+        completed_quantity: obj.completedQuantity ?? 0,
       }));
       
       const { error: objectsError } = await supabase.from('order_objects').insert(objectsToInsert);
@@ -382,6 +391,9 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
             order_id: id,
             name: obj.name,
             description: obj.description || null,
+            planned_quantity: obj.plannedQuantity ?? 1,
+            received_quantity: obj.receivedQuantity ?? 0,
+            completed_quantity: obj.completedQuantity ?? 0,
           })),
           { onConflict: 'id' }
         );
