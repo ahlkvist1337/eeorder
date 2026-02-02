@@ -119,12 +119,30 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
   };
 
   const getNextStep = (order: Order): string => {
-    const pendingStep = order.steps.find(s => s.status === 'pending');
-    const inProgressStep = order.steps.find(s => s.status === 'in_progress');
+    // Collect all step statuses from all work cards (trucks) that are arrived or started
+    const allStepStatuses = (order.objects || [])
+      .flatMap(obj => (obj.trucks || [])
+        .filter(t => t.status === 'arrived' || t.status === 'started')
+        .flatMap(t => t.stepStatuses.map(ss => ({
+          ...ss,
+          stepName: order.steps.find(s => s.id === ss.stepId)?.name || 'Okänt steg'
+        })))
+      );
     
-    if (inProgressStep) return `Pågår: ${inProgressStep.name}`;
-    if (pendingStep) return `Nästa: ${pendingStep.name}`;
-    if (order.steps.every(s => s.status === 'completed')) return 'Alla steg klara';
+    // Find in-progress step
+    const inProgress = allStepStatuses.find(ss => ss.status === 'in_progress');
+    if (inProgress) return `Pågår: ${inProgress.stepName}`;
+    
+    // Find next pending step
+    const pending = allStepStatuses.find(ss => ss.status === 'pending');
+    if (pending) return `Nästa: ${pending.stepName}`;
+    
+    // Check if all work cards are completed
+    const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
+    if (allTrucks.length > 0 && allTrucks.every(t => t.status === 'completed')) {
+      return 'Alla klara';
+    }
+    
     return '-';
   };
 
@@ -226,7 +244,7 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
                 <SortButton field="plannedEnd">Klart</SortButton>
               </TableHead>
               <TableHead className="w-[160px]">Nästa steg</TableHead>
-              <TableHead className="w-[140px]">Truckar</TableHead>
+              <TableHead className="w-[140px]">Arbetskort</TableHead>
               <TableHead className="w-[200px]">Kommentar</TableHead>
               <TableHead className="w-[150px]">
                 <SortButton field="billingStatus">Fakturering</SortButton>
