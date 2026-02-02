@@ -76,6 +76,35 @@ export type Database = {
         }
         Relationships: []
       }
+      object_trucks: {
+        Row: {
+          created_at: string
+          id: string
+          object_id: string
+          truck_number: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          object_id: string
+          truck_number: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          object_id?: string
+          truck_number?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "object_trucks_object_id_fkey"
+            columns: ["object_id"]
+            isOneToOne: false
+            referencedRelation: "order_objects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_attachments: {
         Row: {
           created_at: string
@@ -416,6 +445,48 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      truck_step_status: {
+        Row: {
+          actual_end: string | null
+          actual_start: string | null
+          id: string
+          status: Database["public"]["Enums"]["step_status"]
+          step_id: string
+          truck_id: string
+        }
+        Insert: {
+          actual_end?: string | null
+          actual_start?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["step_status"]
+          step_id: string
+          truck_id: string
+        }
+        Update: {
+          actual_end?: string | null
+          actual_start?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["step_status"]
+          step_id?: string
+          truck_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "truck_step_status_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "order_steps"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "truck_step_status_truck_id_fkey"
+            columns: ["truck_id"]
+            isOneToOne: false
+            referencedRelation: "object_trucks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {

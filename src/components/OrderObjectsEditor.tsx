@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronRight, Pencil, Check, X, Package } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, Pencil, Check, X, Package, Truck } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -17,6 +17,7 @@ import {
 } from '@dnd-kit/sortable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -26,10 +27,11 @@ import {
 } from '@/components/ui/select';
 import { StepStatusBadge } from '@/components/StatusBadge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ObjectTrucksEditor } from '@/components/ObjectTrucksEditor';
 import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
 import { useObjectTemplates } from '@/hooks/useObjectTemplates';
 import { stepStatusLabels } from '@/types/order';
-import type { OrderStep, StepStatus, OrderObject } from '@/types/order';
+import type { OrderStep, StepStatus, OrderObject, ObjectTruck } from '@/types/order';
 import { SortableStep } from '@/components/SortableStep';
 
 interface OrderObjectsEditorProps {
@@ -313,6 +315,14 @@ export function OrderObjectsEditor({
                       <>
                         <span className="font-medium">{obj.name}</span>
                         
+                        {/* Truck summary badge */}
+                        {obj.trucks && obj.trucks.length > 0 && (
+                          <Badge variant="outline" className="ml-2 gap-1">
+                            <Truck className="h-3 w-3" />
+                            {obj.trucks.length} st
+                          </Badge>
+                        )}
+                        
                         {/* Quantity inputs */}
                         <div className="flex items-center gap-2 ml-2">
                           <div className="flex items-center gap-1">
@@ -472,6 +482,18 @@ export function OrderObjectsEditor({
                           Lägg till
                         </Button>
                       </div>
+                      
+                      {/* Truck editor section */}
+                      <ObjectTrucksEditor
+                        trucks={obj.trucks || []}
+                        objectId={obj.id}
+                        objectSteps={objectSteps}
+                        onTrucksChange={(newTrucks) => {
+                          onObjectsChange(objects.map(o =>
+                            o.id === obj.id ? { ...o, trucks: newTrucks } : o
+                          ));
+                        }}
+                      />
                     </div>
                   </CollapsibleContent>
                 </div>

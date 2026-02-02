@@ -30,6 +30,23 @@ export interface ObjectTemplate {
   createdAt: string;
 }
 
+export interface TruckStepStatus {
+  id: string;
+  truckId: string;
+  stepId: string;
+  status: StepStatus;
+  actualStart?: string;
+  actualEnd?: string;
+}
+
+export interface ObjectTruck {
+  id: string;
+  objectId: string;
+  truckNumber: string;
+  stepStatuses: TruckStepStatus[];
+  createdAt?: string;
+}
+
 export interface OrderObject {
   id: string;
   name: string;
@@ -37,6 +54,7 @@ export interface OrderObject {
   plannedQuantity: number;
   receivedQuantity: number;
   completedQuantity: number;
+  trucks?: ObjectTruck[];
   createdAt?: string;
 }
 

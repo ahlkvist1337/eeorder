@@ -1,0 +1,293 @@
+import { useState } from 'react';
+import { Plus, Trash2, Pencil, Check, X, ChevronDown, ChevronRight, Truck } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { cn } from '@/lib/utils';
+import type { ObjectTruck, OrderStep, StepStatus, TruckStepStatus } from '@/types/order';
+
+interface ObjectTrucksEditorProps {
+  trucks: ObjectTruck[];
+  objectId: string;
+  objectSteps: OrderStep[];
+  onTrucksChange: (trucks: ObjectTruck[]) => void;
+  onTruckStepStatusChange?: (truckId: string, stepId: string, status: StepStatus) => void;
+}
+
+const stepStatusColors: Record<StepStatus, { bg: string; text: string; label: string }> = {
+  completed: { bg: 'bg-[hsl(var(--status-completed))]', text: 'text-white', label: '✓' },
+  in_progress: { bg: 'bg-[hsl(var(--status-started))]', text: 'text-black', label: '●' },
+  pending: { bg: 'bg-muted', text: 'text-muted-foreground', label: '○' },
+};
+
+function getTruckOverallStatus(truck: ObjectTruck, objectSteps: OrderStep[]): { label: string; color: string } {
+  if (objectSteps.length === 0 || truck.stepStatuses.length === 0) {
+    return { label: 'Väntande', color: 'text-muted-foreground' };
+  }
+  
+  const allCompleted = objectSteps.every(step => {
+    const status = truck.stepStatuses.find(s => s.stepId === step.id);
+    return status?.status === 'completed';
+  });
+  
+  const anyInProgress = truck.stepStatuses.some(s => s.status === 'in_progress');
+  const anyCompleted = truck.stepStatuses.some(s => s.status === 'completed');
+  
+  if (allCompleted) return { label: '✅ Klar', color: 'text-[hsl(var(--status-completed))]' };
+  if (anyInProgress) return { label: '🔄 Pågående', color: 'text-[hsl(var(--status-started))]' };
+  if (anyCompleted) return { label: '🔄 Pågående', color: 'text-[hsl(var(--status-started))]' };
+  return { label: '⏳ Väntande', color: 'text-muted-foreground' };
+}
+
+export function ObjectTrucksEditor({
+  trucks,
+  objectId,
+  objectSteps,
+  onTrucksChange,
+  onTruckStepStatusChange,
+}: ObjectTrucksEditorProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [newTruckNumber, setNewTruckNumber] = useState('');
+  const [editingTruckId, setEditingTruckId] = useState<string | null>(null);
+  const [editingTruckNumber, setEditingTruckNumber] = useState('');
+
+  const completedTrucks = trucks.filter(truck => {
+    if (objectSteps.length === 0) return false;
+    return objectSteps.every(step => {
+      const status = truck.stepStatuses.find(s => s.stepId === step.id);
+      return status?.status === 'completed';
+    });
+  });
+
+  const handleAddTruck = () => {
+    if (!newTruckNumber.trim()) return;
+    
+    const newTruck: ObjectTruck = {
+      id: crypto.randomUUID(),
+      objectId,
+      truckNumber: newTruckNumber.trim(),
+      stepStatuses: objectSteps.map(step => ({
+        id: crypto.randomUUID(),
+        truckId: '', // Will be set after truck is created
+        stepId: step.id,
+        status: 'pending' as StepStatus,
+      })),
+    };
+    
+    // Fix the truckId for each step status
+    newTruck.stepStatuses = newTruck.stepStatuses.map(s => ({ ...s, truckId: newTruck.id }));
+    
+    onTrucksChange([...trucks, newTruck]);
+    setNewTruckNumber('');
+  };
+
+  const handleRemoveTruck = (truckId: string) => {
+    onTrucksChange(trucks.filter(t => t.id !== truckId));
+  };
+
+  const handleStartEdit = (truck: ObjectTruck) => {
+    setEditingTruckId(truck.id);
+    setEditingTruckNumber(truck.truckNumber);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingTruckId || !editingTruckNumber.trim()) return;
+    
+    onTrucksChange(trucks.map(t =>
+      t.id === editingTruckId ? { ...t, truckNumber: editingTruckNumber.trim() } : t
+    ));
+    setEditingTruckId(null);
+    setEditingTruckNumber('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTruckId(null);
+    setEditingTruckNumber('');
+  };
+
+  const handleStepStatusClick = (truckId: string, stepId: string, currentStatus: StepStatus) => {
+    // Cycle through statuses: pending -> in_progress -> completed -> pending
+    const nextStatus: StepStatus = 
+      currentStatus === 'pending' ? 'in_progress' :
+      currentStatus === 'in_progress' ? 'completed' : 'pending';
+    
+    if (onTruckStepStatusChange) {
+      onTruckStepStatusChange(truckId, stepId, nextStatus);
+    } else {
+      // Update locally
+      onTrucksChange(trucks.map(t => {
+        if (t.id !== truckId) return t;
+        return {
+          ...t,
+          stepStatuses: t.stepStatuses.map(s => 
+            s.stepId === stepId ? { ...s, status: nextStatus } : s
+          ),
+        };
+      }));
+    }
+  };
+
+  const getStepStatusForTruck = (truck: ObjectTruck, stepId: string): StepStatus => {
+    const status = truck.stepStatuses.find(s => s.stepId === stepId);
+    return status?.status || 'pending';
+  };
+
+  if (trucks.length === 0 && !isExpanded) {
+    return (
+      <div className="mt-3 pt-3 border-t">
+        <div className="flex items-center gap-2">
+          <Truck className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Inga truckar</span>
+          <div className="flex-1" />
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Trucknummer..."
+              value={newTruckNumber}
+              onChange={(e) => setNewTruckNumber(e.target.value)}
+              className="h-8 w-28 text-sm"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAddTruck();
+              }}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={handleAddTruck}
+              disabled={!newTruckNumber.trim()}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Lägg till
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t">
+      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+        <div className="flex items-center gap-2">
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 px-2 -ml-2">
+              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              <Truck className="h-4 w-4 ml-1" />
+            </Button>
+          </CollapsibleTrigger>
+          <span className="text-sm font-medium">Truckar:</span>
+          <Badge variant="secondary" className="text-xs">
+            {trucks.length} st • {completedTrucks.length} klar{completedTrucks.length !== 1 ? 'a' : ''}
+          </Badge>
+        </div>
+
+        <CollapsibleContent className="mt-2">
+          <div className="space-y-2 pl-4">
+            {/* Truck list */}
+            {trucks.map(truck => {
+              const isEditing = editingTruckId === truck.id;
+              const overallStatus = getTruckOverallStatus(truck, objectSteps);
+
+              return (
+                <div key={truck.id} className="flex items-center gap-2 py-1 px-2 rounded-md bg-muted/30">
+                  {isEditing ? (
+                    <>
+                      <Input
+                        value={editingTruckNumber}
+                        onChange={(e) => setEditingTruckNumber(e.target.value)}
+                        className="h-7 w-24 text-sm font-mono"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEdit();
+                          if (e.key === 'Escape') handleCancelEdit();
+                        }}
+                      />
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleSaveEdit}>
+                        <Check className="h-3 w-3" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleCancelEdit}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-mono font-bold text-sm w-20">#{truck.truckNumber}</span>
+                      
+                      {/* Step status badges */}
+                      <div className="flex items-center gap-1 flex-1">
+                        {objectSteps.map(step => {
+                          const status = getStepStatusForTruck(truck, step.id);
+                          const colors = stepStatusColors[status];
+                          return (
+                            <button
+                              key={step.id}
+                              onClick={() => handleStepStatusClick(truck.id, step.id, status)}
+                              className={cn(
+                                'px-2 py-0.5 rounded text-xs font-medium transition-colors hover:opacity-80',
+                                colors.bg,
+                                colors.text
+                              )}
+                              title={`${step.name}: Klicka för att ändra status`}
+                            >
+                              {step.name.substring(0, 8)}{step.name.length > 8 ? '…' : ''} {colors.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Overall status */}
+                      <span className={cn('text-xs whitespace-nowrap', overallStatus.color)}>
+                        {overallStatus.label}
+                      </span>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => handleStartEdit(truck)}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-destructive hover:text-destructive"
+                        onClick={() => handleRemoveTruck(truck.id)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Add new truck */}
+            <div className="flex items-center gap-2 pt-2">
+              <Input
+                placeholder="Trucknummer..."
+                value={newTruckNumber}
+                onChange={(e) => setNewTruckNumber(e.target.value)}
+                className="h-8 w-28 text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddTruck();
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={handleAddTruck}
+                disabled={!newTruckNumber.trim()}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Lägg till truck
+              </Button>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}

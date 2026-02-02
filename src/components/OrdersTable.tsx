@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { ArrowUpDown, AlertTriangle, MessageSquare } from 'lucide-react';
+import { ArrowUpDown, AlertTriangle, MessageSquare, Truck } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { ProductionStatusBadge, BillingStatusBadge } from '@/components/StatusBadge';
 import type { Order, ProductionStatus, BillingStatus } from '@/types/order';
 
@@ -38,14 +39,20 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
-      // Search filter
+      // Search filter - include truck numbers
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
+        
+        // Get all truck numbers from the order
+        const allTruckNumbers = (order.objects || [])
+          .flatMap(obj => (obj.trucks || []).map(t => t.truckNumber.toLowerCase()));
+        
         const matchesSearch = 
           order.orderNumber.toLowerCase().includes(query) ||
           order.customer.toLowerCase().includes(query) ||
           (order.comment && order.comment.toLowerCase().includes(query)) ||
-          (order.customerReference && order.customerReference.toLowerCase().includes(query));
+          (order.customerReference && order.customerReference.toLowerCase().includes(query)) ||
+          allTruckNumbers.some(tn => tn.includes(query));
         if (!matchesSearch) return false;
       }
       
@@ -118,6 +125,12 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
     if (pendingStep) return `Nästa: ${pendingStep.name}`;
     if (order.steps.every(s => s.status === 'completed')) return 'Alla steg klara';
     return '-';
+  };
+
+  // Get all truck numbers for an order
+  const getTruckNumbers = (order: Order): string[] => {
+    return (order.objects || [])
+      .flatMap(obj => (obj.trucks || []).map(t => `#${t.truckNumber}`));
   };
 
   const SortButton = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
@@ -204,6 +217,7 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
                 <SortButton field="plannedEnd">Klart</SortButton>
               </TableHead>
               <TableHead className="w-[160px]">Nästa steg</TableHead>
+              <TableHead className="w-[140px]">Truckar</TableHead>
               <TableHead className="w-[200px]">Kommentar</TableHead>
               <TableHead className="w-[150px]">
                 <SortButton field="billingStatus">Fakturering</SortButton>
@@ -246,6 +260,20 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {getNextStep(order)}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {(() => {
+                      const trucks = getTruckNumbers(order);
+                      if (trucks.length === 0) return <span className="text-muted-foreground">-</span>;
+                      const display = trucks.slice(0, 3).join(', ');
+                      return (
+                        <span className="flex items-center gap-1 font-mono text-xs">
+                          <Truck className="h-3 w-3 text-muted-foreground" />
+                          {display}
+                          {trucks.length > 3 && <span className="text-muted-foreground">+{trucks.length - 3}</span>}
+                        </span>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground max-w-[200px]" title={order.comment || ''}>
                     {order.comment ? (
