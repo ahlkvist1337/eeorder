@@ -1,118 +1,154 @@
 
-# Plan: Expanderbara artikelrader i prislistan
+# Plan: Lägg till antal på orderobjekt
 
 ## Sammanfattning
 
-Gruppera prisrader per artikelnummer i prislistan, så att varje artikel visas på en rad med möjlighet att expandera och se/redigera alla stegpriser under.
+Utöka `order_objects`-tabellen med tre enkla antalskolumner som spårar var objekten befinner sig i processen:
+
+- **planned_quantity** - Planerat antal (hur många ska levereras totalt)
+- **received_quantity** - Mottaget antal (hur många har ankommit)
+- **completed_quantity** - Klart antal (hur många är färdigbehandlade)
 
 ---
 
-## Ny design
+## Exempel på hur det fungerar
 
 ```text
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│ Prislista                                  [Importera från ordrar] [Exportera]    │
-│ 45 artiklar (127 prisrader)                                                       │
-├───────────────────────────────────────────────────────────────────────────────────┤
-│ 🔍 [Sök artikelnummer, benämning eller steg...                              ]     │
-├───────────────────────────────────────────────────────────────────────────────────┤
-│ Artikelnr ▼   │ Benämning        │ Antal steg  │ Priser              │           │
-├───────────────┼──────────────────┼─────────────┼─────────────────────┼───────────┤
-│ ▶ 7589450-777 │ Hjulgaffel       │ 3 steg      │ 200–450 kr          │ ✏️        │
-├───────────────┼──────────────────┼─────────────┼─────────────────────┼───────────┤
-│ ▼ 3903041     │ Lagerlock        │ 2 steg      │ 500–1 000 kr        │ ✏️        │
-│ ┌─────────────────────────────────────────────────────────────────────────────┐   │
-│ │ Steg              │ Pris        │                                           │   │
-│ ├───────────────────┼─────────────┼───────────────────────────────────────────┤   │
-│ │ (grundpris)       │ 1 000 kr    │ ✏️  🗑                                    │   │
-│ │ Svetsning         │ 500 kr      │ ✏️  🗑                                    │   │
-│ ├───────────────────┴─────────────┴───────────────────────────────────────────┤   │
-│ │ [+ Lägg till stegpris]                                                      │   │
-│ └─────────────────────────────────────────────────────────────────────────────┘   │
-├───────────────┼──────────────────┼─────────────┼─────────────────────┼───────────┤
-│ ▶ 8821234     │ Axel             │ 1 steg      │ 750 kr              │ ✏️        │
-└───────────────────────────────────────────────────────────────────────────────────┘
+Motorlåda:
+  Planerat: 5
+  Mottaget: 3  ← 3 har ankommit
+  Klart: 2     ← 2 är färdiga
+
+Du ser direkt:
+  - 2 saknas fortfarande (5 - 3)
+  - 1 är under behandling (3 - 2)
+  - 2 är klara
 ```
 
 ---
 
-## Funktionalitet
+## Ny design i objektredigeraren
 
-### Grupperad visning
-- Alla prisrader med samma `part_number` grupperas till en "huvudrad"
-- Huvudraden visar artikelnummer, benämning, antal steg och prisintervall (min–max)
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ▼ Motorlåda                                            [✏️] [🗑️]           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Planerat: [5 ]   Mottaget: [3 ]   Klart: [2 ]         2 av 5 klara       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Behandlingssteg:                                                           │
+│  ● Blästring              Pågående   ▼                                      │
+│  ○ Målning                Väntande   ▼                                      │
+│  [Välj behandlingssteg...          ▼] [+ Lägg till]                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
-### Expandera artikel
-- Klicka på pilen (▶/▼) för att expandera
-- Visar alla stegpriser för den artikeln i en undertabell
-- Varje stegpris kan redigeras och tas bort individuellt
+---
 
-### Lägg till stegpris
-- Inuti den expanderade sektionen finns knapp för att lägga till nytt stegpris
-- Öppnar dialog med förifyllt artikelnummer och benämning
-- Användaren fyller i stegnamn och pris
+## Produktionsskärmen visar framsteg
 
-### Redigera huvudrad
-- Pennikonen på huvudraden öppnar dialog för att redigera artikelnummer/benämning
-- Uppdaterar alla prisrader med samma artikelnummer
+```text
+┌────────────────────────────────────┐
+│ 12345                              │
+│ ┌────────────────────────────────┐ │
+│ │ Startad                        │ │
+│ └────────────────────────────────┘ │
+│                                    │
+│ 📦 Motorlåda         3/5 mottaget  │
+│    ● Blästring       2/5 klart     │
+│    ○ Målning                       │
+│                                    │
+│ 📦 Lagerlock         10/10 mottaget│
+│    ✓ Blästring       10/10 klart   │
+│    ● Målning         5/10 klart    │
+└────────────────────────────────────┘
+```
 
 ---
 
 ## Tekniska ändringar
 
-### Fil: src/pages/PriceList.tsx
+### 1. Databasmigrering
 
-| Ändring | Beskrivning |
-|---------|-------------|
-| Gruppera data | Ny `useMemo` som grupperar `prices` per `part_number` till objekt med alla stegpriser |
-| Expanderat state | `expandedPartNumber: string | null` för att hålla koll på vilken artikel som är expanderad |
-| Undertabell | Rendera stegpriser i en collapsible sektion under varje grupperad rad |
-| Lägg till stegpris | Ny knapp i expanderad sektion som öppnar dialogen med förifyllt artikelnummer |
+Lägg till tre kolumner i `order_objects`:
 
-### Datastruktur (i komponenten)
+```sql
+ALTER TABLE order_objects
+ADD COLUMN planned_quantity integer NOT NULL DEFAULT 1,
+ADD COLUMN received_quantity integer NOT NULL DEFAULT 0,
+ADD COLUMN completed_quantity integer NOT NULL DEFAULT 0;
+```
+
+### 2. Typuppdateringar
+
+**Fil: `src/types/order.ts`**
+
+Uppdatera `OrderObject`:
 
 ```typescript
-interface GroupedArticle {
-  partNumber: string;
-  description: string;  // Från första raden
-  prices: PriceListItem[];  // Alla prisrader för denna artikel
-  minPrice: number;
-  maxPrice: number;
+export interface OrderObject {
+  id: string;
+  name: string;
+  description?: string;
+  plannedQuantity: number;    // Nytt
+  receivedQuantity: number;   // Nytt
+  completedQuantity: number;  // Nytt
+  createdAt?: string;
 }
 ```
 
-### Logik för gruppering
+### 3. Kontextuppdateringar
 
-```typescript
-const groupedPrices = useMemo(() => {
-  const groups = new Map<string, GroupedArticle>();
-  
-  for (const item of filteredPrices) {
-    const existing = groups.get(item.part_number);
-    if (existing) {
-      existing.prices.push(item);
-      existing.minPrice = Math.min(existing.minPrice, item.price);
-      existing.maxPrice = Math.max(existing.maxPrice, item.price);
-    } else {
-      groups.set(item.part_number, {
-        partNumber: item.part_number,
-        description: item.description,
-        prices: [item],
-        minPrice: item.price,
-        maxPrice: item.price,
-      });
-    }
-  }
-  
-  return Array.from(groups.values());
-}, [filteredPrices]);
+**Fil: `src/contexts/OrdersContext.tsx`**
+
+- Uppdatera `DbOrderObject` interface med nya kolumner
+- Uppdatera `mapDbOrderToOrder` för att mappa de nya fälten
+- Uppdatera `addOrder` och `updateOrder` för att inkludera antal vid insert/upsert
+
+### 4. UI-uppdateringar
+
+**Fil: `src/components/OrderObjectsEditor.tsx`**
+
+| Ändring | Beskrivning |
+|---------|-------------|
+| Antalinput | Lägg till tre nummerfält i objekthuvudet: Planerat, Mottaget, Klart |
+| Validering | Mottaget ≤ Planerat, Klart ≤ Mottaget |
+| Sammanfattning | Visa "X av Y klara" i objekthuvudet |
+
+**Fil: `src/components/ProductionOrderCard.tsx`**
+
+| Ändring | Beskrivning |
+|---------|-------------|
+| Antaldisplay | Visa mottaget/planerat och klart/planerat bredvid objektnamn |
+| Visuell indikator | Färgmarkering när allt är klart (grönt) vs pågående (gult) |
+
+---
+
+## Dataflöde
+
+```text
+1. Användaren skapar objekt med planerat antal (default: 1)
+2. När delar anländer uppdaterar man "Mottaget"
+3. När delar är färdigbehandlade uppdaterar man "Klart"
+4. Produktionsskärmen visar framsteg i realtid
 ```
 
 ---
 
-## Fördelar
+## Vad som INTE ändras
 
-- Renare översikt: ser direkt vilka artiklar som finns
-- Enklare att hantera stegpriser: alla på samma ställe
-- Prisintervall ger snabb överblick
-- Samma databas och RLS-policies, ingen migration behövs
+- Orderns struktur (en order, flera objekt)
+- Behandlingsstegen (kopplade till objekt)
+- Status på ordern (Ankommen/Startad/Pausad etc.)
+- Inga nya statusar, enbart antal
+
+---
+
+## Filer som ändras
+
+| Fil | Typ av ändring |
+|-----|----------------|
+| Ny migration | Lägg till 3 kolumner i order_objects |
+| `src/types/order.ts` | Uppdatera OrderObject interface |
+| `src/contexts/OrdersContext.tsx` | Uppdatera mappning och CRUD |
+| `src/components/OrderObjectsEditor.tsx` | Lägg till antalfält i UI |
+| `src/components/ProductionOrderCard.tsx` | Visa antal i produktionsvyn |
