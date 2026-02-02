@@ -31,7 +31,7 @@ import { ObjectTrucksEditor } from '@/components/ObjectTrucksEditor';
 import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
 import { useObjectTemplates } from '@/hooks/useObjectTemplates';
 import { stepStatusLabels } from '@/types/order';
-import type { OrderStep, StepStatus, OrderObject, ObjectTruck } from '@/types/order';
+import type { OrderStep, StepStatus, OrderObject, ObjectTruck, TruckStatus } from '@/types/order';
 import { SortableStep } from '@/components/SortableStep';
 
 interface OrderObjectsEditorProps {
@@ -39,13 +39,17 @@ interface OrderObjectsEditorProps {
   steps: OrderStep[];
   onObjectsChange: (objects: OrderObject[]) => void;
   onStepsChange: (steps: OrderStep[]) => void;
+  onTruckStatusChange?: (truckId: string, status: TruckStatus) => void;
+  onTruckStepStatusChange?: (truckId: string, stepId: string, status: StepStatus) => void;
 }
 
 export function OrderObjectsEditor({ 
   objects, 
   steps, 
   onObjectsChange, 
-  onStepsChange 
+  onStepsChange,
+  onTruckStatusChange,
+  onTruckStepStatusChange,
 }: OrderObjectsEditorProps) {
   const { steps: treatmentTemplates, isLoading: treatmentLoading } = useTreatmentSteps();
   const { templates: objectTemplates, isLoading: objectLoading } = useObjectTemplates();
@@ -511,6 +515,8 @@ export function OrderObjectsEditor({
                             o.id === obj.id ? { ...o, trucks: newTrucks } : o
                           ));
                         }}
+                        onTruckStatusChange={onTruckStatusChange}
+                        onTruckStepStatusChange={onTruckStepStatusChange}
                       />
                     </div>
                   </CollapsibleContent>
