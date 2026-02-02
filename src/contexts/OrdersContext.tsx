@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus, TruckStatusChange } from '@/types/order';
+import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus, TruckStatusChange, TruckStatus } from '@/types/order';
 
 // Database types (manual since types.ts may not be updated yet)
 interface DbOrder {
@@ -54,6 +54,7 @@ interface DbObjectTruck {
   id: string;
   object_id: string;
   truck_number: string;
+  status: 'waiting' | 'arrived' | 'started' | 'paused' | 'completed';
   created_at: string;
 }
 
@@ -128,6 +129,7 @@ interface OrdersContextType {
   orderNumberExists: (orderNumber: string) => boolean;
   refreshOrders: () => Promise<void>;
   updateTruckStepStatus: (orderId: string, truckId: string, stepId: string, newStatus: StepStatus, truckNumber: string, stepName: string) => Promise<void>;
+  updateTruckStatus: (orderId: string, truckId: string, newStatus: TruckStatus) => Promise<void>;
   bulkUpdateOrders: (orderIds: string[], updates: BulkOrderUpdates) => Promise<void>;
 }
 
@@ -170,6 +172,7 @@ function mapDbOrderToOrder(
         id: t.id,
         objectId: t.object_id,
         truckNumber: t.truck_number,
+        status: t.status,
         createdAt: t.created_at,
         stepStatuses: truckStepStatuses
           .filter(s => s.truck_id === t.id)
@@ -922,6 +925,32 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     });
   }, [orders]);
 
+  const updateTruckStatus = useCallback(async (
+    orderId: string,
+    truckId: string,
+    newStatus: TruckStatus
+  ) => {
+    // Optimistic update
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      return {
+        ...o,
+        objects: o.objects?.map(obj => ({
+          ...obj,
+          trucks: obj.trucks?.map(t =>
+            t.id === truckId ? { ...t, status: newStatus } : t
+          ),
+        })),
+      };
+    }));
+
+    // Update DB
+    await supabase
+      .from('object_trucks')
+      .update({ status: newStatus })
+      .eq('id', truckId);
+  }, []);
+
   const bulkUpdateOrders = useCallback(async (orderIds: string[], updates: BulkOrderUpdates) => {
     if (orderIds.length === 0) return;
 
@@ -982,6 +1011,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       orderNumberExists,
       refreshOrders: fetchOrders,
       updateTruckStepStatus,
+      updateTruckStatus,
       bulkUpdateOrders,
     }}>
       {children}

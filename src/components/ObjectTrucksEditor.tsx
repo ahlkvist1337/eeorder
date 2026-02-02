@@ -3,9 +3,11 @@ import { Plus, Trash2, Pencil, Check, X, ChevronDown, ChevronRight, Truck } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import type { ObjectTruck, OrderStep, StepStatus, TruckStepStatus } from '@/types/order';
+import type { ObjectTruck, OrderStep, StepStatus, TruckStatus } from '@/types/order';
+import { truckStatusLabels } from '@/types/order';
 
 interface ObjectTrucksEditorProps {
   trucks: ObjectTruck[];
@@ -13,12 +15,21 @@ interface ObjectTrucksEditorProps {
   objectSteps: OrderStep[];
   onTrucksChange: (trucks: ObjectTruck[]) => void;
   onTruckStepStatusChange?: (truckId: string, stepId: string, status: StepStatus) => void;
+  onTruckStatusChange?: (truckId: string, status: TruckStatus) => void;
 }
 
 const stepStatusColors: Record<StepStatus, { bg: string; text: string; label: string }> = {
   completed: { bg: 'bg-[hsl(var(--status-completed))]', text: 'text-white', label: '✓' },
   in_progress: { bg: 'bg-[hsl(var(--status-started))]', text: 'text-black', label: '●' },
   pending: { bg: 'bg-muted', text: 'text-muted-foreground', label: '○' },
+};
+
+const truckStatusColors: Record<TruckStatus, string> = {
+  waiting: 'text-muted-foreground',
+  arrived: 'text-[hsl(var(--status-arrived))]',
+  started: 'text-[hsl(var(--status-started))]',
+  paused: 'text-[hsl(var(--status-paused))]',
+  completed: 'text-[hsl(var(--status-completed))]',
 };
 
 function getTruckOverallStatus(truck: ObjectTruck, objectSteps: OrderStep[]): { label: string; color: string } {
@@ -46,6 +57,7 @@ export function ObjectTrucksEditor({
   objectSteps,
   onTrucksChange,
   onTruckStepStatusChange,
+  onTruckStatusChange,
 }: ObjectTrucksEditorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [newTruckNumber, setNewTruckNumber] = useState('');
@@ -63,20 +75,19 @@ export function ObjectTrucksEditor({
   const handleAddTruck = () => {
     if (!newTruckNumber.trim()) return;
     
+    const truckId = crypto.randomUUID();
     const newTruck: ObjectTruck = {
-      id: crypto.randomUUID(),
+      id: truckId,
       objectId,
       truckNumber: newTruckNumber.trim(),
+      status: 'waiting',
       stepStatuses: objectSteps.map(step => ({
         id: crypto.randomUUID(),
-        truckId: '', // Will be set after truck is created
+        truckId: truckId,
         stepId: step.id,
         status: 'pending' as StepStatus,
       })),
     };
-    
-    // Fix the truckId for each step status
-    newTruck.stepStatuses = newTruck.stepStatuses.map(s => ({ ...s, truckId: newTruck.id }));
     
     onTrucksChange([...trucks, newTruck]);
     setNewTruckNumber('');
@@ -214,6 +225,31 @@ export function ObjectTrucksEditor({
                     <>
                       <span className="font-mono font-bold text-sm w-20">#{truck.truckNumber}</span>
                       
+                      {/* Truck production status dropdown */}
+                      <Select
+                        value={truck.status}
+                        onValueChange={(value: TruckStatus) => {
+                          if (onTruckStatusChange) {
+                            onTruckStatusChange(truck.id, value);
+                          } else {
+                            onTrucksChange(trucks.map(t =>
+                              t.id === truck.id ? { ...t, status: value } : t
+                            ));
+                          }
+                        }}
+                      >
+                        <SelectTrigger className={cn('h-7 w-28 text-xs', truckStatusColors[truck.status])}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(Object.keys(truckStatusLabels) as TruckStatus[]).map(s => (
+                            <SelectItem key={s} value={s} className={cn('text-xs', truckStatusColors[s])}>
+                              {truckStatusLabels[s]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      
                       {/* Step status badges */}
                       <div className="flex items-center gap-1 flex-1 flex-wrap">
                         {objectSteps.map(step => {
@@ -235,11 +271,6 @@ export function ObjectTrucksEditor({
                           );
                         })}
                       </div>
-
-                      {/* Overall status */}
-                      <span className={cn('text-xs whitespace-nowrap', overallStatus.color)}>
-                        {overallStatus.label}
-                      </span>
 
                       <Button
                         variant="ghost"

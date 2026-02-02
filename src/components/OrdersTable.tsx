@@ -15,7 +15,8 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { ProductionStatusBadge, BillingStatusBadge } from '@/components/StatusBadge';
-import type { Order, ProductionStatus, BillingStatus } from '@/types/order';
+import type { Order, ProductionStatus, BillingStatus, TruckStatus } from '@/types/order';
+import { truckStatusLabels } from '@/types/order';
 
 interface OrdersTableProps {
   orders: Order[];
@@ -125,6 +126,14 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
     if (pendingStep) return `Nästa: ${pendingStep.name}`;
     if (order.steps.every(s => s.status === 'completed')) return 'Alla steg klara';
     return '-';
+  };
+
+  // Get truck summary for an order (counts by status)
+  const getTruckSummary = (order: Order): { total: number; active: number; completed: number } => {
+    const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
+    const active = allTrucks.filter(t => t.status === 'arrived' || t.status === 'started').length;
+    const completed = allTrucks.filter(t => t.status === 'completed').length;
+    return { total: allTrucks.length, active, completed };
   };
 
   // Get all truck numbers for an order
@@ -263,14 +272,18 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
                   </TableCell>
                   <TableCell className="text-sm">
                     {(() => {
-                      const trucks = getTruckNumbers(order);
-                      if (trucks.length === 0) return <span className="text-muted-foreground">-</span>;
-                      const display = trucks.slice(0, 3).join(', ');
+                      const summary = getTruckSummary(order);
+                      if (summary.total === 0) return <span className="text-muted-foreground">-</span>;
                       return (
-                        <span className="flex items-center gap-1 font-mono text-xs">
+                        <span className="flex items-center gap-1 text-xs">
                           <Truck className="h-3 w-3 text-muted-foreground" />
-                          {display}
-                          {trucks.length > 3 && <span className="text-muted-foreground">+{trucks.length - 3}</span>}
+                          <span className="font-medium">{summary.total}</span>
+                          {summary.active > 0 && (
+                            <span className="text-[hsl(var(--status-started))]">({summary.active} aktiv{summary.active !== 1 ? 'a' : ''})</span>
+                          )}
+                          {summary.completed > 0 && summary.active === 0 && (
+                            <span className="text-[hsl(var(--status-completed))]">({summary.completed} klar{summary.completed !== 1 ? 'a' : ''})</span>
+                          )}
                         </span>
                       );
                     })()}
