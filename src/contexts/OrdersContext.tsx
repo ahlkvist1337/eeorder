@@ -666,6 +666,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
                 id: t.id,
                 object_id: obj.id,
                 truck_number: t.truckNumber,
+                status: t.status,
+                sort_order: t.sortOrder ?? null,
               })),
               { onConflict: 'id' }
             );
@@ -932,13 +934,50 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     truckId: string,
     newStatus: TruckStatus
   ) => {
-    // Optimistic update
+    // Find current status and object
+    const order = orders.find(o => o.id === orderId);
+    let objectId: string | undefined;
+    let currentStatus: TruckStatus = 'waiting';
+    
+    for (const obj of order?.objects || []) {
+      const truck = obj.trucks?.find(t => t.id === truckId);
+      if (truck) {
+        currentStatus = truck.status;
+        objectId = obj.id;
+        break;
+      }
+    }
+    
+    // Calculate quantity changes
+    let receivedDelta = 0;
+    let completedDelta = 0;
+    
+    // Mott: increase when arrived, decrease when back to waiting
+    if (newStatus === 'arrived' && currentStatus === 'waiting') receivedDelta = 1;
+    if (currentStatus === 'arrived' && newStatus === 'waiting') receivedDelta = -1;
+    
+    // Klart: increase when completed, decrease when back from completed
+    if (newStatus === 'completed' && currentStatus !== 'completed') completedDelta = 1;
+    if (currentStatus === 'completed' && newStatus !== 'completed') completedDelta = -1;
+    
+    // Get current quantities for DB update
+    const currentObj = order?.objects?.find(o => o.id === objectId);
+    const newReceivedQuantity = currentObj ? Math.max(0, currentObj.receivedQuantity + receivedDelta) : 0;
+    const newCompletedQuantity = currentObj ? Math.max(0, currentObj.completedQuantity + completedDelta) : 0;
+    
+    // Optimistic update with quantities
     setOrders(prev => prev.map(o => {
       if (o.id !== orderId) return o;
       return {
         ...o,
         objects: o.objects?.map(obj => ({
           ...obj,
+          receivedQuantity: obj.id === objectId 
+            ? Math.max(0, obj.receivedQuantity + receivedDelta) 
+            : obj.receivedQuantity,
+          completedQuantity: obj.id === objectId 
+            ? Math.max(0, obj.completedQuantity + completedDelta) 
+            : obj.completedQuantity,
           trucks: obj.trucks?.map(t =>
             t.id === truckId ? { ...t, status: newStatus } : t
           ),
@@ -946,12 +985,17 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       };
     }));
 
-    // Update DB
-    await supabase
-      .from('object_trucks')
-      .update({ status: newStatus })
-      .eq('id', truckId);
-  }, []);
+    // Update truck status in DB
+    await supabase.from('object_trucks').update({ status: newStatus }).eq('id', truckId);
+    
+    // Update object quantities in DB
+    if (objectId && (receivedDelta !== 0 || completedDelta !== 0)) {
+      await supabase.from('order_objects').update({
+        received_quantity: newReceivedQuantity,
+        completed_quantity: newCompletedQuantity,
+      }).eq('id', objectId);
+    }
+  }, [orders]);
 
   const bulkUpdateOrders = useCallback(async (orderIds: string[], updates: BulkOrderUpdates) => {
     if (orderIds.length === 0) return;

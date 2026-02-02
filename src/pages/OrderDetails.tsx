@@ -27,7 +27,7 @@ import { useOrders } from '@/hooks/useOrders';
 import { useOrderAttachments } from '@/hooks/useOrderAttachments';
 import { useAuth } from '@/contexts/AuthContext';
 import { productionStatusLabels, billingStatusLabels, stepStatusLabels } from '@/types/order';
-import type { ProductionStatus, BillingStatus, OrderStep, OrderObject } from '@/types/order';
+import type { ProductionStatus, BillingStatus, OrderStep, OrderObject, TruckStatus, StepStatus } from '@/types/order';
 import { StepStatusBadge } from '@/components/StatusBadge';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -41,6 +41,8 @@ export default function OrderDetails() {
     updateProductionStatus, 
     updateBillingStatus,
     updateOrderStep,
+    updateTruckStatus,
+    updateTruckStepStatus,
     deleteOrder,
     isLoading 
   } = useOrders();
@@ -115,6 +117,32 @@ export default function OrderDetails() {
     } catch (error) {
       console.error('Error updating objects and steps:', error);
       toast.error('Kunde inte spara ändringarna. Försök igen.');
+    }
+  };
+
+  const handleTruckStatusChange = async (truckId: string, status: TruckStatus) => {
+    await updateTruckStatus(order.id, truckId, status);
+  };
+
+  const handleTruckStepStatusChange = async (
+    truckId: string, 
+    stepId: string, 
+    status: StepStatus
+  ) => {
+    const truck = (order.objects || [])
+      .flatMap(o => o.trucks || [])
+      .find(t => t.id === truckId);
+    const step = order.steps.find(s => s.id === stepId);
+    
+    if (truck && step) {
+      await updateTruckStepStatus(
+        order.id, 
+        truckId, 
+        stepId, 
+        status, 
+        truck.truckNumber, 
+        step.name
+      );
     }
   };
 
@@ -350,6 +378,8 @@ export default function OrderDetails() {
                   steps={order.steps}
                   onObjectsChange={(newObjects) => handleObjectsAndStepsChange(newObjects, order.steps)}
                   onStepsChange={(newSteps) => handleObjectsAndStepsChange(order.objects || [], newSteps)}
+                  onTruckStatusChange={handleTruckStatusChange}
+                  onTruckStepStatusChange={handleTruckStepStatusChange}
                 />
               </CardContent>
             </Card>
