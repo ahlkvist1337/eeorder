@@ -141,6 +141,34 @@ export default function CreateOrder() {
     if (file) handleFileUpload(file);
   }, [handleFileUpload]);
 
+  // Helper to normalize date strings from XML to ISO 8601 format
+  const normalizeDate = (dateStr: string | undefined): string | undefined => {
+    if (!dateStr) return undefined;
+    
+    // Try parsing the date string
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString();
+    }
+    
+    // Try common Swedish/European formats (YYYY-MM-DD, DD-MM-YYYY, etc.)
+    const parts = dateStr.split(/[-/.]/);
+    if (parts.length === 3) {
+      // Try YYYY-MM-DD
+      if (parts[0].length === 4) {
+        const isoDate = new Date(`${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`);
+        if (!isNaN(isoDate.getTime())) return isoDate.toISOString();
+      }
+      // Try DD-MM-YYYY or DD/MM/YYYY
+      if (parts[2].length === 4) {
+        const isoDate = new Date(`${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`);
+        if (!isNaN(isoDate.getTime())) return isoDate.toISOString();
+      }
+    }
+    
+    return undefined;
+  };
+
   const handleXmlSubmit = async () => {
     if (!parsedXml) return;
 
@@ -151,8 +179,8 @@ export default function CreateOrder() {
       deliveryAddress: parsedXml.deliveryAddress,
       productionStatus: 'created',
       billingStatus: 'not_ready',
-      plannedStart: parsedXml.orderDate || undefined,
-      plannedEnd: parsedXml.deliveryDate || undefined,
+      plannedStart: normalizeDate(parsedXml.orderDate),
+      plannedEnd: normalizeDate(parsedXml.deliveryDate),
       comment: xmlComment.trim() || undefined,
       objects: xmlObjects.length > 0 ? xmlObjects : undefined,
       steps: xmlSteps,
