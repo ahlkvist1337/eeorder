@@ -11,10 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useOrders } from '@/hooks/useOrders';
 import { parseMonitorXML } from '@/lib/xmlParser';
-import { Upload, FileText, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Upload, FileText, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
 import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
 import { OrderObjectsEditor } from '@/components/OrderObjectsEditor';
-import type { Order, OrderStep, ParsedXMLOrder, ArticleRow, OrderObject } from '@/types/order';
+import type { Order, OrderStep, ParsedXMLOrder, ArticleRow, OrderObject, Instruction } from '@/types/order';
 
 export default function CreateOrder() {
   useDocumentTitle('Ny order');
@@ -42,6 +42,7 @@ export default function CreateOrder() {
   const [xmlObjects, setXmlObjects] = useState<OrderObject[]>([]);
   const [xmlSteps, setXmlSteps] = useState<OrderStep[]>([]);
   const [xmlComment, setXmlComment] = useState('');
+  const [xmlInstructions, setXmlInstructions] = useState<Instruction[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
   const handleManualSubmit = async (e: React.FormEvent) => {
@@ -107,6 +108,7 @@ export default function CreateOrder() {
         }
 
         setParsedXml(parsed);
+        setXmlInstructions(parsed.instructions || []);
       } catch (err) {
         setXmlError(err instanceof Error ? err.message : 'Kunde inte läsa XML-filen.');
       }
@@ -162,6 +164,7 @@ export default function CreateOrder() {
         deliveryDate: parsedXml.deliveryDate,
       },
       articleRows: parsedXml.rows,
+      instructions: xmlInstructions.length > 0 ? xmlInstructions : undefined,
       stepStatusHistory: [],
     };
 
@@ -387,12 +390,34 @@ export default function CreateOrder() {
 
                       {parsedXml.rows.length > 0 && (
                         <div className="pt-2 border-t">
-                          <p className="text-sm font-medium mb-2">Artikelrader:</p>
+                          <p className="text-sm font-medium mb-2">Artikelrader ({parsedXml.rows.length} st):</p>
                           <ul className="text-sm space-y-1">
                             {parsedXml.rows.map((row, i) => (
                               <li key={i} className="text-muted-foreground">
                                 {row.text || row.partNumber || `Rad ${row.rowNumber}`}
                                 {row.quantity > 0 && ` (${row.quantity} ${row.unit})`}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {xmlInstructions.length > 0 && (
+                        <div className="pt-2 border-t">
+                          <p className="text-sm font-medium mb-2">Instruktioner ({xmlInstructions.length} st):</p>
+                          <ul className="text-sm space-y-1">
+                            {xmlInstructions.map((inst) => (
+                              <li key={inst.id} className="flex items-center gap-2 text-muted-foreground">
+                                <FileText className="h-3 w-3 shrink-0" />
+                                <span className="flex-1">{inst.text}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setXmlInstructions(prev => prev.filter(i => i.id !== inst.id))}
+                                  className="p-1 hover:text-destructive transition-colors"
+                                  title="Ta bort instruktion"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
                               </li>
                             ))}
                           </ul>
@@ -431,6 +456,7 @@ export default function CreateOrder() {
                           setXmlObjects([]);
                           setXmlSteps([]);
                           setXmlComment('');
+                          setXmlInstructions([]);
                         }}
                       >
                         Välj annan fil

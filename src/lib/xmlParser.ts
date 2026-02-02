@@ -1,4 +1,4 @@
-import type { ParsedXMLOrder } from '@/types/order';
+import type { ParsedXMLOrder, Instruction } from '@/types/order';
 
 export function parseMonitorXML(xmlString: string): ParsedXMLOrder {
   const parser = new DOMParser();
@@ -37,27 +37,41 @@ export function parseMonitorXML(xmlString: string): ParsedXMLOrder {
   const orderDate = doc.querySelector('OrderDate')?.textContent || '';
   const deliveryDate = doc.querySelector('Row DeliveryPeriod')?.textContent || '';
 
-  // Get rows
+  // Get rows - filter by RowType
   const rows: ParsedXMLOrder['rows'] = [];
+  const instructions: Instruction[] = [];
   const rowElements = doc.querySelectorAll('Row');
   
   rowElements.forEach((row) => {
     const rowNumber = row.getAttribute('RowNumber') || '';
-    const partNumber = row.querySelector('Part')?.getAttribute('PartNumber') || '';
+    const rowType = row.getAttribute('RowType') || '1'; // Default to type 1 (article)
     const text = row.querySelector('Text')?.textContent || '';
-    const quantityStr = row.querySelector('Quantity')?.textContent || '0';
-    const unit = row.querySelector('Unit')?.textContent || '';
-    const eachStr = row.querySelector('Each')?.textContent || '0';
+    
+    if (rowType === '4') {
+      // RowType 4 = Instruction
+      instructions.push({
+        id: crypto.randomUUID(),
+        text: text.trim(),
+        rowNumber,
+      });
+    } else if (rowType === '1' || rowType === '') {
+      // RowType 1 or empty = Article row
+      const partNumber = row.querySelector('Part')?.getAttribute('PartNumber') || '';
+      const quantityStr = row.querySelector('Quantity')?.textContent || '0';
+      const unit = row.querySelector('Unit')?.textContent || '';
+      const eachStr = row.querySelector('Each')?.textContent || '0';
 
-    rows.push({
-      id: crypto.randomUUID(),
-      rowNumber,
-      partNumber,
-      text,
-      quantity: parseFloat(quantityStr) || 0,
-      unit,
-      price: parseFloat(eachStr) || 0,
-    });
+      rows.push({
+        id: crypto.randomUUID(),
+        rowNumber,
+        partNumber,
+        text,
+        quantity: parseFloat(quantityStr) || 0,
+        unit,
+        price: parseFloat(eachStr) || 0,
+      });
+    }
+    // Other RowTypes are ignored
   });
 
   return {
@@ -69,5 +83,6 @@ export function parseMonitorXML(xmlString: string): ParsedXMLOrder {
     orderDate,
     deliveryDate,
     rows,
+    instructions,
   };
 }

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { ArrowLeft, AlertTriangle, Clock, Package, Wrench, Save, CalendarIcon } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Clock, Package, Wrench, Save, CalendarIcon, FileText } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,11 +23,12 @@ import { ProductionStatusBadge, BillingStatusBadge } from '@/components/StatusBa
 import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
 import { OrderObjectsEditor } from '@/components/OrderObjectsEditor';
 import { OrderAttachments } from '@/components/OrderAttachments';
+import { InstructionsEditor } from '@/components/InstructionsEditor';
 import { useOrders } from '@/hooks/useOrders';
 import { useOrderAttachments } from '@/hooks/useOrderAttachments';
 import { useAuth } from '@/contexts/AuthContext';
 import { orderAdminStatusLabels, billingStatusLabels, stepStatusLabels, getWorkUnitDisplayName, toAdminStatus } from '@/types/order';
-import type { ProductionStatus, BillingStatus, OrderStep, OrderObject, TruckStatus, StepStatus, OrderAdminStatus, ArticleRow } from '@/types/order';
+import type { ProductionStatus, BillingStatus, OrderStep, OrderObject, TruckStatus, StepStatus, OrderAdminStatus, ArticleRow, Instruction } from '@/types/order';
 import { StepStatusBadge } from '@/components/StatusBadge';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -390,6 +391,29 @@ export default function OrderDetails() {
                       <p className="font-medium text-sm sm:text-base break-words">{order.deliveryAddress}</p>
                     </div>
                   )}
+                  {/* Instructions section */}
+                  {(order.instructions && order.instructions.length > 0) && (
+                    <div className="sm:col-span-2 space-y-2 pt-2 border-t">
+                      <Label className="text-xs sm:text-sm text-muted-foreground flex items-center gap-1">
+                        <FileText className="h-3 w-3" />
+                        Instruktioner
+                      </Label>
+                      <InstructionsEditor
+                        instructions={order.instructions || []}
+                        onInstructionsChange={async (newInstructions) => {
+                          try {
+                            await updateOrder(order.id, { instructions: newInstructions });
+                            toast.success('Instruktioner uppdaterade');
+                          } catch (error) {
+                            console.error('Error updating instructions:', error);
+                            toast.error('Kunde inte uppdatera instruktioner');
+                          }
+                        }}
+                        readOnly={!canEdit}
+                      />
+                    </div>
+                  )}
+                  
                   <div className="sm:col-span-2 space-y-2">
                     <Label className="text-xs sm:text-sm text-muted-foreground">Kommentar</Label>
                     <Textarea

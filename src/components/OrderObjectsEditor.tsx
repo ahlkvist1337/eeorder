@@ -383,25 +383,8 @@ export function OrderObjectsEditor({
                         <p className="text-sm text-muted-foreground text-center py-2">
                           Inga steg tillagda för detta objekt.
                         </p>
-                      ) : obj.trucks && obj.trucks.length > 0 ? (
-                        /* Horizontal layout when trucks exist */
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                            <span>Steg:</span>
-                            <div className="flex flex-wrap items-center gap-1">
-                              {objectSteps.map((step, idx) => (
-                                <span key={step.id} className="flex items-center gap-1">
-                                  <span className="font-medium text-foreground">{step.name}</span>
-                                  {idx < objectSteps.length - 1 && (
-                                    <span className="text-muted-foreground">→</span>
-                                  )}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
                       ) : (
-                        /* Vertical layout with drag-drop when no trucks */
+                        /* Always show drag-drop sortable list with delete */
                         <DndContext
                           sensors={sensors}
                           collisionDetection={closestCenter}
