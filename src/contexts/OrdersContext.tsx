@@ -382,7 +382,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     const orderId = newOrderData.id;
 
     // Insert objects if any (before steps, as steps reference objects)
-    let objectIdMap: Record<string, string> = {};
+    const objectIdMap: Record<string, string> = {};
     if (order.objects && order.objects.length > 0) {
       const objectsToInsert = order.objects.map(obj => ({
         id: obj.id,
@@ -397,7 +397,33 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       const { error: objectsError } = await supabase.from('order_objects').insert(objectsToInsert);
       if (objectsError) throw objectsError;
       
-      // Insert trucks for each object
+      // Map old object IDs to new ones (in case they're the same, just keep track)
+      order.objects.forEach(obj => {
+        objectIdMap[obj.id] = obj.id;
+      });
+    }
+
+    // Insert steps BEFORE trucks (truck_step_status references step_id via foreign key)
+    if (order.steps && order.steps.length > 0) {
+      const { error: stepsError } = await supabase.from('order_steps').insert(
+        order.steps.map(step => ({
+          order_id: orderId,
+          template_id: step.templateId,
+          name: step.name,
+          status: step.status,
+          object_id: step.objectId || null,
+          planned_start: step.plannedStart || null,
+          planned_end: step.plannedEnd || null,
+          actual_start: step.actualStart || null,
+          actual_end: step.actualEnd || null,
+          price: step.price ?? null,
+        }))
+      );
+      if (stepsError) throw stepsError;
+    }
+
+    // Insert trucks for each object (AFTER steps are created)
+    if (order.objects && order.objects.length > 0) {
       for (const obj of order.objects) {
         if (obj.trucks && obj.trucks.length > 0) {
           const trucksToInsert = obj.trucks.map(t => ({
@@ -409,7 +435,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           const { error: trucksError } = await supabase.from('object_trucks').insert(trucksToInsert);
           if (trucksError) throw trucksError;
           
-          // Insert truck step statuses
+          // Insert truck step statuses (now step_id references exist)
           const allStepStatuses = obj.trucks.flatMap(t =>
             t.stepStatuses.map(s => ({
               id: s.id,
@@ -427,30 +453,6 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           }
         }
       }
-      
-      // Map old object IDs to new ones (in case they're the same, just keep track)
-      order.objects.forEach(obj => {
-        objectIdMap[obj.id] = obj.id;
-      });
-    }
-
-    // Insert steps if any
-    if (order.steps && order.steps.length > 0) {
-      const { error: stepsError } = await supabase.from('order_steps').insert(
-        order.steps.map(step => ({
-          order_id: orderId,
-          template_id: step.templateId,
-          name: step.name,
-          status: step.status,
-          object_id: step.objectId || null,
-          planned_start: step.plannedStart || null,
-          planned_end: step.plannedEnd || null,
-          actual_start: step.actualStart || null,
-          actual_end: step.actualEnd || null,
-          price: step.price ?? null,
-        }))
-      );
-      if (stepsError) throw stepsError;
     }
 
     // Insert article rows if any
