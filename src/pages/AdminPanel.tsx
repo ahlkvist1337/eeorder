@@ -29,11 +29,28 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Plus, Loader2, UserPlus } from 'lucide-react';
+import { Loader2, UserPlus, MoreHorizontal, Trash2, KeyRound } from 'lucide-react';
 import type { AppRole, Profile, UserWithRole } from '@/types/auth';
+import { useAuth } from '@/contexts/AuthContext';
 
 const roleLabels: Record<AppRole, string> = {
   admin: 'Admin',
@@ -49,6 +66,7 @@ const roleBadgeVariants: Record<AppRole, 'default' | 'secondary' | 'outline'> = 
 
 export default function AdminPanel() {
   useDocumentTitle('Admin');
+  const { user } = useAuth();
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -59,6 +77,17 @@ export default function AdminPanel() {
   const [newPassword, setNewPassword] = useState('');
   const [newFullName, setNewFullName] = useState('');
   const [newRole, setNewRole] = useState<AppRole>('lasa');
+
+  // Delete confirmation state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserWithRole | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Password reset state
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [userToResetPassword, setUserToResetPassword] = useState<UserWithRole | null>(null);
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   const fetchUsers = async () => {
     try {
@@ -183,6 +212,77 @@ export default function AdminPanel() {
     }
   };
 
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-user', {
+        body: {
+          action: 'delete',
+          userId: userToDelete.id,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success('Användare raderad');
+      setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id));
+      setDeleteDialogOpen(false);
+      setUserToDelete(null);
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      toast.error(error.message || 'Kunde inte radera användare');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!userToResetPassword || !newUserPassword) return;
+
+    if (newUserPassword.length < 6) {
+      toast.error('Lösenordet måste vara minst 6 tecken');
+      return;
+    }
+
+    setIsResettingPassword(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-user', {
+        body: {
+          action: 'resetPassword',
+          userId: userToResetPassword.id,
+          newPassword: newUserPassword,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success('Lösenord uppdaterat');
+      setPasswordDialogOpen(false);
+      setUserToResetPassword(null);
+      setNewUserPassword('');
+    } catch (error: any) {
+      console.error('Error resetting password:', error);
+      toast.error(error.message || 'Kunde inte uppdatera lösenord');
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
+  const openDeleteDialog = (userItem: UserWithRole) => {
+    setUserToDelete(userItem);
+    setDeleteDialogOpen(true);
+  };
+
+  const openPasswordDialog = (userItem: UserWithRole) => {
+    setUserToResetPassword(userItem);
+    setNewUserPassword('');
+    setPasswordDialogOpen(true);
+  };
+
   if (isLoading) {
     return (
       <Layout>
@@ -299,24 +399,25 @@ export default function AdminPanel() {
                 <TableHead>E-post</TableHead>
                 <TableHead>Roll</TableHead>
                 <TableHead className="text-center">Aktiv</TableHead>
+                <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.id}>
+              {users.map((userItem) => (
+                <TableRow key={userItem.id}>
                   <TableCell className="font-medium">
-                    {user.full_name || '-'}
+                    {userItem.full_name || '-'}
                   </TableCell>
-                  <TableCell>{user.email}</TableCell>
+                  <TableCell>{userItem.email}</TableCell>
                   <TableCell>
                     <Select
-                      value={user.roles[0] || 'lasa'}
-                      onValueChange={(v) => handleChangeRole(user.id, v as AppRole)}
+                      value={userItem.roles[0] || 'lasa'}
+                      onValueChange={(v) => handleChangeRole(userItem.id, v as AppRole)}
                     >
                       <SelectTrigger className="w-32">
                         <SelectValue>
-                          <Badge variant={roleBadgeVariants[user.roles[0] || 'lasa']}>
-                            {roleLabels[user.roles[0] || 'lasa']}
+                          <Badge variant={roleBadgeVariants[userItem.roles[0] || 'lasa']}>
+                            {roleLabels[userItem.roles[0] || 'lasa']}
                           </Badge>
                         </SelectValue>
                       </SelectTrigger>
@@ -329,17 +430,40 @@ export default function AdminPanel() {
                   </TableCell>
                   <TableCell className="text-center">
                     <Switch
-                      checked={user.is_active}
+                      checked={userItem.is_active}
                       onCheckedChange={(checked) =>
-                        handleToggleActive(user.id, checked)
+                        handleToggleActive(userItem.id, checked)
                       }
                     />
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openPasswordDialog(userItem)}>
+                          <KeyRound className="h-4 w-4 mr-2" />
+                          Ändra lösenord
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => openDeleteDialog(userItem)}
+                          className="text-destructive focus:text-destructive"
+                          disabled={userItem.id === user?.id}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Radera användare
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))}
               {users.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                     Inga användare hittades
                   </TableCell>
                 </TableRow>
@@ -350,42 +474,67 @@ export default function AdminPanel() {
 
         {/* Mobile card list */}
         <div className="md:hidden space-y-3">
-          {users.map((user) => (
-            <div key={user.id} className="border rounded-lg p-4 bg-card space-y-3">
+          {users.map((userItem) => (
+            <div key={userItem.id} className="border rounded-lg p-4 bg-card space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate">{user.full_name || '-'}</p>
-                  <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+                  <p className="font-medium truncate">{userItem.full_name || '-'}</p>
+                  <p className="text-sm text-muted-foreground truncate">{userItem.email}</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => openPasswordDialog(userItem)}>
+                        <KeyRound className="h-4 w-4 mr-2" />
+                        Ändra lösenord
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => openDeleteDialog(userItem)}
+                        className="text-destructive focus:text-destructive"
+                        disabled={userItem.id === user?.id}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Radera användare
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Roll:</span>
+                  <Select
+                    value={userItem.roles[0] || 'lasa'}
+                    onValueChange={(v) => handleChangeRole(userItem.id, v as AppRole)}
+                  >
+                    <SelectTrigger className="w-32">
+                      <SelectValue>
+                        <Badge variant={roleBadgeVariants[userItem.roles[0] || 'lasa']}>
+                          {roleLabels[userItem.roles[0] || 'lasa']}
+                        </Badge>
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="redigera">Redigera</SelectItem>
+                      <SelectItem value="lasa">Läsa</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">Aktiv</span>
                   <Switch
-                    checked={user.is_active}
+                    checked={userItem.is_active}
                     onCheckedChange={(checked) =>
-                      handleToggleActive(user.id, checked)
+                      handleToggleActive(userItem.id, checked)
                     }
                   />
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Roll:</span>
-                <Select
-                  value={user.roles[0] || 'lasa'}
-                  onValueChange={(v) => handleChangeRole(user.id, v as AppRole)}
-                >
-                  <SelectTrigger className="w-32">
-                    <SelectValue>
-                      <Badge variant={roleBadgeVariants[user.roles[0] || 'lasa']}>
-                        {roleLabels[user.roles[0] || 'lasa']}
-                      </Badge>
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="redigera">Redigera</SelectItem>
-                    <SelectItem value="lasa">Läsa</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
           ))}
@@ -396,6 +545,86 @@ export default function AdminPanel() {
           )}
         </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Radera användare</AlertDialogTitle>
+            <AlertDialogDescription>
+              Är du säker på att du vill radera{' '}
+              <strong>{userToDelete?.full_name || userToDelete?.email}</strong>?
+              <br />
+              <br />
+              Detta kan inte ångras. Användaren kommer att tas bort permanent.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteUser}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Raderar...
+                </>
+              ) : (
+                'Radera'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Password reset dialog */}
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ändra lösenord</DialogTitle>
+            <DialogDescription>
+              Ange ett nytt lösenord för{' '}
+              <strong>{userToResetPassword?.full_name || userToResetPassword?.email}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="space-y-2">
+              <Label htmlFor="reset-password">Nytt lösenord</Label>
+              <Input
+                id="reset-password"
+                type="password"
+                value={newUserPassword}
+                onChange={(e) => setNewUserPassword(e.target.value)}
+                placeholder="Minst 6 tecken"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPasswordDialogOpen(false)}
+              disabled={isResettingPassword}
+            >
+              Avbryt
+            </Button>
+            <Button
+              onClick={handleResetPassword}
+              disabled={isResettingPassword || !newUserPassword}
+            >
+              {isResettingPassword ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sparar...
+                </>
+              ) : (
+                'Spara lösenord'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
