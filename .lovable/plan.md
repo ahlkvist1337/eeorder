@@ -1,204 +1,241 @@
 
-
-# Plan: Prislistans medvetenhet i artikelradseditor
+# Plan: Förbättrad statistik med produktionsfokus
 
 ## Sammanfattning
 
-Lägger till diskret prislistajämförelse i ArticleRowsEditor som visas **endast när priset skiljer sig** - utan att störa arbetsflödet eller blockera sparande.
+Delar upp statistiksidan i två tydliga block:
+1. **Affär & uppföljning** (befintligt) - ordrar, fakturering, avvikelser
+2. **Produktion & flöde** (nytt) - arbetskort i realtid
+
+Inga diagram eller trender - bara siffror som hjälper att prioritera och se problem tidigt.
 
 ---
 
-## Hur det fungerar
+## Nya produktionsnyckeltal
 
-### Bakgrundslogik (tyst)
-När användaren redigerar eller lägger till en artikelrad:
-1. Systemet söker i prislistan efter:
-   - **Exakt match på artikelnummer** (stark träff)
-   - **Liknande benämning** (svag träff, enkel ordmatchning)
-2. Om träff hittas med **annat pris** → visa diskret notis
-3. Om samma pris eller ingen träff → inget visas
+### Block A: Arbetskort just nu
+| Nyckeltal | Källa | Beskrivning |
+|-----------|-------|-------------|
+| Pågående | `status = 'arrived' OR 'started'` | Hur mycket har vi på golvet? |
+| Väntande | `status = 'waiting'` | Vad väntar på ankomst? |
+| Klara idag | `lifecycle_events` med `event_type = 'completed'` och dagens datum | Vad har vi levererat idag? |
 
-### UI-placering
-Notisen visas direkt **under prisfältet** i redigeringsläge - inte som popup eller modal.
+### Block B: Ålder och varningar
+| Nyckeltal | Beräkning | Beskrivning |
+|-----------|-----------|-------------|
+| Äldsta pågående | Tid sedan äldsta `arrived`-event | "Här borde vi titta" |
+| Försenade | Arbetskort där `NOW() > order.planned_end` och `status IN (arrived, started)` | Antal som passerat planerat slutdatum |
+
+### Block C: Ledtid per arbetskort
+| Nyckeltal | Beräkning | Beskrivning |
+|-----------|-----------|-------------|
+| Verklig ledtid (snitt) | Tid mellan `arrived`- och `completed`-events per arbetskort | Faktisk produktionstid |
+| Planerad vs verklig | Jämför med order-planerade datum | Hur bra planerar vi? |
+
+---
+
+## Förändringar i UI
+
+### Ny struktur
 
 ```text
-┌────────────────────────────────────────────────────────────────┐
-│ Rad │ Artikelnr │ Beskrivning    │ Antal │ Enhet │ Pris       │
-├─────┼───────────┼────────────────┼───────┼───────┼────────────┤
-│ [1] │ [ABC123 ] │ [Blästring   ] │ [2  ] │ [st.] │ [1 500   ] │
-│     │           │                │       │       │ ⚠ Pris i   │
-│     │           │                │       │       │ prislistan:│
-│     │           │                │       │       │ 1 250 kr   │
-│     │           │                │       │       │ [Använd]   │
-└─────┴───────────┴────────────────┴───────┴───────┴────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│ STATISTIK                                                           │
+│ Översikt av orderhanteringen                                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│ ═══ PRODUKTION & FLÖDE ═══════════════════════════════════════════ │
+│                                                                     │
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────────┐│
+│ │ Pågående    │ │ Väntande    │ │ Klara idag  │ │ Försenade       ││
+│ │ arbetskort  │ │ arbetskort  │ │             │ │ arbetskort      ││
+│ │     2       │ │     7       │ │     0       │ │     0           ││
+│ │             │ │             │ │             │ │ (röd om > 0)    ││
+│ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────────┘│
+│                                                                     │
+│ ┌───────────────────────────┐ ┌───────────────────────────────────┐│
+│ │ Äldsta pågående           │ │ Ledtid per arbetskort (snitt)     ││
+│ │ arbetskort                │ │                                   ││
+│ │     < 1 dag               │ │   Verklig: 3 dagar                ││
+│ │     (21270)               │ │   Planerad: 5 dagar               ││
+│ └───────────────────────────┘ └───────────────────────────────────┘│
+│                                                                     │
+│ ═══ AFFÄR & UPPFÖLJNING ══════════════════════════════════════════ │
+│                                                                     │
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────────┐│
+│ │ Aktiva      │ │ Avslutade   │ │ Fakturerade │ │ Avvikelser      ││
+│ │ ordrar      │ │ ordrar      │ │ ordrar      │ │                 ││
+│ │     5       │ │    12       │ │     8       │ │     1           ││
+│ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────────┘│
+│                                                                     │
+│ (resten av befintlig statistik)                                     │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Åtgärder från notisen (ett klick)
-1. **"Använd"** - Ersätter priset med prislistans värde
-2. **Ignorera** - Stäng notisen och fortsätt (inget klick krävs)
+### Förbättring av tomma värden
+- "Verklig ledtid" visar `- (ej tillräcklig data)` istället för bara `-`
+- Tydligare att data kommer när fler ordrar slutförs
 
----
-
-## Vad som INTE händer
-
-- Ingen blockering av sparande
-- Inget krav på beslut
-- Ingen automatisk prisändring
-- Inga popup-dialoger eller modaler
-- Ingen "smart" gissning av liknande artiklar
+### Ta bort sammanfattningskortet
+- Sammanfattningen längst ner upprepar information
+- Tas bort för renare vy
 
 ---
 
 ## Teknisk implementation
 
-### 1. Ny hook: `usePriceListLookup`
-Skapar en lätt hook som:
-- Hämtar prislistan en gång vid mount
-- Exponerar en `findMatch(partNumber, description)` funktion
-- Returnerar bästa träff med pris och matchtyp
+### 1. Ny hook: `useProductionStats`
+
+Skapar en dedikerad hook som hämtar arbetskorts-statistik direkt från databasen för bättre prestanda:
 
 ```typescript
-// src/hooks/usePriceListLookup.ts
+// src/hooks/useProductionStats.ts
 
-interface PriceMatch {
-  price: number;
-  partNumber: string;
-  description: string;
-  matchType: 'exact_part' | 'similar_desc';
+interface ProductionStats {
+  inProgress: number;      // arrived + started
+  waiting: number;         // waiting
+  completedToday: number;  // completed today via lifecycle events
+  overdue: number;         // past planned_end and still active
+  oldestActiveInfo: {
+    days: number;
+    truckNumber: string;
+  } | null;
+  avgLeadTimeDays: number; // from arrived to completed
 }
 
-function usePriceListLookup() {
-  const [prices, setPrices] = useState<PriceListItem[]>([]);
-  
-  // Hämta prislistan en gång
-  useEffect(() => {
-    supabase
-      .from('price_list')
-      .select('*')
-      .then(({ data }) => setPrices(data || []));
-  }, []);
-  
-  const findMatch = useCallback((partNumber: string, description: string): PriceMatch | null => {
-    // 1. Exakt artikelnummer-match (stark)
-    const exactMatch = prices.find(p => 
-      p.part_number.trim().toLowerCase() === partNumber.trim().toLowerCase()
-    );
-    if (exactMatch) {
-      return { 
-        price: exactMatch.price, 
-        partNumber: exactMatch.part_number,
-        description: exactMatch.description,
-        matchType: 'exact_part' 
-      };
-    }
+function useProductionStats() {
+  // Query 1: Count trucks by status
+  const statusCounts = await supabase
+    .from('object_trucks')
+    .select('status');
     
-    // 2. Enkel ordmatchning på beskrivning (svag)
-    // Matcha om minst 2 ord överlappar
-    const descWords = description.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-    const matches = prices.filter(p => {
-      const priceWords = p.description.toLowerCase().split(/\s+/);
-      const overlap = descWords.filter(w => priceWords.includes(w));
-      return overlap.length >= 2;
-    });
+  // Query 2: Completed today from lifecycle events
+  const completedToday = await supabase
+    .from('truck_lifecycle_events')
+    .select('*')
+    .eq('event_type', 'completed')
+    .gte('timestamp', startOfToday);
     
-    if (matches.length > 0) {
-      // Ta den senast uppdaterade
-      const best = matches.sort((a, b) => 
-        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-      )[0];
-      return { 
-        price: best.price, 
-        partNumber: best.part_number,
-        description: best.description,
-        matchType: 'similar_desc' 
-      };
-    }
+  // Query 3: Oldest active truck
+  const oldestActive = await supabase
+    .from('truck_lifecycle_events')
+    .select('truck_id, truck_number, timestamp')
+    .eq('event_type', 'arrived')
+    .in('truck_id', activeIds)
+    .order('timestamp', { ascending: true })
+    .limit(1);
     
-    return null;
-  }, [prices]);
+  // Query 4: Overdue trucks
+  const overdue = ... // Join with orders to check planned_end
   
-  return { findMatch, isReady: prices.length > 0 };
+  // Query 5: Lead time calculation
+  const leadTimes = ... // Calculate arrived → completed times
 }
 ```
 
-### 2. Uppdatering av ArticleRowsEditor
-
-Lägg till prislistematchning i redigeringsläge:
+### 2. Uppdatering av Statistics.tsx
 
 **Nya imports och state:**
 ```typescript
-import { usePriceListLookup } from '@/hooks/usePriceListLookup';
+import { useProductionStats } from '@/hooks/useProductionStats';
+import { Truck, Timer, AlertCircle, Factory } from 'lucide-react';
 
-// Inuti komponenten:
-const { findMatch } = usePriceListLookup();
-const [priceHint, setPriceHint] = useState<{
-  match: PriceMatch;
-  currentPrice: number;
-} | null>(null);
+const { 
+  inProgress, 
+  waiting, 
+  completedToday, 
+  overdue,
+  oldestActiveInfo,
+  avgLeadTimeDays,
+  isLoading: statsLoading 
+} = useProductionStats();
 ```
 
-**I redigeringsläge - under prisfältet:**
+**Ny sektion före befintliga kort:**
 ```tsx
-{/* Visa prishintar endast om prislistan har annat pris */}
-{priceHint && priceHint.match.price !== priceHint.currentPrice && (
-  <div className="flex items-center gap-2 text-xs text-amber-600 mt-1">
-    <span>
-      Prislistan: {priceHint.match.price.toLocaleString('sv-SE')} kr
-      {priceHint.match.matchType === 'similar_desc' && ' (liknande)'}
-    </span>
-    <Button 
-      variant="link" 
-      size="sm" 
-      className="h-auto p-0 text-xs"
-      onClick={() => {
-        setEditForm({ ...editForm, price: priceHint.match.price });
-        setPriceHint(null);
-      }}
-    >
-      Använd
-    </Button>
-  </div>
-)}
-```
-
-**Uppdatera prishinten vid ändringar:**
-```typescript
-// I useEffect eller onChange för artikelnummer/beskrivning/pris:
-useEffect(() => {
-  if (!editingRowId) {
-    setPriceHint(null);
-    return;
-  }
+{/* Produktion & flöde */}
+<div className="space-y-4">
+  <h2 className="text-lg font-semibold text-muted-foreground">
+    Produktion & flöde
+  </h2>
   
-  const match = findMatch(editForm.partNumber || '', editForm.text || '');
-  if (match && match.price !== editForm.price) {
-    setPriceHint({ match, currentPrice: editForm.price || 0 });
-  } else {
-    setPriceHint(null);
-  }
-}, [editForm.partNumber, editForm.text, editForm.price, editingRowId, findMatch]);
-```
-
-### 3. Samma logik för "Lägg till ny rad"
-
-Samma prishintar visas även när användaren lägger till en ny rad:
-
-```tsx
-// I "isAdding" raden, under prisfältet:
-{newRowPriceHint && newRowPriceHint.match.price !== (newRow.price || 0) && (
-  <div className="flex items-center gap-2 text-xs text-amber-600 mt-1">
-    <span>Prislistan: {newRowPriceHint.match.price.toLocaleString('sv-SE')} kr</span>
-    <Button 
-      variant="link" 
-      size="sm" 
-      className="h-auto p-0 text-xs"
-      onClick={() => setNewRow({ ...newRow, price: newRowPriceHint.match.price })}
-    >
-      Använd
-    </Button>
+  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <StatCard
+      title="Pågående arbetskort"
+      value={inProgress}
+      subtitle="Ankommen + Startad"
+      icon={Factory}
+    />
+    <StatCard
+      title="Väntande arbetskort"
+      value={waiting}
+      icon={Timer}
+    />
+    <StatCard
+      title="Klara idag"
+      value={completedToday}
+      icon={CheckCircle2}
+    />
+    <StatCard
+      title="Försenade arbetskort"
+      value={overdue}
+      icon={AlertCircle}
+      className={overdue > 0 ? 'border-destructive/50' : ''}
+    />
   </div>
-)}
+  
+  <div className="grid gap-4 md:grid-cols-2">
+    <Card>
+      <CardHeader>
+        <CardTitle>Äldsta pågående arbetskort</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="text-3xl font-bold">
+          {oldestActiveInfo 
+            ? `${oldestActiveInfo.days} dagar` 
+            : '-'}
+        </div>
+        {oldestActiveInfo && (
+          <p className="text-sm text-muted-foreground mt-1">
+            #{oldestActiveInfo.truckNumber}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+    
+    <Card>
+      <CardHeader>
+        <CardTitle>Ledtid per arbetskort (snitt)</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="text-3xl font-bold">
+          {avgLeadTimeDays > 0 
+            ? `${avgLeadTimeDays} dagar` 
+            : '- (ej tillräcklig data)'}
+        </div>
+        <p className="text-sm text-muted-foreground mt-1">
+          Från Ankommen till Klar
+        </p>
+      </CardContent>
+    </Card>
+  </div>
+</div>
+
+<Separator className="my-6" />
+
+{/* Affär & uppföljning - befintlig kod */}
+<div className="space-y-4">
+  <h2 className="text-lg font-semibold text-muted-foreground">
+    Affär & uppföljning
+  </h2>
+  {/* ... befintliga kort ... */}
+</div>
 ```
+
+### 3. Ta bort sammanfattningskortet
+
+Ta bort hela `<Card>` med `<CardTitle>Sammanfattning</CardTitle>` i slutet av sidan.
 
 ---
 
@@ -206,36 +243,24 @@ Samma prishintar visas även när användaren lägger till en ny rad:
 
 | Fil | Ändring |
 |-----|---------|
-| `src/hooks/usePriceListLookup.ts` | **NY FIL** - Lätt hook för prislistamatchning |
-| `src/components/ArticleRowsEditor.tsx` | Lägg till prishintar under prisfältet vid redigering/tillägg |
+| `src/hooks/useProductionStats.ts` | **NY FIL** - Hook för arbetskorts-statistik |
+| `src/pages/Statistics.tsx` | Lägg till produktionssektion, ta bort sammanfattning |
 
 ---
 
-## Visuell design
+## Designprinciper
 
-Notisen är:
-- **Diskret** - Liten text i dämpad färg (amber/gul)
-- **Icke-blockerande** - Användaren kan ignorera den helt
-- **Direkt placerad** - Under prisfältet, inte någon annanstans
-- **Enkel att agera på** - Ett klick för att använda priset
+- **Bara siffror** - inga diagram, grafer eller trender
+- **Produktionschefens verktyg** - svarar på "hur ser det ut just nu?"
+- **Varningar utan larm** - försenade kort markeras diskret
+- **Snabb överblick** - all viktig info synlig direkt
 
-```text
-Prislistan: 1 250 kr [Använd]
-```
+## Vad som INTE ingår
 
-Ingen röd varning. Ingen modal. Inget som stoppar flödet.
+- Diagram per kund
+- Diagram per objekt
+- Trender över tid
+- Prognoser
+- Historisk jämförelse
 
----
-
-## Matchningslogik (förnuftig nivå)
-
-| Matchtyp | Kriterium | Visning |
-|----------|-----------|---------|
-| Exakt artikelnummer | `part_number` matchar exakt (case-insensitive) | Visa alltid om pris skiljer |
-| Liknande beskrivning | Minst 2 ord gemensamma (>2 bokstäver) | Visa med "(liknande)" |
-
-**Aldrig:**
-- Automatisk prisändring
-- "Vi tror detta är samma sak"
-- Tvingande val
-
+Allt detta är version 2.
