@@ -80,9 +80,13 @@ export function useProductionStats(): ProductionStats {
     if (arrivedEventsForActive.length > 0) {
       const oldest = arrivedEventsForActive[0];
       const days = differenceInDays(now, new Date(oldest.timestamp));
+      
+      // Hämta truck_number från object_trucks istället för events
+      const truck = trucks.find(t => t.id === oldest.truck_id);
+      
       oldestActiveInfo = {
         days,
-        truckNumber: oldest.truck_number || 'Okänt'
+        truckNumber: truck?.truck_number || 'Okänt'
       };
     }
 
