@@ -32,7 +32,7 @@ import type { ProductionStatus, BillingStatus, OrderStep, OrderObject, TruckStat
 import { StepStatusBadge } from '@/components/StatusBadge';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { syncWorkCardsForObject, getLinkedArticleRows } from '@/lib/workCardSync';
+
 
 export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
@@ -177,39 +177,11 @@ export default function OrderDetails() {
   const handleArticleRowsChange = async (rows: ArticleRow[]) => {
     const newTotal = rows.reduce((sum, row) => sum + row.price * row.quantity, 0);
     
-    // Auto-sync work cards for objects that have linked article rows
-    let updatedObjects = [...(order.objects || [])];
-    let objectsNeedUpdate = false;
-    
-    for (const obj of updatedObjects) {
-      const linkedRows = getLinkedArticleRows(obj.id, rows);
-      if (linkedRows.length > 0) {
-        const objectSteps = order.steps.filter(s => s.objectId === obj.id);
-        const syncedTrucks = syncWorkCardsForObject(obj, objectSteps, linkedRows);
-        
-        // Only update if new trucks were added
-        if (syncedTrucks.length > (obj.trucks?.length || 0)) {
-          obj.trucks = syncedTrucks;
-          objectsNeedUpdate = true;
-        }
-      }
-    }
-    
     try {
-      if (objectsNeedUpdate) {
-        // Update both article rows and objects (with new work cards)
-        await updateOrder(order.id, { 
-          articleRows: rows,
-          totalPrice: newTotal,
-          objects: updatedObjects,
-        });
-        toast.success('Arbetskort skapade automatiskt');
-      } else {
-        await updateOrder(order.id, { 
-          articleRows: rows,
-          totalPrice: newTotal
-        });
-      }
+      await updateOrder(order.id, { 
+        articleRows: rows,
+        totalPrice: newTotal
+      });
     } catch (error) {
       console.error('Error updating article rows:', error);
       toast.error('Kunde inte spara ändringar');
@@ -456,7 +428,6 @@ export default function OrderDetails() {
                   onStepsChange={(newSteps) => handleObjectsAndStepsChange(order.objects || [], newSteps)}
                   onTruckStatusChange={handleTruckStatusChange}
                   onTruckStepStatusChange={handleTruckStepStatusChange}
-                  articleRows={order.articleRows || []}
                 />
               </CardContent>
             </Card>
@@ -474,7 +445,6 @@ export default function OrderDetails() {
                   rows={order.articleRows || []}
                   onRowsChange={handleArticleRowsChange}
                   showTotal={true}
-                  objects={order.objects || []}
                 />
               </CardContent>
             </Card>
