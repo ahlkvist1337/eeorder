@@ -1,13 +1,16 @@
 import { useMemo } from 'react';
-import { BarChart3, CheckCircle2, Clock, DollarSign, AlertTriangle, Package } from 'lucide-react';
+import { BarChart3, CheckCircle2, Clock, DollarSign, AlertTriangle, Package, Factory, Timer, AlertCircle } from 'lucide-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import { useOrders } from '@/hooks/useOrders';
+import { useProductionStats } from '@/hooks/useProductionStats';
 
 export default function Statistics() {
   useDocumentTitle('Statistik');
   const { orders } = useOrders();
+  const productionStats = useProductionStats();
 
   const stats = useMemo(() => {
     const activeStatuses = ['created', 'planned', 'started', 'paused', 'arrived'];
@@ -20,30 +23,6 @@ export default function Statistics() {
 
     const billedValue = billedOrders.reduce((sum, o) => sum + o.totalPrice, 0);
     const readyValue = readyForBilling.reduce((sum, o) => sum + o.totalPrice, 0);
-
-    // Calculate average lead time from actual status history (Arrived → Completed)
-    let avgLeadTimeDays = 0;
-    const ordersWithLeadTime: number[] = [];
-
-    completedOrders.forEach(order => {
-      const arrivedEntry = order.statusHistory.find(h => h.toStatus === 'arrived');
-      const completedEntry = order.statusHistory.find(h => h.toStatus === 'completed');
-      
-      if (arrivedEntry && completedEntry) {
-        const arrivedDate = new Date(arrivedEntry.timestamp);
-        const completedDate = new Date(completedEntry.timestamp);
-        const days = Math.ceil((completedDate.getTime() - arrivedDate.getTime()) / (1000 * 60 * 60 * 24));
-        if (days >= 0) {
-          ordersWithLeadTime.push(days);
-        }
-      }
-    });
-
-    if (ordersWithLeadTime.length > 0) {
-      avgLeadTimeDays = Math.round(
-        ordersWithLeadTime.reduce((sum, d) => sum + d, 0) / ordersWithLeadTime.length
-      );
-    }
 
     // Calculate planned average lead time (from plannedStart to plannedEnd)
     let avgPlannedLeadTimeDays = 0;
@@ -68,7 +47,6 @@ export default function Statistics() {
       deviations: deviationOrders.length,
       billedValue,
       readyValue,
-      avgLeadTimeDays,
       avgPlannedLeadTimeDays,
     };
   }, [orders]);
@@ -110,98 +88,166 @@ export default function Statistics() {
           <p className="text-muted-foreground">Översikt av orderhanteringen</p>
         </div>
 
-        {/* Order counts */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Aktiva ordrar"
-            value={stats.active}
-            subtitle={`Av totalt ${stats.total} ordrar`}
-            icon={Package}
-          />
-          <StatCard
-            title="Avslutade ordrar"
-            value={stats.completed}
-            icon={CheckCircle2}
-          />
-          <StatCard
-            title="Fakturerade ordrar"
-            value={stats.billed}
-            icon={DollarSign}
-          />
-          <StatCard
-            title="Avvikelser"
-            value={stats.deviations}
-            icon={AlertTriangle}
-            className={stats.deviations > 0 ? 'border-destructive/50' : ''}
-          />
+        {/* Produktion & flöde */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-muted-foreground">
+            Produktion & flöde
+          </h2>
+          
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              title="Pågående arbetskort"
+              value={productionStats.inProgress}
+              subtitle="Ankommen + Startad"
+              icon={Factory}
+            />
+            <StatCard
+              title="Väntande arbetskort"
+              value={productionStats.waiting}
+              icon={Timer}
+            />
+            <StatCard
+              title="Klara idag"
+              value={productionStats.completedToday}
+              icon={CheckCircle2}
+            />
+            <StatCard
+              title="Försenade arbetskort"
+              value={productionStats.overdue}
+              icon={AlertCircle}
+              className={productionStats.overdue > 0 ? 'border-destructive/50' : ''}
+            />
+          </div>
+          
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Äldsta pågående arbetskort
+                </CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">
+                  {productionStats.oldestActiveInfo 
+                    ? productionStats.oldestActiveInfo.days === 0 
+                      ? '< 1 dag'
+                      : `${productionStats.oldestActiveInfo.days} dagar`
+                    : '-'}
+                </div>
+                {productionStats.oldestActiveInfo && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    #{productionStats.oldestActiveInfo.truckNumber}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Ledtid per arbetskort (snitt)
+                </CardTitle>
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">
+                  {productionStats.avgLeadTimeDays > 0 
+                    ? `${productionStats.avgLeadTimeDays} dagar` 
+                    : '- (ej tillräcklig data)'}
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Från Ankommen till Klar
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
-        {/* Financial overview */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Fakturerat värde
-              </CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">
-                {stats.billedValue.toLocaleString('sv-SE')} kr
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                Från {stats.billed} fakturerade ordrar
-              </p>
-            </CardContent>
-          </Card>
+        <Separator />
 
+        {/* Affär & uppföljning */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-muted-foreground">
+            Affär & uppföljning
+          </h2>
+
+          {/* Order counts */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              title="Aktiva ordrar"
+              value={stats.active}
+              subtitle={`Av totalt ${stats.total} ordrar`}
+              icon={Package}
+            />
+            <StatCard
+              title="Avslutade ordrar"
+              value={stats.completed}
+              icon={CheckCircle2}
+            />
+            <StatCard
+              title="Fakturerade ordrar"
+              value={stats.billed}
+              icon={DollarSign}
+            />
+            <StatCard
+              title="Avvikelser"
+              value={stats.deviations}
+              icon={AlertTriangle}
+              className={stats.deviations > 0 ? 'border-destructive/50' : ''}
+            />
+          </div>
+
+          {/* Financial overview */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Fakturerat värde
+                </CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">
+                  {stats.billedValue.toLocaleString('sv-SE')} kr
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Från {stats.billed} fakturerade ordrar
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Klar för fakturering
+                </CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">
+                  {stats.readyValue.toLocaleString('sv-SE')} kr
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {stats.readyForBilling} ordrar väntar på fakturering
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Lead time - order level */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Klar för fakturering
+                Planerad ledtid per order (snitt)
               </CardTitle>
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
-                {stats.readyValue.toLocaleString('sv-SE')} kr
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                {stats.readyForBilling} ordrar väntar på fakturering
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Lead time comparison */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Verklig ledtid (snitt)
-              </CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">
-                {stats.avgLeadTimeDays > 0 ? `${stats.avgLeadTimeDays} dagar` : '-'}
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                Från Ankommen till Avslutad
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Planerad ledtid (snitt)
-              </CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">
-                {stats.avgPlannedLeadTimeDays > 0 ? `${stats.avgPlannedLeadTimeDays} dagar` : '-'}
+                {stats.avgPlannedLeadTimeDays > 0 
+                  ? `${stats.avgPlannedLeadTimeDays} dagar` 
+                  : '- (ej tillräcklig data)'}
               </div>
               <p className="text-sm text-muted-foreground mt-1">
                 Baserat på planerade datum
@@ -209,33 +255,6 @@ export default function Statistics() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Sammanfattning</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-              <div className="space-y-1">
-                <p className="text-muted-foreground">Totalt antal ordrar</p>
-                <p className="text-2xl font-semibold">{stats.total}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-muted-foreground">Aktiva</p>
-                <p className="text-2xl font-semibold text-primary">{stats.active}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-muted-foreground">Avslutade</p>
-                <p className="text-2xl font-semibold text-[hsl(var(--status-completed))]">{stats.completed}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-muted-foreground">Avbrutna</p>
-                <p className="text-2xl font-semibold text-[hsl(var(--status-cancelled))]">{stats.cancelled}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </Layout>
   );
