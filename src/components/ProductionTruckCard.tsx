@@ -133,28 +133,28 @@ export function ProductionTruckCard({
                 <div 
                   key={step.id}
                   className={cn(
-                    'flex items-center gap-2 text-sm py-1 px-2 rounded-md transition-colors',
+                    'flex items-center gap-2 text-sm py-2 px-3 rounded-md transition-colors min-h-[44px]',
                     isCurrent && 'bg-muted/50'
                   )}
                 >
                   <div className={cn(
-                    'w-4 h-4 rounded-full ring-2 flex-shrink-0 flex items-center justify-center text-xs',
+                    'w-5 h-5 rounded-full ring-2 flex-shrink-0 flex items-center justify-center text-xs',
                     stepColors.bg,
                     stepColors.ring
                   )}>
                     {status === 'completed' && (
-                      <span className="text-white text-[10px]">✓</span>
+                      <span className="text-white text-xs">✓</span>
                     )}
                   </div>
                   <span className={cn(
-                    'truncate',
+                    'flex-1',
                     status === 'completed' && 'text-muted-foreground line-through',
                     isCurrent && 'font-medium'
                   )}>
                     {step.name}
                   </span>
                   {isCurrent && (
-                    <span className="text-xs text-muted-foreground ml-auto">←</span>
+                    <span className="text-xs text-muted-foreground">←</span>
                   )}
                 </div>
               );

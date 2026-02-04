@@ -164,88 +164,91 @@ export function ObjectTrucksEditor({
               placeholder="ID (valfritt)..."
               value={newTruckNumber}
               onChange={(e) => setNewTruckNumber(e.target.value)}
-              className="h-7 w-24 text-sm"
+              className="h-10 w-28 text-sm"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleAddWorkUnit();
               }}
             />
             <Button
               variant="outline"
-              size="sm"
-              className="h-7 text-xs"
+              size="default"
+              className="h-10"
               onClick={handleAddWorkUnit}
             >
-              <Plus className="h-3 w-3 mr-1" />
+              <Plus className="h-4 w-4 mr-1" />
               Lägg till arbetskort
             </Button>
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">Inga arbetskort</p>
+          <p className="text-sm text-muted-foreground">Inga arbetskort</p>
         )}
       </div>
     );
   }
 
   return (
-    <div className="py-1 space-y-1">
-      {/* Truck list - compact rows */}
+    <div className="py-1 space-y-2">
+      {/* Truck list - responsive rows */}
       {trucks.map(truck => {
         const isEditing = editingTruckId === truck.id;
 
         return (
-          <div key={truck.id} className="flex items-center gap-1.5 py-1 px-2 rounded bg-muted/30">
+          <div key={truck.id} className="flex flex-col sm:flex-row sm:items-center gap-2 py-2 px-3 rounded-md bg-muted/30">
             {isEditing ? (
-              <>
+              <div className="flex items-center gap-2">
                 <Input
                   value={editingTruckNumber}
                   onChange={(e) => setEditingTruckNumber(e.target.value)}
-                  className="h-6 w-20 text-xs font-mono"
+                  className="h-9 w-28 text-sm font-mono"
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleSaveEdit();
                     if (e.key === 'Escape') handleCancelEdit();
                   }}
                 />
-                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={handleSaveEdit}>
-                  <Check className="h-3 w-3" />
+                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleSaveEdit}>
+                  <Check className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={handleCancelEdit}>
-                  <X className="h-3 w-3" />
+                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleCancelEdit}>
+                  <X className="h-4 w-4" />
                 </Button>
-              </>
+              </div>
             ) : (
               <>
-                <span className="font-mono font-bold text-xs w-20 truncate" title={getWorkUnitDisplayName(truck.truckNumber, objectName, truck.id)}>
-                  {getWorkUnitDisplayName(truck.truckNumber, objectName, truck.id)}
-                </span>
+                {/* Row 1 on mobile: ID + Status */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="font-mono font-bold text-sm min-w-[60px]" title={getWorkUnitDisplayName(truck.truckNumber, objectName, truck.id)}>
+                    {getWorkUnitDisplayName(truck.truckNumber, objectName, truck.id)}
+                  </span>
+                  
+                  {/* Status dropdown */}
+                  <Select
+                    value={truck.status}
+                    onValueChange={(value: TruckStatus) => {
+                      if (onTruckStatusChange) {
+                        onTruckStatusChange(truck.id, value);
+                      } else {
+                        onTrucksChange(trucks.map(t =>
+                          t.id === truck.id ? { ...t, status: value } : t
+                        ));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className={cn('h-9 w-28 text-sm', truckStatusColors[truck.status])}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(truckStatusLabels) as TruckStatus[]).map(s => (
+                        <SelectItem key={s} value={s} className={cn('text-sm py-2', truckStatusColors[s])}>
+                          {truckStatusLabels[s]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 
-                {/* Status dropdown */}
-                <Select
-                  value={truck.status}
-                  onValueChange={(value: TruckStatus) => {
-                    if (onTruckStatusChange) {
-                      onTruckStatusChange(truck.id, value);
-                    } else {
-                      onTrucksChange(trucks.map(t =>
-                        t.id === truck.id ? { ...t, status: value } : t
-                      ));
-                    }
-                  }}
-                >
-                  <SelectTrigger className={cn('h-6 w-24 text-xs', truckStatusColors[truck.status])}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(truckStatusLabels) as TruckStatus[]).map(s => (
-                      <SelectItem key={s} value={s} className={cn('text-xs', truckStatusColors[s])}>
-                        {truckStatusLabels[s]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                {/* Step status badges */}
-                <div className="flex items-center gap-0.5 flex-1 flex-wrap">
+                {/* Row 2 on mobile: Step status badges */}
+                <div className="flex items-center gap-1.5 flex-1 flex-wrap">
                   {objectSteps.map(step => {
                     const status = getStepStatusForTruck(truck, step.id);
                     const colors = stepStatusColors[status];
@@ -254,7 +257,7 @@ export function ObjectTrucksEditor({
                         key={step.id}
                         onClick={() => handleStepStatusClick(truck.id, step.id, status)}
                         className={cn(
-                          'px-1.5 py-0 rounded text-xs font-medium transition-colors hover:opacity-80 whitespace-nowrap',
+                          'px-3 py-1.5 rounded text-xs font-medium transition-colors hover:opacity-80 whitespace-nowrap min-h-[36px]',
                           colors.bg,
                           colors.text
                         )}
@@ -266,49 +269,52 @@ export function ObjectTrucksEditor({
                   })}
                 </div>
 
-                {isProduction && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5"
-                    onClick={() => handleStartEdit(truck)}
-                    title="Redigera"
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </Button>
-                )}
-                {orderInfo && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      await printWorkCard({
-                        truck,
-                        objectName,
-                        steps: objectSteps,
-                        articleRows,
-                        order: orderInfo,
-                        baseUrl: window.location.origin,
-                      });
-                    }}
-                    title="Skriv ut arbetskort"
-                  >
-                    <Printer className="h-3 w-3" />
-                  </Button>
-                )}
-                {isProduction && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5 text-destructive hover:text-destructive"
-                    onClick={() => handleRemoveTruck(truck.id)}
-                    title="Ta bort"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                )}
+                {/* Row 3 on mobile: Actions */}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {isProduction && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9"
+                      onClick={() => handleStartEdit(truck)}
+                      title="Redigera"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {orderInfo && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await printWorkCard({
+                          truck,
+                          objectName,
+                          steps: objectSteps,
+                          articleRows,
+                          order: orderInfo,
+                          baseUrl: window.location.origin,
+                        });
+                      }}
+                      title="Skriv ut arbetskort"
+                    >
+                      <Printer className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {isProduction && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 text-destructive hover:text-destructive"
+                      onClick={() => handleRemoveTruck(truck.id)}
+                      title="Ta bort"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -317,23 +323,23 @@ export function ObjectTrucksEditor({
 
       {/* Add new work card */}
       {isProduction && (
-        <div className="flex items-center gap-1.5 pt-1">
+        <div className="flex items-center gap-2 pt-2">
           <Input
             placeholder="ID (valfritt)..."
             value={newTruckNumber}
             onChange={(e) => setNewTruckNumber(e.target.value)}
-            className="h-6 w-24 text-xs"
+            className="h-10 w-28 text-sm"
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleAddWorkUnit();
             }}
           />
           <Button
             variant="outline"
-            size="sm"
-            className="h-6 text-xs"
+            size="default"
+            className="h-10"
             onClick={handleAddWorkUnit}
           >
-            <Plus className="h-3 w-3 mr-1" />
+            <Plus className="h-4 w-4 mr-1" />
             Lägg till
           </Button>
         </div>
