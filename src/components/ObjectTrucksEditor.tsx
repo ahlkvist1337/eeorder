@@ -247,8 +247,8 @@ export function ObjectTrucksEditor({
                   </Select>
                 </div>
                 
-                {/* Row 2 on mobile: Step status badges */}
-                <div className="flex items-center gap-1.5 flex-1 flex-wrap">
+                {/* Row 2 on mobile: Step status badges - larger touch targets */}
+                <div className="flex items-center gap-2 flex-1 flex-wrap">
                   {objectSteps.map(step => {
                     const status = getStepStatusForTruck(truck, step.id);
                     const colors = stepStatusColors[status];
@@ -257,7 +257,7 @@ export function ObjectTrucksEditor({
                         key={step.id}
                         onClick={() => handleStepStatusClick(truck.id, step.id, status)}
                         className={cn(
-                          'px-3 py-1.5 rounded text-xs font-medium transition-colors hover:opacity-80 whitespace-nowrap min-h-[36px]',
+                          'px-4 py-2 rounded-md text-sm font-medium transition-colors hover:opacity-80 whitespace-nowrap min-h-[44px]',
                           colors.bg,
                           colors.text
                         )}
