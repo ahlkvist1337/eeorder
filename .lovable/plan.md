@@ -1,222 +1,183 @@
 
-# Plan: Behörighetsbegränsningar för Utförare + Avvikelsesystem
+# Plan: Förbättrad prisindikator för orderartiklar
 
 ## Sammanfattning
 
-Implementerar striktare behörighetskontroller för **Utförare**-rollen och utvecklar ett fullständigt **avvikelseloggsystem** där varje inrapporterad avvikelse sparas med vem som skapade den och när.
+Utvecklar prisvarningssystemet så att en diskret indikator ("Prislistan finns") visas direkt på artikelraden när artikelnummer eller benämning matchar prislistan - utan att användaren behöver redigera raden. Vid klick visas en kompakt prisöversikt med alla tillgängliga priser som speglar prislistans struktur.
 
 ---
 
-## Del 1: Utförare-begränsningar
+## Nuvarande vs Nytt
 
-### Vad som ska begränsas för Utförare
-
-| Funktion | Nuvarande | Nytt |
-|----------|-----------|------|
-| Lägga till/ändra/ta bort behandlingssteg | Tillåtet | Blockerat |
-| Lägga till/ändra/ta bort objekt | Tillåtet | Blockerat |
-| Sortera steg i objekt (drag-and-drop) | Tillåtet | Blockerat |
-| Se statistik | Tillåtet | Blockerat |
-| Se prislista | Tillåtet | Blockerat |
-| Ändra/lägga till artikelrader | Tillåtet | Blockerat |
-| Skriva/ändra orderkommentar | Tillåtet | Endast läsa |
-| Ändra prioritering i produktionsvyn | Tillåtet | Blockerat |
-| Skapa avvikelser | Begränsat | Tillåtet |
-
-### Navigation (Layout.tsx)
-
-Dölj följande menyalternativ för Utförare:
-- **Inställningar** (behandlingssteg/objektmallar)
-- **Statistik**
-- **Prislista**
-
-### OrderDetails.tsx
-
-| Element | Utförare |
-|---------|----------|
-| Kommentarsfält | ReadOnly - visa text utan redigering |
-| Artikelrader | ReadOnly - visa utan edit/add/delete |
-| Planerade datum | ReadOnly - visa utan datumväljare |
-
-### OrderObjectsEditor.tsx
-
-| Element | Utförare |
-|---------|----------|
-| Lägg till objekt | Dolt |
-| Ta bort objekt | Dolt |
-| Lägg till behandlingssteg | Dolt |
-| Ta bort behandlingssteg | Dolt |
-| Drag-and-drop för sortering | Inaktiverat |
-
-### ObjectTrucksEditor.tsx
-
-| Element | Utförare |
-|---------|----------|
-| Lägg till arbetskort | Dolt |
-| Ta bort arbetskort | Dolt |
-| Redigera arbetskortsnummer | Dolt |
-| Ändra arbetskortsstatus | Tillåtet |
-| Klicka på steg för statusändring | Tillåtet |
-| Skriva ut arbetskort | Tillåtet |
-
-### ProductionScreen.tsx
-
-| Element | Utförare |
-|---------|----------|
-| Drag-and-drop prioritering | Blockerat (endast visuellt) |
-| "Återställ ordning"-knappen | Dolt |
-| Klicka på kort för att navigera | Tillåtet |
+| Aspekt | Nuvarande | Nytt |
+|--------|-----------|------|
+| **När visas prisinfo** | Endast vid redigering av prisfältet | Direkt på alla rader som matchar prislistan |
+| **Vad visas** | Enskilt pris + "Använd"-knapp | Badge "Prislista finns" på raden |
+| **Prisöversikt** | Inget | Popover med ALLA prisvarianter vid klick |
+| **Flöde** | Måste redigera för att se | Ser direkt, klickar för detaljer |
 
 ---
 
-## Del 2: Produktion kan ändra orderstatus
-
-Produktion ska kunna ändra orderstatus (Aktiv/Avslutad/Avbruten). Nu är det endast Admin.
-
-**Ändring i OrderDetails.tsx:**
-- Ändra villkoret för orderstatus-dropdown från `isAdmin` till `isProduction`
-
----
-
-## Del 3: Nytt Avvikelsesystem
-
-### Nuvarande implementation
-- Ett `has_deviation` boolean-fält
-- Ett `deviation_comment` textfält  
-- Överskriven vid varje sparning
-
-### Ny implementation
-
-Skapa en **avvikelselogg** där varje avvikelse är en separat post med:
-- Tidsstämpel
-- Vem som rapporterade
-- Avvikelsebeskrivning
-
-### Ny databastabell: `order_deviations`
-
-```sql
-CREATE TABLE public.order_deviations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id uuid NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
-  message text NOT NULL,
-  created_by uuid NOT NULL REFERENCES auth.users(id),
-  created_by_name text NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT now()
-);
-
--- Enable RLS
-ALTER TABLE public.order_deviations ENABLE ROW LEVEL SECURITY;
-
--- All authenticated users can read
-CREATE POLICY "Authenticated users can read order_deviations"
-ON public.order_deviations FOR SELECT
-USING (true);
-
--- All roles can insert (utförare ska kunna rapportera)
-CREATE POLICY "All roles can insert order_deviations"
-ON public.order_deviations FOR INSERT
-WITH CHECK (has_any_role(auth.uid()));
-
--- Production can delete (för att rensa felaktiga)
-CREATE POLICY "Production can delete order_deviations"
-ON public.order_deviations FOR DELETE
-USING (is_production_or_admin(auth.uid()));
-```
-
-### Avvikelse-UI på OrderDetails
-
-Ersätt nuvarande deviation-checkbox + textarea med:
+## Användarflöde
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  ⚠️ AVVIKELSER                                          │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │ Problem med rostangrepp på undersidan.          │   │
-│  │ ──────────────────────────────────────────────  │   │
-│  │ Erik Nilsson • 3 feb 2026 kl 14:32              │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │ Saknas 2 st bultar på vänster sida.             │   │
-│  │ ──────────────────────────────────────────────  │   │
-│  │ Anna Svensson • 4 feb 2026 kl 09:15             │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │ [Beskriv avvikelsen...]                         │   │
-│  │                                   [Rapportera]  │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Rad  │  Artikelnr  │  Beskrivning           │ Antal │ Enhet │  Pris  │ Summa │
+├──────────────────────────────────────────────────────────────────────────────┤
+│   1   │  116        │  Fingerskydd litet     │   2   │  st.  │  0 kr  │ 0 kr  │
+│        ∟ [📋 Prislista finns]  ← diskret badge, alltid synlig                │
+│                                                                              │
+│   2   │  3903041    │  Lagerlock             │   3   │  st.  │  0 kr  │ 0 kr  │
+│        ∟ [📋 Prislista finns]                                                │
+│                                                                              │
+│   3   │  XYZ-123    │  Okänd artikel         │   1   │  st.  │ 500 kr │ 500 kr│
+│        (ingen badge - ingen match)                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Funktionalitet:**
-- Alla roller kan lägga till nya avvikelser
-- Varje avvikelse visar meddelande + skaparens namn + tidsstämpel
-- Lista sorteras med senaste överst
-- `has_deviation` uppdateras automatiskt (true om det finns poster, kan behållas som snabbflagga för filtrering)
+**Vid klick på "Prislista finns":**
+
+```
+┌─────────────────────────────────────────┐
+│  📋 Priser i prislistan                 │
+│                                         │
+│  Artikelnr: 3903041 - Lagerlock         │
+│  ─────────────────────────────          │
+│  1:a Målning          1 500 kr  [Välj]  │
+│  2:a uppåt Målning      275 kr  [Välj]  │
+│                                         │
+└─────────────────────────────────────────┘
+```
 
 ---
 
 ## Teknisk implementation
 
-### Nya filer
+### 1. Utöka usePriceListLookup hook
 
-| Fil | Beskrivning |
-|-----|-------------|
-| `src/hooks/useOrderDeviations.ts` | Hook för att hämta/skapa avvikelser |
-| `src/components/OrderDeviations.tsx` | UI-komponent för avvikelselistan |
+Lägg till en ny funktion `findAllMatches` som returnerar ALLA matchande priser (inte bara bästa):
 
-### Ändringar i befintliga filer
+```typescript
+interface PriceMatch {
+  price: number;
+  partNumber: string;
+  description: string;
+  stepName: string | null;  // NY - behövs för visning
+  matchType: 'exact_part' | 'similar_desc';
+}
 
-| Fil | Ändring |
-|-----|---------|
-| `src/components/Layout.tsx` | Dölj nav för Utförare (inställningar, statistik, prislista) |
-| `src/pages/OrderDetails.tsx` | ReadOnly comment, rollbaserad orderstatus, ersätt deviation UI |
-| `src/components/OrderObjectsEditor.tsx` | Dölj add/remove för Utförare, inaktivera drag-drop |
-| `src/components/ObjectTrucksEditor.tsx` | Dölj add/remove/edit för Utförare |
-| `src/components/ArticleRowsEditor.tsx` | Lägg till readOnly prop-stöd (redan finns) - använd det |
-| `src/components/SortableStep.tsx` | Inaktivera drag för Utförare |
-| `src/pages/ProductionScreen.tsx` | Blockera drag-and-drop för Utförare (redan implementerat) |
-| **Migration** | Skapa `order_deviations` tabell |
+// NY funktion
+findAllMatches(partNumber: string, description: string): PriceMatch[]
+```
+
+**Logik:**
+1. Om artikelnumret matchar exakt → returnera alla priser för det artikelnumret
+2. Annars om beskrivning matchar (≥2 ord) → returnera alla priser för matchande artiklar
+3. Sortera efter step_name för konsekvent ordning
+
+### 2. Ny komponent: PriceListBadge
+
+Skapar en liten badge-komponent som:
+- Tar emot `partNumber` och `text` som props
+- Använder `findAllMatches` för att kontrollera om det finns matchningar
+- Visar en diskret badge om match finns
+- Vid klick öppnas en Popover med prisöversikten
+
+```typescript
+interface PriceListBadgeProps {
+  partNumber: string;
+  text: string;
+  onSelectPrice?: (price: number) => void;  // Callback när användare väljer pris
+  readOnly?: boolean;  // Om true, visa inte "Välj"-knappar
+}
+```
+
+### 3. Uppdatera ArticleRowsEditor
+
+**I visningstabellenraden (ej redigering):**
+- Lägg till `<PriceListBadge>` under artikelraden
+- Badge visas alltid om match finns
+- Klickbar för att visa prisöversikt
+
+**I redigeringsläge:**
+- Befintlig `PriceHint` kan behållas för snabb varning
+- ELLER ersätt helt med ny badge + popover
 
 ---
 
-## Filändringar sammanfattning
+## Prisöversiktens design
 
-### Databas
-- Ny tabell `order_deviations` med RLS-policies
+Popover vid klick visar alla priser rakt upp och ner:
 
-### Frontend
-1. `src/components/Layout.tsx` - Dölj nav-items för Utförare
-2. `src/pages/OrderDetails.tsx` - ReadOnly för kommentar, isProduction för orderstatus, nytt avvikelse-UI
-3. `src/components/OrderObjectsEditor.tsx` - Rollbaserade kontroller
-4. `src/components/ObjectTrucksEditor.tsx` - Rollbaserade kontroller  
-5. `src/components/SortableStep.tsx` - Villkorlig drag-handle
-6. `src/hooks/useOrderDeviations.ts` - **NY FIL**
-7. `src/components/OrderDeviations.tsx` - **NY FIL**
+```
+┌───────────────────────────────────────────┐
+│  Priser i prislistan                      │
+│                                           │
+│  116 - Fingerskydd litet                  │
+│  ─────────────────────────────────────    │
+│                                           │
+│  SPZ                         500 kr [Välj]│
+│  (grundpris)                 500 kr [Välj]│
+│                                           │
+└───────────────────────────────────────────┘
+```
+
+Eller för artikel med mängdpriser:
+
+```
+┌───────────────────────────────────────────┐
+│  Priser i prislistan                      │
+│                                           │
+│  2954145 - RIGHT ADDITIONAL FENDER        │
+│  ─────────────────────────────────────    │
+│                                           │
+│  1:a                       1 500 kr [Välj]│
+│  från 2:a                    650 kr [Välj]│
+│                                           │
+└───────────────────────────────────────────┘
+```
+
+---
+
+## Filändringar
+
+| Fil | Ändring |
+|-----|---------|
+| `src/hooks/usePriceListLookup.ts` | Lägg till `findAllMatches` funktion |
+| `src/components/PriceListBadge.tsx` | **NY FIL** - Badge + Popover komponent |
+| `src/components/ArticleRowsEditor.tsx` | Integrera PriceListBadge i tabellrader |
+
+---
+
+## Användargränssnitt detaljer
+
+### Badge-design
+- Liten, diskret text eller ikon
+- Färg: `text-muted-foreground` eller lätt accentfärg
+- Ikon: `List` eller `FileText` från lucide
+- Text: "Prislista finns" eller bara ikon med tooltip
+
+### Popover-design
+- Rubrik: "Priser i prislistan"
+- Artikelinfo: Artikelnr + beskrivning
+- Separator
+- Lista över priser:
+  - Vänster: step_name (eller "(grundpris)" om null)
+  - Höger: pris formaterat + "Välj"-knapp
+- Ingen gruppering eller dropdown - flat lista
+
+### Beteende
+- Badge visas på ALLA rader som har matchning (inte bara vid redigering)
+- Popover stängs automatiskt vid val av pris
+- Vid val uppdateras radens pris direkt
+- readOnly-läge: visa priserna men utan "Välj"-knappar
 
 ---
 
 ## Resultat
 
-### För Utförare:
-- Kan se produktion och ordrar
-- Kan ändra arbetskortsstatus och stegstatus
-- Kan rapportera avvikelser (men inte ta bort dem)
-- Kan läsa kommentarer men inte ändra
-- Kan INTE se statistik, prislista eller inställningar
-- Kan INTE ändra objekt, steg eller artikelrader
-- Kan INTE prioritera i produktionsvyn
-
-### För Produktion:
-- Allt Utförare kan + planering och struktur
-- Kan nu ändra orderstatus (Aktiv/Avslutad/Avbruten)
-- Kan ta bort avvikelser om de är felaktiga
-
-### Avvikelsesystemet:
-- Varje avvikelse är spårbar (vem, när, vad)
-- Fungerar som ett internt kommentarsystem för problem
-- Ingen data skrivs över - alla rapporter bevaras
+1. **Omedelbar överblick** - Användaren ser direkt vilka artiklar som finns i prislistan
+2. **Enkel jämförelse** - Alla prisvarianter visas samtidigt utan gruppering
+3. **Frivillig användning** - Priserna är informativa, inte tvingande
+4. **Speglar datan** - Visar exakt vad som finns i prislistan (behandlingspriser, mängdpriser, etc.)
+5. **Inte rörigt** - Diskret badge som inte stör arbetsflödet
