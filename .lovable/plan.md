@@ -1,293 +1,252 @@
 
 
-# Plan: Utskrift av arbetskort med QR-kod
+# Plan: Nytt rollsystem för verkstaden
 
-## Sammanfattning
+## Översikt
 
-Bygger en utskriftsfunktion för arbetskort - ett snyggt orienteringsblad som följer jobbet fysiskt i verkstaden. QR-koden leder direkt till ordern i systemet.
-
----
-
-## Design av arbetskort (A4 utskrift)
-
-```text
-┌────────────────────────────────────────────────────────────────┐
-│                                                                │
-│    ╔══════════════════════════════════════════════════════╗    │
-│    ║                     ARBETSKORT                       ║    │
-│    ╚══════════════════════════════════════════════════════╝    │
-│                                                                │
-│   ┌────────────────────────────────┐   ┌──────────────────┐   │
-│   │                                │   │                  │   │
-│   │  #21270                        │   │    ██████████    │   │
-│   │  (Arbetskort-ID, stor text)    │   │    ██  QR  ██    │   │
-│   │                                │   │    ██ CODE ██    │   │
-│   │  BALKBLÄSTRING                 │   │    ██████████    │   │
-│   │  (Objekttyp)                   │   │                  │   │
-│   │                                │   │  Skanna för att  │   │
-│   │  Order: ORD-2024-0147          │   │  öppna i systemet│   │
-│   │  Kund: Skaraborg Stål AB       │   │                  │   │
-│   │                                │   └──────────────────┘   │
-│   └────────────────────────────────┘                           │
-│                                                                │
-│   ─────────────────────────────────────────────────────────    │
-│                                                                │
-│   ARBETSMOMENT                                                 │
-│                                                                │
-│     1. Blästring                                               │
-│     2. Sprutzink                                               │
-│     3. Målning                                                 │
-│     4. Torkning                                                │
-│                                                                │
-│   ─────────────────────────────────────────────────────────    │
-│                                                                │
-│           Uppdatera status genom att skanna QR-koden           │
-│                                                                │
-└────────────────────────────────────────────────────────────────┘
-```
+Byter ut det nuvarande abstrakta rollsystemet (`admin`, `redigera`, `lasa`) mot ett verkstadsanpassat system med tre tydliga roller som speglar hur arbetet faktiskt sker.
 
 ---
 
-## QR-kod och URL-hantering
+## Nya roller
 
-### QR-kod pekar till:
-```
-https://eeorder.lovable.app/order/{orderId}
-```
+| Roll | Svenska namn | Syfte |
+|------|--------------|-------|
+| `utforare` | Utförare | Golvpersonal som rapporterar arbete |
+| `produktion` | Produktion | Produktionschef som planerar flödet |
+| `admin` | Admin | Full kontroll över affär och ekonomi |
 
-### Autentiseringsflöde:
-1. Användare skannar QR-kod på mobil/surfplatta
-2. Om inloggad → öppnas orderdetaljer direkt
-3. Om ej inloggad → redirect till login med `redirectUrl=/order/{orderId}`
-4. Efter inloggning → användaren tas automatiskt till ordern
+---
 
-**Befintlig routing fungerar redan** - `/order/:id` finns i `App.tsx` och `ProtectedRoute` hanterar redan autentisering.
+## Behörighetsmatris
+
+### Vad varje roll kan göra
+
+| Funktion | Utförare | Produktion | Admin |
+|----------|:--------:|:----------:|:-----:|
+| **Se produktionsvyn** | ✓ | ✓ | ✓ |
+| **Se ordrar och arbetskort** | ✓ | ✓ | ✓ |
+| **Markera arbete som påbörjat** | ✓ | ✓ | ✓ |
+| **Markera arbetsmoment klara** | ✓ | ✓ | ✓ |
+| **Ändra arbetskortsstatus (Ankommen/Pausad/Klar)** | ✓ | ✓ | ✓ |
+| **Skapa/redigera arbetskort** | ✗ | ✓ | ✓ |
+| **Ta bort arbetskort** | ✗ | ✓ | ✓ |
+| **Ändra prioritering (drag-and-drop i produktion)** | ✗ | ✓ | ✓ |
+| **Skapa/redigera objekt** | ✗ | ✓ | ✓ |
+| **Skapa/redigera arbetsmoment** | ✗ | ✓ | ✓ |
+| **Skapa/importera ordrar** | ✗ | ✓ | ✓ |
+| **Ändra planerade datum** | ✗ | ✓ | ✓ |
+| **Ändra orderstatus (Aktiv/Avslutad/Avbruten)** | ✗ | ✗ | ✓ |
+| **Ändra priser på artikelrader** | ✗ | ✗ | ✓ |
+| **Hantera prislista** | ✗ | ✗ | ✓ |
+| **Ändra faktureringsstatus** | ✗ | ✗ | ✓ |
+| **Exportera fakturaunderlag** | ✗ | ✗ | ✓ |
+| **Ta bort ordrar permanent** | ✗ | ✗ | ✓ |
+| **Hantera användare** | ✗ | ✗ | ✓ |
 
 ---
 
 ## Teknisk implementation
 
-### 1. Nytt bibliotek för QR-koder
+### 1. Databasändringar
 
-Installera `qrcode` för att generera QR som data-URL (kompatibelt med jsPDF):
+**Migrera `app_role` enum:**
 
-```bash
-npm install qrcode
-npm install @types/qrcode --save-dev
+```sql
+-- Steg 1: Lägg till nya värden
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'utforare';
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'produktion';
+
+-- Steg 2: Migrera befintliga roller
+-- 'lasa' → 'utforare' (minsta behörighet)
+-- 'redigera' → 'produktion' (produktionschef)
+-- 'admin' → 'admin' (oförändrat)
+
+UPDATE public.user_roles 
+SET role = 'utforare' 
+WHERE role = 'lasa';
+
+UPDATE public.user_roles 
+SET role = 'produktion' 
+WHERE role = 'redigera';
+
+-- Steg 3: Ta bort gamla värden (kan göras senare)
+-- OBS: Postgres stödjer inte direkt borttagning av enum-värden
+-- De gamla värdena blir kvar men används inte
 ```
 
-### 2. Ny fil: `src/lib/workCardPrint.ts`
+**Uppdatera `has_role` funktionen** för att hantera de nya rollerna.
+
+**Uppdatera RLS-policies:**
+- Utförare får UPDATE på `truck_step_status` och `object_trucks.status`
+- Produktion får INSERT/UPDATE/DELETE på arbetskort, objekt, steg
+- Admin behåller full access
+
+### 2. AuthContext - Nya behörighetsflaggor
 
 ```typescript
-import jsPDF from 'jspdf';
-import QRCode from 'qrcode';
-import type { ObjectTruck, OrderStep, Order } from '@/types/order';
-import { getWorkUnitDisplayName } from '@/types/order';
+// src/contexts/AuthContext.tsx
 
-interface WorkCardPrintData {
-  truck: ObjectTruck;
-  objectName: string;
-  steps: OrderStep[];
-  order: {
-    id: string;
-    orderNumber: string;
-    customer: string;
-  };
-  baseUrl: string; // e.g. "https://eeorder.lovable.app"
-}
+// Befintliga
+isAdmin: boolean;       // role === 'admin'
 
-export async function printWorkCard(data: WorkCardPrintData): Promise<void> {
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  
-  // Arbetskort ID - stor och tydlig
-  const workCardId = getWorkUnitDisplayName(
-    data.truck.truckNumber, 
-    data.objectName, 
-    data.truck.id
-  );
-  
-  // Title
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100);
-  doc.text('ARBETSKORT', pageWidth / 2, 25, { align: 'center' });
-  
-  // Arbetskort ID - STOR
-  doc.setFontSize(36);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0);
-  doc.text(workCardId, 20, 50);
-  
-  // Objekttyp
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'normal');
-  doc.text(data.objectName.toUpperCase(), 20, 65);
-  
-  // Order och kund
-  doc.setFontSize(12);
-  doc.setTextColor(60);
-  doc.text(`Order: ${data.order.orderNumber}`, 20, 80);
-  doc.text(`Kund: ${data.order.customer}`, 20, 88);
-  
-  // QR-kod (höger sida)
-  const orderUrl = `${data.baseUrl}/order/${data.order.id}`;
-  const qrDataUrl = await QRCode.toDataURL(orderUrl, {
-    width: 200,
-    margin: 1,
-    errorCorrectionLevel: 'M',
-  });
-  
-  // Placera QR-kod till höger
-  doc.addImage(qrDataUrl, 'PNG', pageWidth - 70, 30, 50, 50);
-  
-  // QR-kod text
-  doc.setFontSize(8);
-  doc.setTextColor(100);
-  doc.text('Skanna för att öppna', pageWidth - 45, 85, { align: 'center' });
-  doc.text('i systemet', pageWidth - 45, 90, { align: 'center' });
-  
-  // Separator
-  doc.setDrawColor(200);
-  doc.setLineWidth(0.5);
-  doc.line(20, 105, pageWidth - 20, 105);
-  
-  // Arbetsmoment rubrik
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0);
-  doc.text('ARBETSMOMENT', 20, 120);
-  
-  // Lista stegen
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'normal');
-  let yPos = 135;
-  
-  data.steps.forEach((step, index) => {
-    doc.text(`${index + 1}. ${step.name}`, 25, yPos);
-    yPos += 12;
-  });
-  
-  // Footer
-  doc.setFontSize(9);
-  doc.setTextColor(120);
-  doc.text(
-    'Uppdatera status genom att skanna QR-koden',
-    pageWidth / 2,
-    pageHeight - 20,
-    { align: 'center' }
-  );
-  
-  // Spara/öppna för utskrift
-  doc.save(`arbetskort-${workCardId.replace('#', '')}.pdf`);
-}
+// Nya flaggor
+isProduction: boolean;  // role === 'admin' || role === 'produktion'
+canManageOrders: boolean;  // isProduction - skapa/ändra ordrar
+canManagePrices: boolean;  // isAdmin - hantera priser
+canManageUsers: boolean;   // isAdmin - hantera användare
+canReportWork: boolean;    // alla roller - rapportera arbete
+
+// Ta bort eller byt namn på
+canEdit → canManageOrders (bredare användning)
 ```
 
-### 3. Utskriftsknapp i ObjectTrucksEditor
+### 3. types/auth.ts
 
-Lägg till en skrivarikon bredvid varje arbetskort:
+```typescript
+// Nya roller
+export type AppRole = 'admin' | 'produktion' | 'utforare';
 
-```tsx
-// I ObjectTrucksEditor.tsx
+// Nya etiketter
+export const roleLabels: Record<AppRole, string> = {
+  admin: 'Admin',
+  produktion: 'Produktion', 
+  utforare: 'Utförare',
+};
 
-import { Printer } from 'lucide-react';
-import { printWorkCard } from '@/lib/workCardPrint';
-
-// Ny prop för att skicka med orderdata
-interface ObjectTrucksEditorProps {
-  // ... befintliga props
-  orderInfo?: {
-    id: string;
-    orderNumber: string;
-    customer: string;
-  };
-}
-
-// I render för varje truck, efter redigera-knappen:
-<Button
-  variant="ghost"
-  size="icon"
-  className="h-6 w-6"
-  onClick={async (e) => {
-    e.stopPropagation();
-    await printWorkCard({
-      truck,
-      objectName,
-      steps: objectSteps,
-      order: orderInfo,
-      baseUrl: window.location.origin,
-    });
-  }}
-  title="Skriv ut arbetskort"
->
-  <Printer className="h-3 w-3" />
-</Button>
+// Beskrivningar för AdminPanel
+export const roleDescriptions: Record<AppRole, string> = {
+  admin: 'Full kontroll över ordrar, priser, fakturering och användare',
+  produktion: 'Planerar produktion, skapar arbetskort, hanterar flöde',
+  utforare: 'Rapporterar arbete, markerar steg som klara',
+};
 ```
 
-### 4. Uppdatera OrderDetails.tsx
+### 4. UI-anpassningar per sida
 
-Skicka orderinfo till ObjectTrucksEditor via OrderObjectsEditor:
+**Layout.tsx (Navigation):**
+- "Ny order" visas endast för `isProduction`
+- Prislista visas för alla (men redigering bara för admin)
+- Admin-länken visas endast för `isAdmin`
 
-```tsx
-// I OrderObjectsEditor - ny prop
-interface OrderObjectsEditorProps {
-  // ... befintliga
-  orderInfo?: {
-    id: string;
-    orderNumber: string;
-    customer: string;
-  };
-}
+**Index.tsx (Orderlista):**
+- "Importera XML" / "Ny order" → endast `isProduction`
+- Bulk-redigering → endast `isProduction`
+- Faktureringsstatus → endast `isAdmin`
 
-// Skicka vidare till ObjectTrucksEditor
-<ObjectTrucksEditor
-  // ... befintliga props
-  orderInfo={orderInfo}
-/>
+**OrderDetails.tsx:**
+- Planerade datum → endast `isProduction`
+- Orderstatus (dropdown) → endast `isAdmin`
+- Faktureringsstatus → endast `isAdmin`
+- Priser på artikelrader → endast `isAdmin` (visa för alla, redigera för admin)
+- Avvikelse-checkbox → `isProduction`
+- Ta bort order → endast `isAdmin`
 
-// I OrderDetails.tsx
-<OrderObjectsEditor
-  // ... befintliga props
-  orderInfo={{
-    id: order.id,
-    orderNumber: order.orderNumber,
-    customer: order.customer,
-  }}
-/>
-```
+**OrderObjectsEditor.tsx:**
+- Lägg till objekt → endast `isProduction`
+- Ta bort objekt → endast `isProduction`
+- Lägg till arbetsmoment → endast `isProduction`
+- Ta bort arbetsmoment → endast `isProduction`
+
+**ObjectTrucksEditor.tsx:**
+- Lägg till arbetskort → endast `isProduction`
+- Ta bort arbetskort → endast `isProduction`
+- Ändra arbetskortsnummer → endast `isProduction`
+- Ändra arbetskortsstatus (dropdown) → alla roller
+- Klicka på steg för att ändra status → alla roller
+- Utskriftsknapp → alla roller
+
+**ProductionScreen.tsx:**
+- Drag-and-drop för prioritering → endast `isProduction`
+- "Återställ ordning" → endast `isProduction`
+- Klicka på arbetskort → alla (navigerar till order)
+
+**PriceList.tsx:**
+- Lägg till pris → endast `isAdmin`
+- Redigera pris → endast `isAdmin`
+- Ta bort pris → endast `isAdmin`
+- Importera från ordrar → endast `isAdmin`
+- Exportera Excel → alla roller
+
+**Statistics.tsx:**
+- Alla kan se statistik
+
+**AdminPanel.tsx:**
+- Endast `isAdmin` (redan skyddad via route)
+- Uppdatera rollväljaren med nya roller
+
+### 5. Edge Functions
+
+**create-user/index.ts:**
+- Uppdatera för nya roller
+
+**manage-user/index.ts:**
+- Oförändrad (admin-only redan)
 
 ---
 
-## Filändringar
+## Fil-ändringar
 
 | Fil | Ändring |
 |-----|---------|
-| `package.json` | Lägg till `qrcode` och `@types/qrcode` |
-| `src/lib/workCardPrint.ts` | **NY FIL** - PDF-generering med QR-kod |
-| `src/components/ObjectTrucksEditor.tsx` | Lägg till utskriftsknapp + ny prop för orderInfo |
-| `src/components/OrderObjectsEditor.tsx` | Skicka orderInfo vidare till ObjectTrucksEditor |
-| `src/pages/OrderDetails.tsx` | Skicka orderInfo till OrderObjectsEditor |
+| `src/types/auth.ts` | Nya roller och etiketter |
+| `src/contexts/AuthContext.tsx` | Nya behörighetsflaggor |
+| `src/components/Layout.tsx` | Villkorlig navigation |
+| `src/pages/Index.tsx` | Begränsa bulk-redigering och knappar |
+| `src/pages/OrderDetails.tsx` | Rollbaserad UI |
+| `src/components/OrderObjectsEditor.tsx` | Rollbaserad UI |
+| `src/components/ObjectTrucksEditor.tsx` | Alla kan ändra status, bara prod kan hantera kort |
+| `src/pages/ProductionScreen.tsx` | Drag-drop endast för produktion |
+| `src/pages/PriceList.tsx` | Admin-only för redigering |
+| `src/pages/AdminPanel.tsx` | Nya roller i dropdown |
+| `supabase/functions/create-user/index.ts` | Nya roller |
+| **Migration** | Uppdatera enum och migrera data |
 
 ---
 
-## Vad som INTE ingår
+## Migrationsplan för befintliga användare
 
-- ❌ Priser
-- ❌ Fakturering
-- ❌ Historik
-- ❌ Checkboxar eller statusmarkeringar
-- ❌ Manuell ifyllnad på pappret
+| Nuvarande roll | Ny roll | Motivering |
+|----------------|---------|------------|
+| `admin` | `admin` | Oförändrad |
+| `redigera` | `produktion` | Produktionschef |
+| `lasa` | `utforare` | Golvpersonal |
 
 ---
 
-## Resultat
+## Förväntad användarupplevelse
 
-1. **Utskriftsknapp** visas bredvid varje arbetskort
-2. **Ett klick** genererar en PDF
-3. **Snyggt arbetskort** med tydlig ID, objekttyp, kund och arbetsmoment
-4. **QR-kod** som leder direkt till ordern i systemet
-5. **Autentisering** sker automatiskt om användaren inte är inloggad
+**Utförare:**
+- Ser produktionsvyn med arbetskort
+- Klickar på steg för att markera som pågående/klart
+- Kan ändra arbetskortsstatus (Ankommen → Startad → Klar)
+- Ser ordrar men kan inte ändra struktur
+- Knappar för att skapa/ta bort är dolda
 
-Arbetskortet blir en "vägvisare" i verkstaden - systemet är alltid källan till sanning.
+**Produktionschef:**
+- Allt utförare kan plus:
+- Skapar och hanterar arbetskort
+- Drar och släpper för att prioritera
+- Lägger till objekt och arbetsmoment
+- Skapar ordrar via import eller manuellt
+
+**Admin:**
+- Allt produktion kan plus:
+- Hanterar priser och prislista
+- Ändrar faktureringsstatus
+- Exporterar fakturaunderlag
+- Tar bort ordrar permanent
+- Hanterar användarkonton
+
+---
+
+## Säkerhet
+
+Alla behörighetskontroller sker på tre nivåer:
+
+1. **UI** - Knappar och funktioner dolda
+2. **Hooks/Context** - Client-side validering
+3. **RLS/Edge Functions** - Server-side validering (säkerhetsbarriär)
+
+Även om UI manipuleras skyddar RLS-policyerna databasen.
 
