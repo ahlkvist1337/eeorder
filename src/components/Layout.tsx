@@ -18,7 +18,7 @@ interface LayoutProps {
 
 const navItems = [
   { to: '/', label: 'Ordrar', icon: ClipboardList },
-  { to: '/create', label: 'Ny order', icon: Plus, requiresEdit: true },
+  { to: '/create', label: 'Ny order', icon: Plus, requiresProduction: true },
   { to: '/steps', label: 'Inställningar', icon: Settings },
   { to: '/statistics', label: 'Statistik', icon: BarChart3 },
   { to: '/production', label: 'Produktion', icon: Tv },
@@ -28,17 +28,18 @@ const navItems = [
 export function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, isAdmin, canEdit, signOut } = useAuth();
+  const { profile, isAdmin, isProduction } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleSignOut = async () => {
+    const { signOut } = useAuth();
     await signOut();
     navigate('/login');
   };
 
   // Filter nav items based on role
   const visibleNavItems = navItems.filter(item => {
-    if (item.requiresEdit && !canEdit) return false;
+    if (item.requiresProduction && !isProduction) return false;
     return true;
   });
 
@@ -84,6 +85,13 @@ export function Layout({ children }: LayoutProps) {
     </>
   );
 
+  const { signOut } = useAuth();
+  
+  const handleSignOutClick = async () => {
+    await signOut();
+    navigate('/login');
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -112,7 +120,7 @@ export function Layout({ children }: LayoutProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleSignOut}
+                  onClick={handleSignOutClick}
                   className="text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
                 >
                   <LogOut className="h-4 w-4" />
@@ -125,7 +133,7 @@ export function Layout({ children }: LayoutProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleSignOut}
+                onClick={handleSignOutClick}
                 className="text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
               >
                 <LogOut className="h-4 w-4" />

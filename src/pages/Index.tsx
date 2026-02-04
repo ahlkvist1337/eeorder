@@ -20,7 +20,7 @@ import { canExportOrders } from '@/lib/invoiceExport';
 const Index = () => {
   useDocumentTitle('Ordrar');
   const { orders, isLoading, bulkUpdateOrders } = useOrders();
-  const { canEdit } = useAuth();
+  const { isProduction, isAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [archiveSearchQuery, setArchiveSearchQuery] = useState('');
   const [filters, setFilters] = useState<{
@@ -143,7 +143,7 @@ const Index = () => {
               {orders.length} {orders.length === 1 ? 'order' : 'ordrar'} totalt
             </p>
           </div>
-          {canEdit && (
+          {isProduction && (
             <div className="flex gap-2">
               <Button asChild variant="outline">
                 <Link to="/create?mode=xml">
@@ -182,14 +182,14 @@ const Index = () => {
               onSearchChange={setSearchQuery}
             />
 
-            {/* Bulk edit toolbar - only for editors */}
-            {canEdit && selectedOrderIds.size > 0 && (
+            {/* Bulk edit toolbar - only for production/admin */}
+            {isProduction && selectedOrderIds.size > 0 && (
               <BulkEditToolbar
                 selectedCount={selectedOrderIds.size}
-                canExportInvoice={canExportSelectedOrders}
+                canExportInvoice={canExportSelectedOrders && isAdmin}
                 onProductionStatusChange={handleProductionStatusChange}
-                onExportInvoice={handleExportInvoice}
-                onBillingStatusChange={handleBillingStatusChange}
+                onExportInvoice={isAdmin ? handleExportInvoice : undefined}
+                onBillingStatusChange={isAdmin ? handleBillingStatusChange : undefined}
                 onDeviationChange={handleDeviationChange}
                 onClearSelection={handleClearSelection}
               />
@@ -200,8 +200,8 @@ const Index = () => {
               orders={activeOrders}
               filters={filters}
               searchQuery={searchQuery}
-              selectedOrderIds={canEdit ? selectedOrderIds : new Set()}
-              onSelectionChange={canEdit ? setSelectedOrderIds : () => {}}
+              selectedOrderIds={isProduction ? selectedOrderIds : new Set()}
+              onSelectionChange={isProduction ? setSelectedOrderIds : () => {}}
             />
           </TabsContent>
 

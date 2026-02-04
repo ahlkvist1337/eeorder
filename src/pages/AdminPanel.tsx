@@ -52,17 +52,7 @@ import { Loader2, UserPlus, MoreHorizontal, Trash2, KeyRound } from 'lucide-reac
 import type { AppRole, Profile, UserWithRole } from '@/types/auth';
 import { useAuth } from '@/contexts/AuthContext';
 
-const roleLabels: Record<AppRole, string> = {
-  admin: 'Admin',
-  redigera: 'Redigera',
-  lasa: 'Läsa',
-};
-
-const roleBadgeVariants: Record<AppRole, 'default' | 'secondary' | 'outline'> = {
-  admin: 'default',
-  redigera: 'secondary',
-  lasa: 'outline',
-};
+import { roleLabels, roleBadgeVariants } from '@/types/auth';
 
 export default function AdminPanel() {
   useDocumentTitle('Admin');
@@ -76,7 +66,7 @@ export default function AdminPanel() {
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newFullName, setNewFullName] = useState('');
-  const [newRole, setNewRole] = useState<AppRole>('lasa');
+  const [newRole, setNewRole] = useState<AppRole>('utforare');
 
   // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -154,7 +144,7 @@ export default function AdminPanel() {
       setNewEmail('');
       setNewPassword('');
       setNewFullName('');
-      setNewRole('lasa');
+      setNewRole('utforare');
       fetchUsers();
     } catch (error: any) {
       console.error('Error creating user:', error);
@@ -361,8 +351,8 @@ export default function AdminPanel() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="redigera">Redigera</SelectItem>
-                      <SelectItem value="lasa">Läsa</SelectItem>
+                      <SelectItem value="produktion">Produktion</SelectItem>
+                      <SelectItem value="utforare">Utförare</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -411,20 +401,20 @@ export default function AdminPanel() {
                   <TableCell>{userItem.email}</TableCell>
                   <TableCell>
                     <Select
-                      value={userItem.roles[0] || 'lasa'}
+                      value={userItem.roles[0] || 'utforare'}
                       onValueChange={(v) => handleChangeRole(userItem.id, v as AppRole)}
                     >
                       <SelectTrigger className="w-32">
                         <SelectValue>
-                          <Badge variant={roleBadgeVariants[userItem.roles[0] || 'lasa']}>
-                            {roleLabels[userItem.roles[0] || 'lasa']}
+                          <Badge variant={roleBadgeVariants[userItem.roles[0] || 'utforare']}>
+                            {roleLabels[userItem.roles[0] || 'utforare']}
                           </Badge>
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="redigera">Redigera</SelectItem>
-                        <SelectItem value="lasa">Läsa</SelectItem>
+                        <SelectItem value="produktion">Produktion</SelectItem>
+                        <SelectItem value="utforare">Utförare</SelectItem>
                       </SelectContent>
                     </Select>
                   </TableCell>
@@ -509,20 +499,20 @@ export default function AdminPanel() {
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">Roll:</span>
                   <Select
-                    value={userItem.roles[0] || 'lasa'}
+                    value={userItem.roles[0] || 'utforare'}
                     onValueChange={(v) => handleChangeRole(userItem.id, v as AppRole)}
                   >
                     <SelectTrigger className="w-32">
                       <SelectValue>
-                        <Badge variant={roleBadgeVariants[userItem.roles[0] || 'lasa']}>
-                          {roleLabels[userItem.roles[0] || 'lasa']}
+                        <Badge variant={roleBadgeVariants[userItem.roles[0] || 'utforare']}>
+                          {roleLabels[userItem.roles[0] || 'utforare']}
                         </Badge>
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="redigera">Redigera</SelectItem>
-                      <SelectItem value="lasa">Läsa</SelectItem>
+                      <SelectItem value="produktion">Produktion</SelectItem>
+                      <SelectItem value="utforare">Utförare</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

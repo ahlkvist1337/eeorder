@@ -29,6 +29,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ObjectTrucksEditor } from '@/components/ObjectTrucksEditor';
 import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
 import { useObjectTemplates } from '@/hooks/useObjectTemplates';
+import { useAuth } from '@/contexts/AuthContext';
 import { calculateObjectQuantities } from '@/types/order';
 import type { OrderStep, StepStatus, OrderObject, ObjectTruck, TruckStatus } from '@/types/order';
 import { SortableStep } from '@/components/SortableStep';
@@ -56,6 +57,7 @@ export function OrderObjectsEditor({
   onTruckStepStatusChange,
   orderInfo,
 }: OrderObjectsEditorProps) {
+  const { isProduction } = useAuth();
   const { steps: treatmentTemplates, isLoading: treatmentLoading } = useTreatmentSteps();
   const { templates: objectTemplates, isLoading: objectLoading } = useObjectTemplates();
   
@@ -335,34 +337,38 @@ export function OrderObjectsEditor({
                           );
                         })()}
                         
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStartEditObject(obj);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (objectSteps.length > 0) {
-                              if (confirm(`Ta bort "${obj.name}" och dess ${objectSteps.length} steg?`)) {
+                        {isProduction && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartEditObject(obj);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {isProduction && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (objectSteps.length > 0) {
+                                if (confirm(`Ta bort "${obj.name}" och dess ${objectSteps.length} steg?`)) {
+                                  handleRemoveObject(obj.id);
+                                }
+                              } else {
                                 handleRemoveObject(obj.id);
                               }
-                            } else {
-                              handleRemoveObject(obj.id);
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </>
                     )}
                   </div>
@@ -398,43 +404,45 @@ export function OrderObjectsEditor({
                         </DndContext>
                       )}
 
-                      {/* Add step to object */}
-                      <div className="flex gap-2 pt-2 border-t mt-3">
-                        <Select 
-                          value={selectedTemplates[obj.id] || ''} 
-                          onValueChange={(v) => {
-                            if (v && v !== '_none' && v !== '') {
-                              setSelectedTemplates(prev => ({ ...prev, [obj.id]: v }));
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="flex-1 h-9 text-sm bg-background">
-                            <SelectValue placeholder="Välj behandlingssteg..." />
-                          </SelectTrigger>
-                          <SelectContent className="bg-popover">
-                            {treatmentTemplates.length === 0 ? (
-                              <SelectItem value="_none" disabled>
-                                Inga steg tillgängliga
-                              </SelectItem>
-                            ) : (
-                              treatmentTemplates.map(template => (
-                                <SelectItem key={template.id} value={template.id}>
-                                  {template.name}
+                      {/* Add step to object - production only */}
+                      {isProduction && (
+                        <div className="flex gap-2 pt-2 border-t mt-3">
+                          <Select 
+                            value={selectedTemplates[obj.id] || ''} 
+                            onValueChange={(v) => {
+                              if (v && v !== '_none' && v !== '') {
+                                setSelectedTemplates(prev => ({ ...prev, [obj.id]: v }));
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="flex-1 h-9 text-sm bg-background">
+                              <SelectValue placeholder="Välj behandlingssteg..." />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover">
+                              {treatmentTemplates.length === 0 ? (
+                                <SelectItem value="_none" disabled>
+                                  Inga steg tillgängliga
                                 </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <Button 
-                          type="button"
-                          size="sm"
-                          onClick={() => handleAddStep(obj.id)} 
-                          disabled={!selectedTemplates[obj.id]}
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Lägg till
-                        </Button>
-                      </div>
+                              ) : (
+                                treatmentTemplates.map(template => (
+                                  <SelectItem key={template.id} value={template.id}>
+                                    {template.name}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <Button 
+                            type="button"
+                            size="sm"
+                            onClick={() => handleAddStep(obj.id)} 
+                            disabled={!selectedTemplates[obj.id]}
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Lägg till
+                          </Button>
+                        </div>
+                      )}
                       
                       {/* Work unit editor section */}
                       <ObjectTrucksEditor
@@ -460,74 +468,76 @@ export function OrderObjectsEditor({
         </div>
       )}
 
-      {/* Add new object */}
-      <div className="space-y-3 pt-2 border-t">
-        <div className="text-sm font-medium">Lägg till objekt</div>
-        
-        {/* Template selection or custom name */}
-        <div className="flex flex-col sm:flex-row gap-2">
-          {!useCustomObjectName ? (
-            <>
-              <Select 
-                value={selectedObjectTemplateId} 
-                onValueChange={setSelectedObjectTemplateId}
-                disabled={isLoading}
-              >
-                <SelectTrigger className="flex-1 bg-background">
-                  <SelectValue placeholder="Välj objektmall..." />
-                </SelectTrigger>
-                <SelectContent className="bg-popover">
-                  {objectTemplates.length === 0 ? (
-                    <SelectItem value="_none" disabled>
-                      Inga mallar tillgängliga
-                    </SelectItem>
-                  ) : (
-                    objectTemplates.map(template => (
-                      <SelectItem key={template.id} value={template.id}>
-                        {template.name}
+      {/* Add new object - production only */}
+      {isProduction && (
+        <div className="space-y-3 pt-2 border-t">
+          <div className="text-sm font-medium">Lägg till objekt</div>
+          
+          {/* Template selection or custom name */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            {!useCustomObjectName ? (
+              <>
+                <Select 
+                  value={selectedObjectTemplateId} 
+                  onValueChange={setSelectedObjectTemplateId}
+                  disabled={isLoading}
+                >
+                  <SelectTrigger className="flex-1 bg-background">
+                    <SelectValue placeholder="Välj objektmall..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover">
+                    {objectTemplates.length === 0 ? (
+                      <SelectItem value="_none" disabled>
+                        Inga mallar tillgängliga
                       </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              <Button 
-                variant="outline"
-                onClick={() => setUseCustomObjectName(true)}
-              >
-                Eget namn
-              </Button>
-            </>
-          ) : (
-            <>
-              <Input
-                value={customObjectName}
-                onChange={(e) => setCustomObjectName(e.target.value)}
-                placeholder="Skriv objektnamn..."
-                className="flex-1"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAddObject();
-                }}
-              />
-              <Button 
-                variant="outline"
-                onClick={() => {
-                  setUseCustomObjectName(false);
-                  setCustomObjectName('');
-                }}
-              >
-                Välj mall
-              </Button>
-            </>
-          )}
-          <Button 
-            onClick={handleAddObject} 
-            disabled={useCustomObjectName ? !customObjectName.trim() : !selectedObjectTemplateId}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Lägg till objekt
-          </Button>
+                    ) : (
+                      objectTemplates.map(template => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button 
+                  variant="outline"
+                  onClick={() => setUseCustomObjectName(true)}
+                >
+                  Eget namn
+                </Button>
+              </>
+            ) : (
+              <>
+                <Input
+                  value={customObjectName}
+                  onChange={(e) => setCustomObjectName(e.target.value)}
+                  placeholder="Skriv objektnamn..."
+                  className="flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddObject();
+                  }}
+                />
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setUseCustomObjectName(false);
+                    setCustomObjectName('');
+                  }}
+                >
+                  Välj mall
+                </Button>
+              </>
+            )}
+            <Button 
+              onClick={handleAddObject} 
+              disabled={useCustomObjectName ? !customObjectName.trim() : !selectedObjectTemplateId}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Lägg till objekt
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

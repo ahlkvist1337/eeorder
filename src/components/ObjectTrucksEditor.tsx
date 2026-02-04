@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 import type { ObjectTruck, OrderStep, StepStatus, TruckStatus } from '@/types/order';
 import { truckStatusLabels, getWorkUnitDisplayName } from '@/types/order';
 import { printWorkCard } from '@/lib/workCardPrint';
@@ -68,6 +69,7 @@ export function ObjectTrucksEditor({
   onTruckStatusChange,
   orderInfo,
 }: ObjectTrucksEditorProps) {
+  const { isProduction } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
   const [newTruckNumber, setNewTruckNumber] = useState('');
   const [editingTruckId, setEditingTruckId] = useState<string | null>(null);
@@ -193,26 +195,28 @@ export function ObjectTrucksEditor({
           <Package className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm text-muted-foreground">Inga arbetskort</span>
           <div className="flex-1" />
-          <div className="flex items-center gap-2">
-            <Input
-              placeholder="ID (valfritt)..."
-              value={newTruckNumber}
-              onChange={(e) => setNewTruckNumber(e.target.value)}
-              className="h-8 w-28 text-sm"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleAddWorkUnit();
-              }}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={handleAddWorkUnit}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Lägg till
-            </Button>
-          </div>
+          {isProduction && (
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="ID (valfritt)..."
+                value={newTruckNumber}
+                onChange={(e) => setNewTruckNumber(e.target.value)}
+                className="h-8 w-28 text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddWorkUnit();
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={handleAddWorkUnit}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Lägg till
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -315,15 +319,17 @@ export function ObjectTrucksEditor({
                         })}
                       </div>
 
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => handleStartEdit(truck)}
-                        title="Redigera"
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </Button>
+                      {isProduction && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => handleStartEdit(truck)}
+                          title="Redigera"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      )}
                       {orderInfo && (
                         <Button
                           variant="ghost"
@@ -344,42 +350,46 @@ export function ObjectTrucksEditor({
                           <Printer className="h-3 w-3" />
                         </Button>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-destructive hover:text-destructive"
-                        onClick={() => handleRemoveTruck(truck.id)}
-                        title="Ta bort"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                      {isProduction && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-destructive hover:text-destructive"
+                          onClick={() => handleRemoveTruck(truck.id)}
+                          title="Ta bort"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>
               );
             })}
 
-            {/* Add new work card */}
-            <div className="flex items-center gap-2 pt-2">
-              <Input
-                placeholder="ID (valfritt)..."
-                value={newTruckNumber}
-                onChange={(e) => setNewTruckNumber(e.target.value)}
-                className="h-8 w-28 text-sm"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAddWorkUnit();
-                }}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8"
-                onClick={handleAddWorkUnit}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Lägg till
-              </Button>
-            </div>
+            {/* Add new work card - production only */}
+            {isProduction && (
+              <div className="flex items-center gap-2 pt-2">
+                <Input
+                  placeholder="ID (valfritt)..."
+                  value={newTruckNumber}
+                  onChange={(e) => setNewTruckNumber(e.target.value)}
+                  className="h-8 w-28 text-sm"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddWorkUnit();
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={handleAddWorkUnit}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Lägg till
+                </Button>
+              </div>
+            )}
           </div>
         </CollapsibleContent>
       </Collapsible>

@@ -253,13 +253,13 @@ export default function PriceList() {
             </p>
           </div>
           <div className="flex gap-2">
-            {canEdit && (
+            {isAdmin && (
               <Button onClick={() => openAddDialog()}>
                 <Plus className="h-4 w-4 mr-2" />
                 Lägg till pris
               </Button>
             )}
-            {canEdit && (
+            {isAdmin && (
               <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
                 <Upload className="h-4 w-4 mr-2" />
                 Importera från ordrar
@@ -325,19 +325,19 @@ export default function PriceList() {
                     <ArrowUpDown className="h-4 w-4" />
                   </div>
                 </TableHead>
-                {canEdit && <TableHead className="w-24"></TableHead>}
+                {isAdmin && <TableHead className="w-24"></TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={canEdit ? 6 : 5} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={isAdmin ? 6 : 5} className="text-center py-8 text-muted-foreground">
                     Laddar...
                   </TableCell>
                 </TableRow>
               ) : groupedPrices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={canEdit ? 6 : 5} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={isAdmin ? 6 : 5} className="text-center py-8 text-muted-foreground">
                     {search ? 'Inga träffar' : 'Inga prisrader ännu'}
                   </TableCell>
                 </TableRow>
@@ -367,7 +367,7 @@ export default function PriceList() {
                           <TableCell className="text-right">
                             {formatPriceRange(group.minPrice, group.maxPrice)}
                           </TableCell>
-                          {canEdit && (
+                          {isAdmin && (
                             <TableCell onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-end gap-1">
                                 <Button
@@ -384,14 +384,14 @@ export default function PriceList() {
                         </TableRow>
                         <CollapsibleContent asChild>
                           <TableRow className="bg-muted/30">
-                            <TableCell colSpan={canEdit ? 6 : 5} className="p-0">
+                            <TableCell colSpan={isAdmin ? 6 : 5} className="p-0">
                               <div className="px-6 py-4">
                                 <Table>
                                   <TableHeader>
                                     <TableRow>
                                       <TableHead className="w-1/2">Steg</TableHead>
                                       <TableHead className="text-right">Pris</TableHead>
-                                      {canEdit && <TableHead className="w-24"></TableHead>}
+                                      {isAdmin && <TableHead className="w-24"></TableHead>}
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
@@ -403,7 +403,7 @@ export default function PriceList() {
                                         <TableCell className="text-right font-medium">
                                           {formatPrice(item.price)}
                                         </TableCell>
-                                        {canEdit && (
+                                        {isAdmin && (
                                           <TableCell>
                                             <div className="flex items-center justify-end gap-1">
                                               <Button
@@ -413,15 +413,13 @@ export default function PriceList() {
                                               >
                                                 <Pencil className="h-4 w-4" />
                                               </Button>
-                                              {isAdmin && (
-                                                <Button
-                                                  variant="ghost"
-                                                  size="icon"
-                                                  onClick={() => openDeleteDialog(item)}
-                                                >
-                                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                                </Button>
-                                              )}
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => openDeleteDialog(item)}
+                                              >
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                              </Button>
                                             </div>
                                           </TableCell>
                                         )}
@@ -429,7 +427,7 @@ export default function PriceList() {
                                     ))}
                                   </TableBody>
                                 </Table>
-                                {canEdit && (
+                                {isAdmin && (
                                   <Button
                                     variant="outline"
                                     size="sm"
