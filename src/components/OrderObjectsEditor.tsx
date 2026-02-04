@@ -347,14 +347,14 @@ export function OrderObjectsEditor({
                     )}
                   </div>
                   
-                  {/* Row 2 on mobile: Treatment steps as horizontal scroll or wrap */}
+                  {/* Row 2 on mobile: Treatment steps as wrapping badges */}
                   {!isEditing && objectSteps.length > 0 && (
-                    <div className="flex items-center gap-1 flex-wrap pl-10 sm:pl-0 sm:flex-1">
+                    <div className="flex items-center gap-1 flex-wrap pl-10 sm:pl-0 sm:flex-1 min-w-0 max-w-full">
                       {objectSteps.map(step => (
                         <Badge 
                           key={step.id} 
                           variant="outline" 
-                          className="text-xs py-0.5 px-2 h-6 font-normal whitespace-nowrap"
+                          className="text-xs py-0.5 px-2 h-auto font-normal whitespace-normal break-words max-w-full"
                         >
                           {step.name}
                         </Badge>
