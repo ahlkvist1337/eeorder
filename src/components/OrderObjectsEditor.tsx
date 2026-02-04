@@ -452,7 +452,7 @@ export function OrderObjectsEditor({
                         objectId={obj.id}
                         objectName={obj.name}
                         objectSteps={objectSteps}
-                        articleRows={articleRows?.filter(r => r.objectId === obj.id)}
+                        articleRows={articleRows?.filter(r => r.objectId === obj.id || !r.objectId)}
                         onTrucksChange={(newTrucks) => {
                           onObjectsChange(objects.map(o =>
                             o.id === obj.id ? { ...o, trucks: newTrucks } : o
