@@ -268,110 +268,133 @@ export function OrderObjectsEditor({
               });
             }).length;
 
-            return (
+              return (
               <div key={obj.id} className="border rounded-md overflow-hidden">
-                {/* Compact object header with inline steps */}
-                <div className="flex items-center gap-2 px-2 py-1.5 bg-muted/40">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-6 w-6 shrink-0"
-                    onClick={() => toggleExpanded(obj.id)}
-                  >
-                    {isExpanded ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
-                  </Button>
+                {/* Compact object header - responsive layout */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 px-3 py-2 bg-muted/40">
+                  {/* Row 1: Expand + Name + Summary + Actions */}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => toggleExpanded(obj.id)}
+                    >
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                    </Button>
 
-                  {isEditing ? (
-                    <div className="flex-1 flex items-center gap-1">
-                      <Input
-                        value={editingObjectName}
-                        onChange={(e) => setEditingObjectName(e.target.value)}
-                        className="h-7 flex-1 text-sm"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveEditObject();
-                          if (e.key === 'Escape') handleCancelEditObject();
-                        }}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-primary"
-                        onClick={handleSaveEditObject}
-                      >
-                        <Check className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={handleCancelEditObject}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <span className="font-medium text-sm uppercase tracking-wide">{obj.name}</span>
-                      
-                      {/* Treatment steps as compact inline chips */}
-                      <div className="flex gap-1 flex-1 flex-wrap">
-                        {objectSteps.map(step => (
-                          <Badge 
-                            key={step.id} 
-                            variant="outline" 
-                            className="text-xs py-0 h-5 font-normal"
-                          >
-                            {step.name}
-                          </Badge>
-                        ))}
+                    {isEditing ? (
+                      <div className="flex-1 flex items-center gap-1">
+                        <Input
+                          value={editingObjectName}
+                          onChange={(e) => setEditingObjectName(e.target.value)}
+                          className="h-8 flex-1 text-sm"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveEditObject();
+                            if (e.key === 'Escape') handleCancelEditObject();
+                          }}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-primary"
+                          onClick={handleSaveEditObject}
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={handleCancelEditObject}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
-                      
-                      {/* Work card summary */}
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {quantities.planned > 0 
-                          ? `${quantities.planned} kort • ${completedTrucks} klar${completedTrucks !== 1 ? 'a' : ''}`
-                          : 'Inga kort'
-                        }
-                      </span>
+                    ) : (
+                      <>
+                        <span className="font-semibold text-sm uppercase tracking-wide truncate">{obj.name}</span>
+                        
+                        {/* Work card summary */}
+                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-auto sm:ml-0">
+                          {quantities.planned > 0 
+                            ? `${quantities.planned} kort • ${completedTrucks} klar${completedTrucks !== 1 ? 'a' : ''}`
+                            : 'Inga kort'
+                          }
+                        </span>
+                        
+                        {isProduction && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStartEditObject(obj);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  
+                  {/* Row 2 on mobile: Treatment steps as horizontal scroll or wrap */}
+                  {!isEditing && objectSteps.length > 0 && (
+                    <div className="flex items-center gap-1 flex-wrap pl-10 sm:pl-0 sm:flex-1">
+                      {objectSteps.map(step => (
+                        <Badge 
+                          key={step.id} 
+                          variant="outline" 
+                          className="text-xs py-0.5 px-2 h-6 font-normal whitespace-nowrap"
+                        >
+                          {step.name}
+                        </Badge>
+                      ))}
                       
                       {isProduction && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStartEditObject(obj);
-                            }}
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-destructive hover:text-destructive"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (objectSteps.length > 0 || (obj.trucks?.length || 0) > 0) {
-                                if (confirm(`Ta bort "${obj.name}" och alla dess steg och arbetskort?`)) {
-                                  handleRemoveObject(obj.id);
-                                }
-                              } else {
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-destructive hover:text-destructive ml-1"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (objectSteps.length > 0 || (obj.trucks?.length || 0) > 0) {
+                              if (confirm(`Ta bort "${obj.name}" och alla dess steg och arbetskort?`)) {
                                 handleRemoveObject(obj.id);
                               }
-                            }}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </>
+                            } else {
+                              handleRemoveObject(obj.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       )}
-                    </>
+                    </div>
+                  )}
+                  
+                  {/* Delete button when no steps */}
+                  {!isEditing && objectSteps.length === 0 && isProduction && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive ml-auto sm:ml-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveObject(obj.id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   )}
                 </div>
 
