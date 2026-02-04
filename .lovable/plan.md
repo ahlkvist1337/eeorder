@@ -1,210 +1,107 @@
 
+Mål
+- Orderns detaljvy på mobil ska aldrig kapa innehåll på höger sida.
+- Pris och åtgärdsknappar ska alltid vara synliga utan att man behöver “gissa” att det finns sid-scroll.
+- Inga konstiga radbrytningar som trycker ut layouten; långa texter ska brytas eller kapslas snyggt.
 
-# Plan: Mobiloptimering för produktionsgolvet
+Varför det blir avklippt nu (rotorsak)
+1) Artikelraderna renderas som en klassisk tabell med många kolumner. På mobil hamnar “Pris”, “Summa” och knapparna utanför viewporten. Det vi gjorde senast (min-w + overflow-x-auto) gör att innehållet tekniskt sett finns, men kräver horisontell scroll i en liten yta (och kan dessutom upplevas som “borta”).
+2) Vi har lagt overflow-hidden på wrappern i OrderDetails för att stoppa horisontell overflow. Om någon del (t.ex. negativ marginal, långa badges/knappar) sticker ut, så blir resultatet klippning i stället för att layouten anpassar sig.
+3) Det finns fler “nowrap”-ytor (whitespace-nowrap) i t.ex. steg-badges/knappar och vissa headers. En enda lång text kan då bli bredare än skärmen och pressa ut allt.
 
-## Sammanfattning
+Åtgärdsstrategi (fixa det på riktigt, inte maskera)
+- Ta bort horisontella “tabellproblem” genom att byta till mobilkort (card-list) i detaljvyn där det behövs.
+- Eliminera källor till overflow: ta bort nowrap där det kan bli långt, lägg till break-words/whitespace-normal och se till att flexbarn har min-w-0.
+- Undvika “overflow-hidden som plåster” på stora wrappers. Om vi behöver en sista säkerhetslina använder vi overflow-x-clip på en mer kontrollerad nivå (och bara efter att källorna är fixade).
 
-En genomgående optimering av mobilupplevelsen för produktionsarbetarna, med fokus på:
-- Större klickytor och knappar
-- Bättre texthantering (inga avklippta texter)
-- Snabbare åtkomst till viktiga funktioner
-- Tydligare visuell hierarki
+Konkreta ändringar (filer)
 
----
+1) src/pages/OrderDetails.tsx (sluta klippa sidan)
+- Ändra yttersta innehållswrappern från:
+  - `overflow-hidden max-w-full`
+  till:
+  - `max-w-full min-w-0` (utan overflow-hidden)
+- Ändra grid-wrappers på samma sätt:
+  - ta bort `overflow-hidden` där vi satt det på grid och huvudkolumnen
+  - behåll/addera `min-w-0` på flex/grid-barn så de får lov att krympa
+Syfte:
+- Inget ska “kapas” på höger sida av en generisk overflow-hidden. Allt ska istället anpassas av layouten.
 
-## Identifierade problem
+2) src/components/ArticleRowsEditor.tsx (gör pris + knappar alltid synliga på mobil)
+- Implementera två renderingar:
+  A) Desktop/tablet (>= sm): behåll tabellen (nuvarande) för effektiv överblick.
+  B) Mobil (< sm): byt till “kort-layout” per artikelrad.
+- Teknik:
+  - Importera `useIsMobile` från `@/hooks/use-mobile`
+  - `const isMobile = useIsMobile()`
+  - `if (isMobile) return <MobileArticleRows .../>` annars tabell.
+- Mobilkort-layout (per rad):
+  - Visa överst: Radnr + Artikelnr (vänster), “Summa” (höger)
+  - Under: Beskrivning (break-words)
+  - Under: ett litet 2x2-grid med Antal/Enhet/Pris/Summa (så “Pris” alltid syns)
+  - Prislista-badge under beskrivning (som idag)
+  - Åtgärder (Redigera/Ta bort) som tydliga knappar inom kortet (aldrig i en “sista kolumn” utanför skärmen)
+- Edit mode på mobil:
+  - När man trycker Redigera: visa inputs staplade (Rad, Artikelnr, Beskrivning, Antal, Enhet, Pris)
+  - “Spara” / “Avbryt” som stora knappar i kortets botten
+- “Lägg till artikelrad” på mobil:
+  - Antingen ett “Lägg till”-kort som expanderar till samma staplade inputs
+  - (Minimerar risken att en tabellrad hamnar utanför skärmen)
+- Rensa bort den senaste “table scroll”-lösningen på mobil:
+  - Ta bort `min-w-[600px]`-beroendet för mobil rendering (det hör bara hemma i desktop-tabellen om alls)
+  - Ta bort `-mx-4 px-4`-hack för mobil-läget (inte behövs när vi inte tabellscrollar)
 
-### 1. Produktionsvyn (ProductionScreen.tsx)
+Resultat:
+- Priset blir alltid synligt direkt på mobil.
+- Inga “knappar på höger sida som man inte ser”.
 
-| Problem | Beskrivning |
-|---------|-------------|
-| Header tar för mycket plats | Logo + titel + legend + tid tar upp ~150px på mobil |
-| Kort-layout ok | Arbetskorten ser bra ut men kan optimeras |
-| Steg-knappar för små | Behandlingsstegen är svåra att klicka på |
+3) src/components/OrderObjectsEditor.tsx (förhindra att objekt-headrar/badges trycker ut sidan)
+- Objekt-header (row 1):
+  - Ta bort konstruktioner som kan skapa overflow på mobil:
+    - `ml-auto` + `whitespace-nowrap` i samma flexrad kan putta ut ikoner.
+  - Strukturera om så att:
+    - Namn har `flex-1 min-w-0 truncate`
+    - Summering antingen hamnar på rad 2 på mobil, eller får wrap/shorten utan att putta ut actions
+    - Actions (penn-ikon etc) ligger i en `shrink-0`-container som aldrig hamnar utanför skärmen
+- Steg-badges (row 2):
+  - Byt `whitespace-nowrap` till `whitespace-normal break-words`
+  - Lägg `max-w-full` så en badge aldrig kan bli bredare än kortet
+Syfte:
+- Inget i objekt-headern ska kunna skapa horisontell overflow eller klippning.
 
-### 2. Layout/Navigation (Layout.tsx)
+4) src/components/ObjectTrucksEditor.tsx (stegknappar ska aldrig kunna bli bredare än skärmen)
+- Stegknapparna har idag `whitespace-nowrap`, vilket kan skapa en knapp som blir bredare än viewport om stegnamnet är långt.
+- Ändra knappklasser:
+  - ta bort `whitespace-nowrap`
+  - lägg `whitespace-normal break-words max-w-full`
+  - gärna `leading-tight` + `text-left` så fler-raders knapp ser snygg ut
+- Ändra layout för stegknappar på mobil:
+  - ersätt flex-wrap med en stabil grid på mobil:
+    - `grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:gap-2` (säkraste, aldrig overflow)
+    - alternativt `grid-cols-2` om ni vill ha mindre scroll; men `grid-cols-1` är “bombsäker” för långa namn.
+Resultat:
+- Stegknappar kan aldrig trycka ut höger sida.
+- Knapparna ligger alltid i skärmen och är enkla att trycka på.
 
-| Problem | Beskrivning |
-|---------|-------------|
-| Mobilmeny visar bara ikoner | Menyn visar ikoner i en rad istället för tydliga rader med text |
-| Logout-knapp liten | Svår att träffa på mobil |
+5) (Endast om det fortfarande finns 1–2px “mystery overflow”) Global säkerhetslina
+- Lägg en mycket försiktig CSS-säkring i src/index.css:
+  - `html, body { max-width: 100%; overflow-x: clip; }`
+- Detta gör vi bara om vi efter ovanstående fortfarande ser minimal horisontell overflow från tredjeparts-komponenter (popover etc).
+- Viktigt: vi ska inte använda detta för att dölja riktiga layoutproblem (därför kommer detta sist).
 
-### 3. OrderDetails.tsx - Mobilvy
+Testplan (snabb, praktisk)
+1) Öppna en order i detaljvy på mobil (360–390px bredd):
+   - Artikelrader: kontrollera att “Pris” och “Summa” syns direkt utan sid-scroll
+   - Åtgärdsknappar (redigera/ta bort) syns och går att trycka
+2) Testa “Redigera artikelrad” på mobil:
+   - Inga inputs/knappar hamnar utanför skärmen
+3) Testa objekt med lång titel och långt stegnamn:
+   - Inga element skapar horisontell scroll eller klippning
+4) Testa bifogade filer (PDF/bild):
+   - Filnamn trunceras, preview håller sig inom kortet
+5) Testa på /production också snabbt (så vi inte råkar introducera overflow där via gemensamma komponenter)
 
-| Problem | Beskrivning |
-|---------|-------------|
-| Leveransadress avklippt | Adressen bryts och visar "691..." istället för hela postnumret |
-| Arbetskort-raden för trång | Mycket information på liten yta |
-| Steg-knappar för små | Behandlingsstegen är små och svåra att klicka |
-
-### 4. ObjectTrucksEditor.tsx - Arbetskort
-
-| Problem | Beskrivning |
-|---------|-------------|
-| Rad-layout för kompakt | Allt på en rad gör det svårt att klicka rätt |
-| Stegknappar för små | 'px-1.5 py-0' ger väldigt små klickytor |
-| Ikoner för små | h-5 w-5 är svårt att träffa |
-
----
-
-## Tekniska ändringar
-
-### Fil 1: src/components/Layout.tsx
-
-**Mobilmeny förbättring:**
-```typescript
-// Ändra NavLinks för mobilmeny - visa text + större klickytor
-const NavLinks = ({ onClick, isMobile }: { onClick?: () => void; isMobile?: boolean }) => (
-  <>
-    {visibleNavItems.map(item => {
-      const Icon = item.icon;
-      const isActive = location.pathname === item.to;
-      return (
-        <Link
-          key={item.to}
-          to={item.to}
-          onClick={onClick}
-          className={cn(
-            isMobile 
-              ? 'flex items-center gap-3 px-3 py-3 rounded-md transition-colors text-base'  // Större klickyta på mobil
-              : 'flex items-center justify-center p-2 rounded-sm transition-colors',
-            isActive
-              ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-              : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-          )}
-          title={item.label}
-        >
-          <Icon className={isMobile ? "h-5 w-5" : "h-5 w-5"} />
-          {isMobile && <span>{item.label}</span>}
-        </Link>
-      );
-    })}
-    // ... admin link på samma sätt
-  </>
-);
-```
-
-### Fil 2: src/pages/ProductionScreen.tsx
-
-**Kompaktare header på mobil:**
-```typescript
-// Ändra header för att ta mindre plats på mobil
-<header className="flex flex-col gap-3 mb-4 lg:mb-6">
-  {/* Rad 1: Logo + Titel + Tid */}
-  <div className="flex items-center justify-between">
-    <div className="flex items-center gap-2">
-      <img src={eeLogo} alt="EE" className="h-10 lg:h-16 w-auto" />
-      <h1 className="text-xl lg:text-4xl font-bold">Produktion</h1>
-    </div>
-    <span className="text-sm lg:text-lg text-muted-foreground">
-      {format(lastUpdated, 'HH:mm', { locale: sv })}
-    </span>
-  </div>
-  
-  {/* Rad 2: Status-legend - endast på desktop */}
-  <div className="hidden lg:flex flex-wrap items-center gap-4 text-sm">
-    // ... legend
-  </div>
-</header>
-```
-
-### Fil 3: src/components/ProductionTruckCard.tsx
-
-**Större steg-knappar på mobil:**
-```typescript
-// Ändra step progress för större klickytor
-<div 
-  key={step.id}
-  className={cn(
-    'flex items-center gap-2 text-sm py-2 px-3 rounded-md transition-colors', // Ökad padding
-    isCurrent && 'bg-muted/50'
-  )}
->
-```
-
-### Fil 4: src/components/ObjectTrucksEditor.tsx
-
-**Bättre mobil-layout för arbetskort:**
-```typescript
-// Ändra truck row för bättre mobil-upplevelse
-<div key={truck.id} className="flex flex-col sm:flex-row sm:items-center gap-2 py-2 px-2 rounded bg-muted/30">
-  {/* Rad 1 på mobil: ID + Status */}
-  <div className="flex items-center gap-2">
-    <span className="font-mono font-bold text-sm min-w-[60px]">
-      {getWorkUnitDisplayName(truck.truckNumber, objectName, truck.id)}
-    </span>
-    <Select value={truck.status} onValueChange={...}>
-      <SelectTrigger className={cn('h-8 w-28 text-sm', truckStatusColors[truck.status])}>
-        // ...
-      </SelectTrigger>
-    </Select>
-  </div>
-  
-  {/* Rad 2 på mobil: Steg-knappar */}
-  <div className="flex items-center gap-1 flex-1 flex-wrap">
-    {objectSteps.map(step => (
-      <button
-        className={cn(
-          'px-2.5 py-1.5 rounded text-xs font-medium min-h-[32px]', // Större knappar
-          // ...
-        )}
-      >
-      // ...
-      </button>
-    ))}
-  </div>
-  
-  {/* Rad 3 på mobil: Åtgärder */}
-  <div className="flex items-center gap-1">
-    // Knappar med h-8 w-8 istället för h-5 w-5
-  </div>
-</div>
-```
-
-### Fil 5: src/pages/OrderDetails.tsx
-
-**Bättre texthantering:**
-```typescript
-// Leveransadress - word-break för långa adresser
-{order.deliveryAddress && (
-  <div className="sm:col-span-2">
-    <Label className="text-xs sm:text-sm text-muted-foreground">Leveransadress</Label>
-    <p className="font-medium text-sm sm:text-base break-words whitespace-normal">
-      {order.deliveryAddress}
-    </p>
-  </div>
-)}
-```
-
----
-
-## Översikt av ändringar
-
-| Fil | Ändring |
-|-----|---------|
-| `src/components/Layout.tsx` | Mobilmeny med text + större klickytor |
-| `src/pages/ProductionScreen.tsx` | Kompaktare header på mobil, göm legend |
-| `src/components/ProductionTruckCard.tsx` | Större padding på steg-rader |
-| `src/components/ObjectTrucksEditor.tsx` | Responsiv layout med flex-col på mobil, större knappar |
-| `src/pages/OrderDetails.tsx` | word-break på adresser, bättre responsiv layout |
-
----
-
-## Designprinciper som följs
-
-1. **44px minimum touch target** - Alla interaktiva element får minst 44px klickyta
-2. **Tydlig visuell hierarki** - Viktigast information först
-3. **Ingen horisontell scroll** - Allt ska passa inom skärmen
-4. **Läsbar text** - Inget avklipps mitt i ord/nummer
-5. **Snabb åtkomst** - Färre klick till viktiga funktioner
-
----
-
-## Resultat
-
-- Produktionsarbetare kan snabbt ändra status på arbetskort
-- Inga texter som avbryts mitt i ord
-- Större knappar som är lätta att träffa med fingret
-- Kompaktare layout som visar mer information utan scrollning
-- Tydlig navigation med text på mobil
-
+Leverans (vad du ska se efter fix)
+- Inget är avklippt på höger sida i orderdetaljvyn.
+- Pris syns alltid i artikelrader på mobil.
+- Alla knappar ligger inom skärmen och är lätta att trycka på.
