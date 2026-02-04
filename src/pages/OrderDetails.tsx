@@ -428,6 +428,11 @@ export default function OrderDetails() {
                   onStepsChange={(newSteps) => handleObjectsAndStepsChange(order.objects || [], newSteps)}
                   onTruckStatusChange={handleTruckStatusChange}
                   onTruckStepStatusChange={handleTruckStepStatusChange}
+                  orderInfo={{
+                    id: order.id,
+                    orderNumber: order.orderNumber,
+                    customer: order.customer,
+                  }}
                 />
               </CardContent>
             </Card>

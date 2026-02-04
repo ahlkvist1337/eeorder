@@ -40,6 +40,11 @@ interface OrderObjectsEditorProps {
   onStepsChange: (steps: OrderStep[]) => void;
   onTruckStatusChange?: (truckId: string, status: TruckStatus) => void;
   onTruckStepStatusChange?: (truckId: string, stepId: string, status: StepStatus) => void;
+  orderInfo?: {
+    id: string;
+    orderNumber: string;
+    customer: string;
+  };
 }
 
 export function OrderObjectsEditor({ 
@@ -49,6 +54,7 @@ export function OrderObjectsEditor({
   onStepsChange,
   onTruckStatusChange,
   onTruckStepStatusChange,
+  orderInfo,
 }: OrderObjectsEditorProps) {
   const { steps: treatmentTemplates, isLoading: treatmentLoading } = useTreatmentSteps();
   const { templates: objectTemplates, isLoading: objectLoading } = useObjectTemplates();
@@ -443,6 +449,7 @@ export function OrderObjectsEditor({
                         }}
                         onTruckStatusChange={onTruckStatusChange}
                         onTruckStepStatusChange={onTruckStepStatusChange}
+                        orderInfo={orderInfo}
                       />
                     </div>
                   </CollapsibleContent>
