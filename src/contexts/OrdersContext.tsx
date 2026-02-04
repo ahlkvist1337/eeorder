@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus, TruckStatusChange, TruckStatus, Instruction, TruckLifecycleEvent, TruckLifecycleEventType } from '@/types/order';
@@ -376,9 +376,32 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     }
   }, [user, fetchOrders]);
 
-  // Realtime subscription for live updates
+  // Debounced realtime subscription for live updates
+  // Uses a ref to track pending updates and debounce timer
+  const realtimeDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const lastLocalUpdateRef = useRef<number>(0);
+  
   useEffect(() => {
     if (!user) return;
+    
+    const debouncedFetch = () => {
+      // Ignore realtime events that happened within 2 seconds of our own update
+      // This prevents double-fetching when we make changes ourselves
+      const timeSinceLocalUpdate = Date.now() - lastLocalUpdateRef.current;
+      if (timeSinceLocalUpdate < 2000) {
+        return;
+      }
+      
+      // Clear any existing debounce timer
+      if (realtimeDebounceRef.current) {
+        clearTimeout(realtimeDebounceRef.current);
+      }
+      
+      // Debounce: wait 500ms before fetching to batch rapid changes
+      realtimeDebounceRef.current = setTimeout(() => {
+        fetchOrders();
+      }, 500);
+    };
     
     const channel = supabase
       .channel('orders-realtime')
@@ -389,9 +412,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           schema: 'public',
           table: 'orders',
         },
-        () => {
-          fetchOrders();
-        }
+        debouncedFetch
       )
       .on(
         'postgres_changes',
@@ -400,9 +421,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           schema: 'public',
           table: 'object_trucks',
         },
-        () => {
-          fetchOrders();
-        }
+        debouncedFetch
       )
       .on(
         'postgres_changes',
@@ -411,18 +430,26 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           schema: 'public',
           table: 'truck_step_status',
         },
-        () => {
-          fetchOrders();
-        }
+        debouncedFetch
       )
       .subscribe();
 
     return () => {
+      if (realtimeDebounceRef.current) {
+        clearTimeout(realtimeDebounceRef.current);
+      }
       supabase.removeChannel(channel);
     };
   }, [user, fetchOrders]);
+  
+  // Helper to mark that we made a local update (to ignore our own realtime events)
+  const markLocalUpdate = useCallback(() => {
+    lastLocalUpdateRef.current = Date.now();
+  }, []);
 
   const addOrder = useCallback(async (order: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>): Promise<Order> => {
+    markLocalUpdate(); // Prevent realtime refetch for our own changes
+    
     // Insert order
     const insertData = {
       order_number: order.orderNumber,
@@ -561,6 +588,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   }, [fetchOrders, orders]);
 
   const updateOrder = useCallback(async (id: string, updates: Partial<Order>, previousSteps?: OrderStep[]) => {
+    markLocalUpdate(); // Prevent realtime refetch for our own changes
+    
     const dbUpdates: Record<string, unknown> = {};
     
     if (updates.orderNumber !== undefined) dbUpdates.order_number = updates.orderNumber;
@@ -822,6 +851,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   }, [orders]);
 
   const updateProductionStatus = useCallback(async (id: string, newStatus: ProductionStatus) => {
+    markLocalUpdate(); // Prevent realtime refetch for our own changes
+    
     const order = orders.find(o => o.id === id);
     if (!order) return;
 
@@ -845,6 +876,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   }, [orders, fetchOrders]);
 
   const updateBillingStatus = useCallback(async (id: string, newStatus: BillingStatus) => {
+    markLocalUpdate(); // Prevent realtime refetch for our own changes
+    
     await supabase
       .from('orders')
       .update({ billing_status: newStatus })
@@ -854,6 +887,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   }, [fetchOrders]);
 
   const updateOrderStep = useCallback(async (orderId: string, stepId: string, updates: Partial<OrderStep>) => {
+    markLocalUpdate(); // Prevent realtime refetch for our own changes
+    
     // Check if status is being changed and log it
     const order = orders.find(o => o.id === orderId);
     const currentStep = order?.steps.find(s => s.id === stepId);
@@ -923,6 +958,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   }, [orders, fetchOrders]);
 
   const deleteOrder = useCallback(async (id: string) => {
+    markLocalUpdate(); // Prevent realtime refetch for our own changes
+    
     // Related rows are deleted via CASCADE
     const { error } = await supabase.from('orders').delete().eq('id', id);
     if (error) throw error;
@@ -950,6 +987,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     truckNumber: string,
     stepName: string
   ) => {
+    markLocalUpdate(); // Prevent realtime refetch for our own changes
+    
     // Find current status
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
@@ -1031,6 +1070,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     truckId: string,
     newStatus: TruckStatus
   ) => {
+    markLocalUpdate(); // Prevent realtime refetch for our own changes
+    
     // Find current status and object
     const order = orders.find(o => o.id === orderId);
     let objectId: string | undefined;
@@ -1203,6 +1244,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   }, [orders]);
 
   const bulkUpdateOrders = useCallback(async (orderIds: string[], updates: BulkOrderUpdates) => {
+    markLocalUpdate(); // Prevent realtime refetch for our own changes
+    
     if (orderIds.length === 0) return;
 
     // Build the update object for the orders table
