@@ -49,7 +49,7 @@ serve(async (req) => {
       );
     }
 
-    const { action, userId, newPassword } = await req.json();
+    const { action, userId, newPassword, fullName, email } = await req.json();
 
     if (!action || !userId) {
       return new Response(
@@ -106,6 +106,70 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({ success: true, message: "Password updated" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "updateProfile": {
+        // Validate inputs
+        if (email && typeof email === "string") {
+          // Basic email validation
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email) || email.length > 255) {
+            return new Response(
+              JSON.stringify({ error: "Invalid email address" }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        }
+
+        if (fullName && typeof fullName === "string" && fullName.length > 100) {
+          return new Response(
+            JSON.stringify({ error: "Name must be less than 100 characters" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Update auth.users email if provided
+        if (email) {
+          const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
+            userId,
+            { email }
+          );
+
+          if (authUpdateError) {
+            return new Response(
+              JSON.stringify({ error: authUpdateError.message }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        }
+
+        // Update profiles table (full_name and email if provided)
+        const profileUpdate: { full_name?: string; email?: string } = {};
+        if (fullName !== undefined) {
+          profileUpdate.full_name = fullName;
+        }
+        if (email) {
+          profileUpdate.email = email;
+        }
+
+        if (Object.keys(profileUpdate).length > 0) {
+          const { error: profileError } = await supabaseAdmin
+            .from("profiles")
+            .update(profileUpdate)
+            .eq("id", userId);
+
+          if (profileError) {
+            return new Response(
+              JSON.stringify({ error: profileError.message }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, message: "Profile updated" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
