@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { usePriceListLookup, type PriceMatch } from '@/hooks/usePriceListLookup';
+import { PriceListBadge } from '@/components/PriceListBadge';
 import type { ArticleRow } from '@/types/order';
 
 interface ArticleRowsEditorProps {
@@ -236,7 +237,23 @@ export function ArticleRowsEditor({
                   <>
                     <td className="py-2 pr-2 font-mono">{row.rowNumber}</td>
                     <td className="py-2 pr-2 font-mono">{row.partNumber}</td>
-                    <td className="py-2 pr-2">{row.text}</td>
+                    <td className="py-2 pr-2">
+                      <div>
+                        {row.text}
+                        <div className="mt-1">
+                          <PriceListBadge 
+                            partNumber={row.partNumber} 
+                            text={row.text}
+                            onSelectPrice={!readOnly ? (price) => {
+                              onRowsChange(rows.map(r => 
+                                r.id === row.id ? { ...r, price } : r
+                              ));
+                            } : undefined}
+                            readOnly={readOnly}
+                          />
+                        </div>
+                      </div>
+                    </td>
                     <td className="py-2 pr-2 text-right">{row.quantity}</td>
                     <td className="py-2 pr-2">{row.unit}</td>
                     <td className="py-2 pr-2 text-right">{row.price.toLocaleString('sv-SE')} kr</td>
