@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronRight, Pencil, Check, X, Package, ClipboardList } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, Pencil, Check, X, Settings } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -66,6 +66,7 @@ export function OrderObjectsEditor({
   const [expandedObjects, setExpandedObjects] = useState<Set<string>>(new Set(objects.map(o => o.id)));
   const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
   const [editingObjectName, setEditingObjectName] = useState('');
+  const [expandedStepEditors, setExpandedStepEditors] = useState<Set<string>>(new Set());
   
   // Object add state
   const [selectedObjectTemplateId, setSelectedObjectTemplateId] = useState('');
@@ -95,6 +96,18 @@ export function OrderObjectsEditor({
 
   const toggleExpanded = (objectId: string) => {
     setExpandedObjects(prev => {
+      const next = new Set(prev);
+      if (next.has(objectId)) {
+        next.delete(objectId);
+      } else {
+        next.add(objectId);
+      }
+      return next;
+    });
+  };
+
+  const toggleStepEditor = (objectId: string) => {
+    setExpandedStepEditors(prev => {
       const next = new Set(prev);
       if (next.has(objectId)) {
         next.delete(objectId);
@@ -162,16 +175,10 @@ export function OrderObjectsEditor({
   // Step management within objects
   const handleAddStep = (objectId: string) => {
     const templateId = selectedTemplates[objectId];
-    if (!templateId) {
-      console.log('No template selected for object', objectId);
-      return;
-    }
+    if (!templateId) return;
     
     const template = treatmentTemplates.find(t => t.id === templateId);
-    if (!template) {
-      console.log('Template not found:', templateId);
-      return;
-    }
+    if (!template) return;
 
     const newStep: OrderStep = {
       id: crypto.randomUUID(),
@@ -182,7 +189,6 @@ export function OrderObjectsEditor({
     };
 
     onStepsChange([...steps, newStep]);
-    // Nollställ efter att steget lagts till
     setSelectedTemplates(prev => {
       const next = { ...prev };
       delete next[objectId];
@@ -193,8 +199,6 @@ export function OrderObjectsEditor({
   const handleRemoveStep = (stepId: string) => {
     onStepsChange(steps.filter(s => s.id !== stepId));
   };
-
-  // Note: Step status is now only managed at the work card level
 
   // Drag end handler for reordering steps within an object
   const handleDragEnd = (objectId: string) => (event: DragEndEvent) => {
@@ -208,8 +212,6 @@ export function OrderObjectsEditor({
       const newIndex = objectSteps.findIndex(s => s.id === over.id);
       
       const reorderedObjectSteps = arrayMove(objectSteps, oldIndex, newIndex);
-      
-      // Combine: keep other steps, then add reordered object steps
       onStepsChange([...otherSteps, ...reorderedObjectSteps]);
     }
   };
@@ -218,27 +220,26 @@ export function OrderObjectsEditor({
   const isLoading = treatmentLoading || objectLoading;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Unassigned steps (legacy mode) */}
       {unassignedSteps.length > 0 && (
-        <div className="border rounded-md p-4 bg-muted/30">
-          <div className="flex items-center gap-2 mb-3">
-            <Package className="h-4 w-4 text-muted-foreground" />
+        <div className="border rounded-md p-3 bg-muted/30">
+          <div className="flex items-center gap-2 mb-2">
             <span className="font-medium text-sm text-muted-foreground">
               Steg utan objekt (legacy)
             </span>
           </div>
           <div className="space-y-1">
             {unassignedSteps.map(step => (
-              <div key={step.id} className="flex items-center gap-2 pl-6 py-1">
+              <div key={step.id} className="flex items-center gap-2 pl-4 py-0.5">
                 <span className="flex-1 text-sm">{step.name}</span>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-destructive hover:text-destructive"
+                  className="h-6 w-6 text-destructive hover:text-destructive"
                   onClick={() => handleRemoveStep(step.id)}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3 w-3" />
                 </Button>
               </div>
             ))}
@@ -252,115 +253,113 @@ export function OrderObjectsEditor({
           Inga objekt tillagda. Lägg till ett objekt för att hantera behandlingssteg.
         </p>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {objects.map(obj => {
             const objectSteps = getStepsForObject(obj.id);
             const isExpanded = expandedObjects.has(obj.id);
             const isEditing = editingObjectId === obj.id;
+            const isStepEditorExpanded = expandedStepEditors.has(obj.id);
+            const quantities = calculateObjectQuantities(obj.trucks);
+            const completedTrucks = (obj.trucks || []).filter(truck => {
+              if (objectSteps.length === 0) return false;
+              return objectSteps.every(step => {
+                const status = truck.stepStatuses.find(s => s.stepId === step.id);
+                return status?.status === 'completed';
+              });
+            }).length;
 
             return (
-              <Collapsible 
-                key={obj.id} 
-                open={isExpanded} 
-                onOpenChange={() => toggleExpanded(obj.id)}
-              >
-                <div className="border rounded-md overflow-hidden">
-                  {/* Object header */}
-                  <div className="flex items-center gap-2 p-3 bg-muted/50">
-                    <CollapsibleTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0">
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </CollapsibleTrigger>
-
-                    {isEditing ? (
-                      <div className="flex-1 flex items-center gap-2">
-                        <Input
-                          value={editingObjectName}
-                          onChange={(e) => setEditingObjectName(e.target.value)}
-                          className="h-8 flex-1"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveEditObject();
-                            if (e.key === 'Escape') handleCancelEditObject();
-                          }}
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-primary"
-                          onClick={handleSaveEditObject}
-                        >
-                          <Check className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={handleCancelEditObject}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
+              <div key={obj.id} className="border rounded-md overflow-hidden">
+                {/* Compact object header with inline steps */}
+                <div className="flex items-center gap-2 px-2 py-1.5 bg-muted/40">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-6 w-6 shrink-0"
+                    onClick={() => toggleExpanded(obj.id)}
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="h-4 w-4" />
                     ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </Button>
+
+                  {isEditing ? (
+                    <div className="flex-1 flex items-center gap-1">
+                      <Input
+                        value={editingObjectName}
+                        onChange={(e) => setEditingObjectName(e.target.value)}
+                        className="h-7 flex-1 text-sm"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEditObject();
+                          if (e.key === 'Escape') handleCancelEditObject();
+                        }}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-primary"
+                        onClick={handleSaveEditObject}
+                      >
+                        <Check className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={handleCancelEditObject}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
                     <>
-                        <span className="font-medium">{obj.name}</span>
-                        
-                        {/* Work card summary badge - auto-calculated */}
-                        {(() => {
-                          const quantities = calculateObjectQuantities(obj.trucks);
-                          if (quantities.planned === 0) return null;
-                          return (
-                            <Badge variant="outline" className="ml-2 gap-1">
-                              <ClipboardList className="h-3 w-3" />
-                              {quantities.planned} arbetskort
-                            </Badge>
-                          );
-                        })()}
-                        
-                        {/* Auto-calculated summary */}
-                        {(() => {
-                          const quantities = calculateObjectQuantities(obj.trucks);
-                          if (quantities.planned === 0) {
-                            return (
-                              <span className="text-xs text-muted-foreground ml-auto">
-                                Inga arbetskort
-                              </span>
-                            );
-                          }
-                          return (
-                            <span className="text-xs text-muted-foreground ml-auto">
-                              {quantities.planned} planerade • {quantities.received} ankomna • {quantities.completed} klara
-                            </span>
-                          );
-                        })()}
-                        
-                        {isProduction && (
+                      <span className="font-medium text-sm uppercase tracking-wide">{obj.name}</span>
+                      
+                      {/* Treatment steps as compact inline chips */}
+                      <div className="flex gap-1 flex-1 flex-wrap">
+                        {objectSteps.map(step => (
+                          <Badge 
+                            key={step.id} 
+                            variant="outline" 
+                            className="text-xs py-0 h-5 font-normal"
+                          >
+                            {step.name}
+                          </Badge>
+                        ))}
+                      </div>
+                      
+                      {/* Work card summary */}
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {quantities.planned > 0 
+                          ? `${quantities.planned} kort • ${completedTrucks} klar${completedTrucks !== 1 ? 'a' : ''}`
+                          : 'Inga kort'
+                        }
+                      </span>
+                      
+                      {isProduction && (
+                        <>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8"
+                            className="h-6 w-6"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleStartEditObject(obj);
                             }}
                           >
-                            <Pencil className="h-4 w-4" />
+                            <Pencil className="h-3 w-3" />
                           </Button>
-                        )}
-                        {isProduction && (
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            className="h-6 w-6 text-destructive hover:text-destructive"
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (objectSteps.length > 0) {
-                                if (confirm(`Ta bort "${obj.name}" och dess ${objectSteps.length} steg?`)) {
+                              if (objectSteps.length > 0 || (obj.trucks?.length || 0) > 0) {
+                                if (confirm(`Ta bort "${obj.name}" och alla dess steg och arbetskort?`)) {
                                   handleRemoveObject(obj.id);
                                 }
                               } else {
@@ -368,104 +367,121 @@ export function OrderObjectsEditor({
                               }
                             }}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3 w-3" />
                           </Button>
-                        )}
-                      </>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Content: Work cards (primary) + hidden step editor */}
+                {isExpanded && (
+                  <div className="px-2 pb-2 bg-background">
+                    {/* Work cards - always visible, primary focus */}
+                    <ObjectTrucksEditor
+                      trucks={obj.trucks || []}
+                      objectId={obj.id}
+                      objectName={obj.name}
+                      objectSteps={objectSteps}
+                      articleRows={articleRows?.filter(r => r.objectId === obj.id || !r.objectId)}
+                      onTrucksChange={(newTrucks) => {
+                        onObjectsChange(objects.map(o =>
+                          o.id === obj.id ? { ...o, trucks: newTrucks } : o
+                        ));
+                      }}
+                      onTruckStatusChange={onTruckStatusChange}
+                      onTruckStepStatusChange={onTruckStepStatusChange}
+                      orderInfo={orderInfo}
+                    />
+                    
+                    {/* Hidden step editor - only for production users */}
+                    {isProduction && (
+                      <Collapsible 
+                        open={isStepEditorExpanded} 
+                        onOpenChange={() => toggleStepEditor(obj.id)}
+                        className="mt-2"
+                      >
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="text-xs h-7 px-2 text-muted-foreground">
+                            <Settings className="h-3 w-3 mr-1" />
+                            {isStepEditorExpanded ? 'Dölj stegredigering' : 'Redigera steg...'}
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="pt-2">
+                          <div className="border rounded-md p-2 bg-muted/20 space-y-2">
+                            {objectSteps.length === 0 ? (
+                              <p className="text-xs text-muted-foreground text-center py-1">
+                                Inga steg tillagda.
+                              </p>
+                            ) : (
+                              <DndContext
+                                sensors={sensors}
+                                collisionDetection={closestCenter}
+                                onDragEnd={handleDragEnd(obj.id)}
+                              >
+                                <SortableContext
+                                  items={objectSteps.map(s => s.id)}
+                                  strategy={verticalListSortingStrategy}
+                                >
+                                  <div className="space-y-0.5">
+                                    {objectSteps.map((step) => (
+                                      <SortableStep
+                                        key={step.id}
+                                        step={step}
+                                        onRemove={handleRemoveStep}
+                                      />
+                                    ))}
+                                  </div>
+                                </SortableContext>
+                              </DndContext>
+                            )}
+
+                            {/* Add step */}
+                            <div className="flex gap-1 pt-1 border-t">
+                              <Select 
+                                value={selectedTemplates[obj.id] || ''} 
+                                onValueChange={(v) => {
+                                  if (v && v !== '_none') {
+                                    setSelectedTemplates(prev => ({ ...prev, [obj.id]: v }));
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="flex-1 h-7 text-xs bg-background">
+                                  <SelectValue placeholder="Välj steg..." />
+                                </SelectTrigger>
+                                <SelectContent className="bg-popover">
+                                  {treatmentTemplates.length === 0 ? (
+                                    <SelectItem value="_none" disabled>
+                                      Inga steg tillgängliga
+                                    </SelectItem>
+                                  ) : (
+                                    treatmentTemplates.map(template => (
+                                      <SelectItem key={template.id} value={template.id}>
+                                        {template.name}
+                                      </SelectItem>
+                                    ))
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              <Button 
+                                type="button"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => handleAddStep(obj.id)} 
+                                disabled={!selectedTemplates[obj.id]}
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                Lägg till
+                              </Button>
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
                     )}
                   </div>
-
-                  {/* Object content - steps */}
-                  <CollapsibleContent>
-                    <div className="p-3 space-y-2 bg-background">
-                      {objectSteps.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-2">
-                          Inga steg tillagda för detta objekt.
-                        </p>
-                      ) : (
-                        /* Always show drag-drop sortable list with delete */
-                        <DndContext
-                          sensors={sensors}
-                          collisionDetection={closestCenter}
-                          onDragEnd={handleDragEnd(obj.id)}
-                        >
-                          <SortableContext
-                            items={objectSteps.map(s => s.id)}
-                            strategy={verticalListSortingStrategy}
-                          >
-                            <div className="space-y-1">
-                              {objectSteps.map((step) => (
-                                <SortableStep
-                                  key={step.id}
-                                  step={step}
-                                  onRemove={handleRemoveStep}
-                                />
-                              ))}
-                            </div>
-                          </SortableContext>
-                        </DndContext>
-                      )}
-
-                      {/* Add step to object - production only */}
-                      {isProduction && (
-                        <div className="flex gap-2 pt-2 border-t mt-3">
-                          <Select 
-                            value={selectedTemplates[obj.id] || ''} 
-                            onValueChange={(v) => {
-                              if (v && v !== '_none' && v !== '') {
-                                setSelectedTemplates(prev => ({ ...prev, [obj.id]: v }));
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="flex-1 h-9 text-sm bg-background">
-                              <SelectValue placeholder="Välj behandlingssteg..." />
-                            </SelectTrigger>
-                            <SelectContent className="bg-popover">
-                              {treatmentTemplates.length === 0 ? (
-                                <SelectItem value="_none" disabled>
-                                  Inga steg tillgängliga
-                                </SelectItem>
-                              ) : (
-                                treatmentTemplates.map(template => (
-                                  <SelectItem key={template.id} value={template.id}>
-                                    {template.name}
-                                  </SelectItem>
-                                ))
-                              )}
-                            </SelectContent>
-                          </Select>
-                          <Button 
-                            type="button"
-                            size="sm"
-                            onClick={() => handleAddStep(obj.id)} 
-                            disabled={!selectedTemplates[obj.id]}
-                          >
-                            <Plus className="h-4 w-4 mr-1" />
-                            Lägg till
-                          </Button>
-                        </div>
-                      )}
-                      
-                      {/* Work unit editor section */}
-                      <ObjectTrucksEditor
-                        trucks={obj.trucks || []}
-                        objectId={obj.id}
-                        objectName={obj.name}
-                        objectSteps={objectSteps}
-                        articleRows={articleRows?.filter(r => r.objectId === obj.id || !r.objectId)}
-                        onTrucksChange={(newTrucks) => {
-                          onObjectsChange(objects.map(o =>
-                            o.id === obj.id ? { ...o, trucks: newTrucks } : o
-                          ));
-                        }}
-                        onTruckStatusChange={onTruckStatusChange}
-                        onTruckStepStatusChange={onTruckStepStatusChange}
-                        orderInfo={orderInfo}
-                      />
-                    </div>
-                  </CollapsibleContent>
-                </div>
-              </Collapsible>
+                )}
+              </div>
             );
           })}
         </div>
@@ -473,10 +489,9 @@ export function OrderObjectsEditor({
 
       {/* Add new object - production only */}
       {isProduction && (
-        <div className="space-y-3 pt-2 border-t">
+        <div className="space-y-2 pt-2 border-t">
           <div className="text-sm font-medium">Lägg till objekt</div>
           
-          {/* Template selection or custom name */}
           <div className="flex flex-col sm:flex-row gap-2">
             {!useCustomObjectName ? (
               <>
@@ -485,7 +500,7 @@ export function OrderObjectsEditor({
                   onValueChange={setSelectedObjectTemplateId}
                   disabled={isLoading}
                 >
-                  <SelectTrigger className="flex-1 bg-background">
+                  <SelectTrigger className="flex-1 h-9 bg-background">
                     <SelectValue placeholder="Välj objektmall..." />
                   </SelectTrigger>
                   <SelectContent className="bg-popover">
@@ -504,6 +519,7 @@ export function OrderObjectsEditor({
                 </Select>
                 <Button 
                   variant="outline"
+                  size="sm"
                   onClick={() => setUseCustomObjectName(true)}
                 >
                   Eget namn
@@ -515,13 +531,14 @@ export function OrderObjectsEditor({
                   value={customObjectName}
                   onChange={(e) => setCustomObjectName(e.target.value)}
                   placeholder="Skriv objektnamn..."
-                  className="flex-1"
+                  className="flex-1 h-9"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleAddObject();
                   }}
                 />
                 <Button 
                   variant="outline"
+                  size="sm"
                   onClick={() => {
                     setUseCustomObjectName(false);
                     setCustomObjectName('');
@@ -532,11 +549,12 @@ export function OrderObjectsEditor({
               </>
             )}
             <Button 
+              size="sm"
               onClick={handleAddObject} 
               disabled={useCustomObjectName ? !customObjectName.trim() : !selectedObjectTemplateId}
             >
-              <Plus className="h-4 w-4 mr-2" />
-              Lägg till objekt
+              <Plus className="h-4 w-4 mr-1" />
+              Lägg till
             </Button>
           </div>
         </div>
