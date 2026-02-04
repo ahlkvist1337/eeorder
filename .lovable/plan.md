@@ -1,9 +1,9 @@
 
-# Plan: Förbättrad prisindikator för orderartiklar
+# Plan: Kompaktare objekt/steg med arbetskort i fokus
 
 ## Sammanfattning
 
-Utvecklar prisvarningssystemet så att en diskret indikator ("Prislistan finns") visas direkt på artikelraden när artikelnummer eller benämning matchar prislistan - utan att användaren behöver redigera raden. Vid klick visas en kompakt prisöversikt med alla tillgängliga priser som speglar prislistans struktur.
+Omstrukturerar UI:n för objekt och behandlingssteg så att arbetskortet blir det primära fokuset. Objektet blir mer av en rubrik/gruppering med behandlingssteg visade kompakt inline, medan arbetskorten är synliga från start och kan kollapsas vid behov.
 
 ---
 
@@ -11,130 +11,134 @@ Utvecklar prisvarningssystemet så att en diskret indikator ("Prislistan finns")
 
 | Aspekt | Nuvarande | Nytt |
 |--------|-----------|------|
-| **När visas prisinfo** | Endast vid redigering av prisfältet | Direkt på alla rader som matchar prislistan |
-| **Vad visas** | Enskilt pris + "Använd"-knapp | Badge "Prislista finns" på raden |
-| **Prisöversikt** | Inget | Popover med ALLA prisvarianter vid klick |
-| **Flöde** | Måste redigera för att se | Ser direkt, klickar för detaljer |
+| **Objekt** | Stort collapsible block med header och content | Kompakt rubrikrad med steg inline |
+| **Behandlingssteg** | Vertikal lista, tar mycket plats | Horisontella badges/chips, kompakt |
+| **Arbetskort** | Gömd under "Arbetskort" collapse, stängt som default | Synligt direkt, öppet som default |
+| **Hierarki** | Objekt → Steg → Arbetskort (nedåt) | Objekt (rubrik) → Arbetskort (primärt) med steg inline |
 
 ---
 
-## Användarflöde
+## Ny layout per objekt
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│  Rad  │  Artikelnr  │  Beskrivning           │ Antal │ Enhet │  Pris  │ Summa │
+│  ▾ MOTORHUV        [Målning] [SPZ] [Kontroll]    3 arbetskort • 1 klar  [✎][🗑]  │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│   1   │  116        │  Fingerskydd litet     │   2   │  st.  │  0 kr  │ 0 kr  │
-│        ∟ [📋 Prislista finns]  ← diskret badge, alltid synlig                │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │ #135  [Ankommen ▾]   Målning ✓  SPZ ●  Kontroll ○           [✎][🖨][🗑] │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │ #136  [Väntande ▾]   Målning ○  SPZ ○  Kontroll ○           [✎][🖨][🗑] │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │ Motor A3F2  [Klar ▾]   Målning ✓  SPZ ✓  Kontroll ✓          [✎][🖨][🗑] │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
 │                                                                              │
-│   2   │  3903041    │  Lagerlock             │   3   │  st.  │  0 kr  │ 0 kr  │
-│        ∟ [📋 Prislista finns]                                                │
+│  [+ Lägg till arbetskort]                                                    │
 │                                                                              │
-│   3   │  XYZ-123    │  Okänd artikel         │   1   │  st.  │ 500 kr │ 500 kr│
-│        (ingen badge - ingen match)                                           │
+│  ▸ Redigera steg...                   ← Dold section för att lägga till steg │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Vid klick på "Prislista finns":**
+---
 
-```
-┌─────────────────────────────────────────┐
-│  📋 Priser i prislistan                 │
-│                                         │
-│  Artikelnr: 3903041 - Lagerlock         │
-│  ─────────────────────────────          │
-│  1:a Målning          1 500 kr  [Välj]  │
-│  2:a uppåt Målning      275 kr  [Välj]  │
-│                                         │
-└─────────────────────────────────────────┘
-```
+## Designprinciper
+
+### 1. Objekthuvudet blir kompaktare
+- Objektnamn + behandlingssteg som små chips (horisontellt)
+- Sammanfattning av arbetskort ("3 st • 1 klar") i slutet
+- Collapse-knapp för att dölja arbetskorten (inte objektet)
+
+### 2. Arbetskorten synliga från start
+- `isExpanded` default = `true` (öppet från start)
+- Varje arbetskort är en kompakt rad med:
+  - ID/namn (font-mono, bold)
+  - Status-dropdown
+  - Steg-badges inline
+  - Åtgärdsknappar (edit, print, delete)
+
+### 3. Steg-redigeringen gömd
+- "Redigera steg..." knapp som expanderar till steg-lista
+- Endast för production users
+- Förhindrar att steg-listan tar plats i det dagliga arbetet
+
+### 4. Kompaktare spacing
+- Mindre padding, tightare gap
+- Borders istället för bakgrundsfärger för separation
+- Arbetskort-rader med minimal höjd
 
 ---
 
 ## Teknisk implementation
 
-### 1. Utöka usePriceListLookup hook
+### ObjectTrucksEditor.tsx - Omstrukturering
 
-Lägg till en ny funktion `findAllMatches` som returnerar ALLA matchande priser (inte bara bästa):
-
+**Ändring 1: Default expanded**
 ```typescript
-interface PriceMatch {
-  price: number;
-  partNumber: string;
-  description: string;
-  stepName: string | null;  // NY - behövs för visning
-  matchType: 'exact_part' | 'similar_desc';
-}
-
-// NY funktion
-findAllMatches(partNumber: string, description: string): PriceMatch[]
+// Ändra från false till true
+const [isExpanded, setIsExpanded] = useState(true);
 ```
 
-**Logik:**
-1. Om artikelnumret matchar exakt → returnera alla priser för det artikelnumret
-2. Annars om beskrivning matchar (≥2 ord) → returnera alla priser för matchande artiklar
-3. Sortera efter step_name för konsekvent ordning
+**Ändring 2: Kompaktare layout**
+- Ta bort extra border-t och pt-3 mt-3
+- Integrera direkt i objekt-innehållet
+- Arbetskort-listan direkt synlig
 
-### 2. Ny komponent: PriceListBadge
+### OrderObjectsEditor.tsx - Ny struktur
 
-Skapar en liten badge-komponent som:
-- Tar emot `partNumber` och `text` som props
-- Använder `findAllMatches` för att kontrollera om det finns matchningar
-- Visar en diskret badge om match finns
-- Vid klick öppnas en Popover med prisöversikten
+**Ändring 1: Kompaktare objekt-header**
+- Flytta behandlingssteg till header som chips/badges
+- Ta bort CollapsibleContent för steg
+- Arbetskorten hamnar direkt under header
 
-```typescript
-interface PriceListBadgeProps {
-  partNumber: string;
-  text: string;
-  onSelectPrice?: (price: number) => void;  // Callback när användare väljer pris
-  readOnly?: boolean;  // Om true, visa inte "Välj"-knappar
-}
+**Ändring 2: Steg i header**
+```tsx
+<div className="flex items-center gap-2 p-2 bg-muted/30 rounded-t-md">
+  <Button variant="ghost" size="sm" onClick={toggle}>
+    {isExpanded ? <ChevronDown /> : <ChevronRight />}
+  </Button>
+  <span className="font-medium">{obj.name}</span>
+  
+  {/* Behandlingssteg som kompakta chips */}
+  <div className="flex gap-1 flex-1 flex-wrap">
+    {objectSteps.map(step => (
+      <Badge key={step.id} variant="outline" className="text-xs py-0 h-5">
+        {step.name}
+      </Badge>
+    ))}
+  </div>
+  
+  {/* Sammanfattning + actions */}
+  <span className="text-xs text-muted-foreground">
+    {trucks.length} kort • {completed} klar
+  </span>
+  {/* Edit/delete buttons */}
+</div>
 ```
 
-### 3. Uppdatera ArticleRowsEditor
-
-**I visningstabellenraden (ej redigering):**
-- Lägg till `<PriceListBadge>` under artikelraden
-- Badge visas alltid om match finns
-- Klickbar för att visa prisöversikt
-
-**I redigeringsläge:**
-- Befintlig `PriceHint` kan behållas för snabb varning
-- ELLER ersätt helt med ny badge + popover
-
----
-
-## Prisöversiktens design
-
-Popover vid klick visar alla priser rakt upp och ner:
-
-```
-┌───────────────────────────────────────────┐
-│  Priser i prislistan                      │
-│                                           │
-│  116 - Fingerskydd litet                  │
-│  ─────────────────────────────────────    │
-│                                           │
-│  SPZ                         500 kr [Välj]│
-│  (grundpris)                 500 kr [Välj]│
-│                                           │
-└───────────────────────────────────────────┘
+**Ändring 3: "Redigera steg" collapse**
+```tsx
+{/* Dold sektion för steg-hantering */}
+{isProduction && (
+  <Collapsible>
+    <CollapsibleTrigger asChild>
+      <Button variant="ghost" size="sm" className="text-xs">
+        <Settings className="h-3 w-3 mr-1" />
+        Redigera steg...
+      </Button>
+    </CollapsibleTrigger>
+    <CollapsibleContent>
+      {/* Steg-lista med drag-drop */}
+    </CollapsibleContent>
+  </Collapsible>
+)}
 ```
 
-Eller för artikel med mängdpriser:
+### SortableStep.tsx - Kompaktare
 
-```
-┌───────────────────────────────────────────┐
-│  Priser i prislistan                      │
-│                                           │
-│  2954145 - RIGHT ADDITIONAL FENDER        │
-│  ─────────────────────────────────────    │
-│                                           │
-│  1:a                       1 500 kr [Välj]│
-│  från 2:a                    650 kr [Välj]│
-│                                           │
-└───────────────────────────────────────────┘
+Minska padding och storlek:
+```tsx
+className="flex items-center gap-1 bg-background rounded py-0.5"
 ```
 
 ---
@@ -143,41 +147,24 @@ Eller för artikel med mängdpriser:
 
 | Fil | Ändring |
 |-----|---------|
-| `src/hooks/usePriceListLookup.ts` | Lägg till `findAllMatches` funktion |
-| `src/components/PriceListBadge.tsx` | **NY FIL** - Badge + Popover komponent |
-| `src/components/ArticleRowsEditor.tsx` | Integrera PriceListBadge i tabellrader |
+| `src/components/OrderObjectsEditor.tsx` | Ny layout med steg i header, arbetskort primärt |
+| `src/components/ObjectTrucksEditor.tsx` | Default expanded, ta bort extra wrapper |
+| `src/components/SortableStep.tsx` | Kompaktare styling |
 
 ---
 
-## Användargränssnitt detaljer
+## Mobil-anpassning
 
-### Badge-design
-- Liten, diskret text eller ikon
-- Färg: `text-muted-foreground` eller lätt accentfärg
-- Ikon: `List` eller `FileText` från lucide
-- Text: "Prislista finns" eller bara ikon med tooltip
-
-### Popover-design
-- Rubrik: "Priser i prislistan"
-- Artikelinfo: Artikelnr + beskrivning
-- Separator
-- Lista över priser:
-  - Vänster: step_name (eller "(grundpris)" om null)
-  - Höger: pris formaterat + "Välj"-knapp
-- Ingen gruppering eller dropdown - flat lista
-
-### Beteende
-- Badge visas på ALLA rader som har matchning (inte bara vid redigering)
-- Popover stängs automatiskt vid val av pris
-- Vid val uppdateras radens pris direkt
-- readOnly-läge: visa priserna men utan "Välj"-knappar
+- På mobil wrappas steg-chips till ny rad
+- Arbetskort-raderna stackas vertikalt vid behov
+- Åtgärdsknappar förblir kompakta
 
 ---
 
 ## Resultat
 
-1. **Omedelbar överblick** - Användaren ser direkt vilka artiklar som finns i prislistan
-2. **Enkel jämförelse** - Alla prisvarianter visas samtidigt utan gruppering
-3. **Frivillig användning** - Priserna är informativa, inte tvingande
-4. **Speglar datan** - Visar exakt vad som finns i prislistan (behandlingspriser, mängdpriser, etc.)
-5. **Inte rörigt** - Diskret badge som inte stör arbetsflödet
+1. **Arbetskorten i fokus** - Synliga direkt när man öppnar en order
+2. **Kompaktare objekt** - Behandlingssteg tar inte extra vertikalt utrymme
+3. **Snabbare överblick** - Ser alla arbetskort och deras status direkt
+4. **Flexibelt** - Kan kollapsa arbetskorten om man vill fokusera på annat
+5. **Steg-redigering gömd** - Finns men stör inte det dagliga arbetet
