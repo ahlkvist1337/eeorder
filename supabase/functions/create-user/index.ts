@@ -73,11 +73,12 @@ serve(async (req) => {
       );
     }
 
-    // Assign role if specified
-    if (role && newUser.user) {
+    // Assign role if specified (default to utforare if no role provided)
+    const roleToAssign = role || 'utforare';
+    if (newUser.user) {
       const { error: roleError } = await supabaseAdmin
         .from("user_roles")
-        .insert({ user_id: newUser.user.id, role });
+        .insert({ user_id: newUser.user.id, role: roleToAssign });
 
       if (roleError) {
         console.error("Error assigning role:", roleError);

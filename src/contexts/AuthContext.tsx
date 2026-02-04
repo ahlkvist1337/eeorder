@@ -9,7 +9,15 @@ interface AuthContextType {
   profile: Profile | null;
   roles: AppRole[];
   isLoading: boolean;
+  // Role checks
   isAdmin: boolean;
+  isProduction: boolean;
+  // Permission flags
+  canManageOrders: boolean;  // Create/edit orders, objects, steps (produktion/admin)
+  canManagePrices: boolean;  // Edit prices, price list (admin only)
+  canManageUsers: boolean;   // User management (admin only)
+  canReportWork: boolean;    // Report work status (all roles)
+  // Legacy alias - kept for backwards compatibility during transition
   canEdit: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -24,8 +32,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Role checks
   const isAdmin = roles.includes('admin');
-  const canEdit = roles.includes('admin') || roles.includes('redigera');
+  const isProduction = roles.includes('admin') || roles.includes('produktion');
+  
+  // Permission flags
+  const canManageOrders = isProduction;
+  const canManagePrices = isAdmin;
+  const canManageUsers = isAdmin;
+  const canReportWork = roles.length > 0; // Any role can report work
+  
+  // Legacy alias
+  const canEdit = isProduction;
 
   const fetchUserData = async (userId: string) => {
     try {
@@ -115,6 +133,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         roles,
         isLoading,
         isAdmin,
+        isProduction,
+        canManageOrders,
+        canManagePrices,
+        canManageUsers,
+        canReportWork,
         canEdit,
         signIn,
         signOut,

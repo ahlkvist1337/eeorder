@@ -51,7 +51,7 @@ export default function OrderDetails() {
 
   const order = getOrderById(id || '');
   const { attachments, refetch: refetchAttachments } = useOrderAttachments(id || '');
-  const { canEdit } = useAuth();
+  const { isAdmin, isProduction } = useAuth();
   
   // Set dynamic page title
   useDocumentTitle(order ? `Order ${order.orderNumber}` : 'Order');
@@ -267,7 +267,7 @@ export default function OrderDetails() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs sm:text-sm text-muted-foreground">Planerat start</Label>
-                    {canEdit ? (
+                    {isProduction ? (
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button
@@ -313,7 +313,7 @@ export default function OrderDetails() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs sm:text-sm text-muted-foreground">Planerat slut</Label>
-                    {canEdit ? (
+                    {isProduction ? (
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button
@@ -381,7 +381,7 @@ export default function OrderDetails() {
                             toast.error('Kunde inte uppdatera instruktioner');
                           }
                         }}
-                        readOnly={!canEdit}
+                        readOnly={!isProduction}
                       />
                     </div>
                   )}
@@ -543,77 +543,87 @@ export default function OrderDetails() {
               <CardContent className="space-y-3 sm:space-y-4 pt-0 sm:pt-0">
                 <div className="space-y-1.5 sm:space-y-2">
                   <Label className="text-xs sm:text-sm">Orderstatus</Label>
-                  <Select 
-                    value={toAdminStatus(order.productionStatus)} 
-                    onValueChange={handleProductionStatusChange}
-                  >
-                    <SelectTrigger className="bg-background text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover">
-                      {Object.entries(orderAdminStatusLabels).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {isAdmin ? (
+                    <Select 
+                      value={toAdminStatus(order.productionStatus)} 
+                      onValueChange={handleProductionStatusChange}
+                    >
+                      <SelectTrigger className="bg-background text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover">
+                        {Object.entries(orderAdminStatusLabels).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm font-medium">
+                      {orderAdminStatusLabels[toAdminStatus(order.productionStatus)] || order.productionStatus}
+                    </p>
+                  )}
                 </div>
 
-                <div className="space-y-1.5 sm:space-y-2">
-                  <Label className="text-xs sm:text-sm">Faktureringsstatus</Label>
-                  <Select 
-                    value={order.billingStatus} 
-                    onValueChange={handleBillingStatusChange}
-                  >
-                    <SelectTrigger className="bg-background text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover">
-                      {Object.entries(billingStatusLabels).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {isAdmin && (
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <Label className="text-xs sm:text-sm">Faktureringsstatus</Label>
+                    <Select 
+                      value={order.billingStatus} 
+                      onValueChange={handleBillingStatusChange}
+                    >
+                      <SelectTrigger className="bg-background text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover">
+                        {Object.entries(billingStatusLabels).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="border-t my-4" />
 
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="deviation"
-                      checked={order.hasDeviation}
-                      onCheckedChange={(checked) => handleDeviationChange(!!checked)}
-                    />
-                    <Label htmlFor="deviation" className="font-medium cursor-pointer flex items-center gap-2 text-sm">
-                      <AlertTriangle className="h-4 w-4 text-destructive" />
-                      Avvikelse
-                    </Label>
-                  </div>
-                  {order.hasDeviation && (
-                    <div className="space-y-2">
-                      <Textarea
-                        value={localDeviationComment}
-                        onChange={(e) => {
-                          setLocalDeviationComment(e.target.value);
-                          setHasUnsavedDeviationComment(e.target.value !== (order.deviationComment || ''));
-                        }}
-                        placeholder="Beskriv avvikelsen..."
-                        rows={3}
-                        className="text-sm"
+                {isProduction && (
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="deviation"
+                        checked={order.hasDeviation}
+                        onCheckedChange={(checked) => handleDeviationChange(!!checked)}
                       />
-                      {hasUnsavedDeviationComment && (
-                        <Button 
-                          size="sm" 
-                          onClick={handleSaveDeviationComment}
-                          className="w-full"
-                        >
-                          <Save className="h-4 w-4 mr-2" />
-                          Spara
-                        </Button>
-                      )}
+                      <Label htmlFor="deviation" className="font-medium cursor-pointer flex items-center gap-2 text-sm">
+                        <AlertTriangle className="h-4 w-4 text-destructive" />
+                        Avvikelse
+                      </Label>
                     </div>
-                  )}
-                </div>
+                    {order.hasDeviation && (
+                      <div className="space-y-2">
+                        <Textarea
+                          value={localDeviationComment}
+                          onChange={(e) => {
+                            setLocalDeviationComment(e.target.value);
+                            setHasUnsavedDeviationComment(e.target.value !== (order.deviationComment || ''));
+                          }}
+                          placeholder="Beskriv avvikelsen..."
+                          rows={3}
+                          className="text-sm"
+                        />
+                        {hasUnsavedDeviationComment && (
+                          <Button 
+                            size="sm" 
+                            onClick={handleSaveDeviationComment}
+                            className="w-full"
+                          >
+                            <Save className="h-4 w-4 mr-2" />
+                            Spara
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -641,21 +651,23 @@ export default function OrderDetails() {
               </CardContent>
             </Card>
 
-            {/* Danger zone */}
-            <Card className="border-destructive/50">
-              <CardHeader className="pb-3 sm:pb-6">
-                <CardTitle className="text-destructive text-base sm:text-lg">Farozon</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0 sm:pt-0">
-                <Button 
-                  variant="destructive" 
-                  className="w-full text-sm"
-                  onClick={handleDelete}
-                >
-                  Ta bort order
-                </Button>
-              </CardContent>
-            </Card>
+            {/* Danger zone - admin only */}
+            {isAdmin && (
+              <Card className="border-destructive/50">
+                <CardHeader className="pb-3 sm:pb-6">
+                  <CardTitle className="text-destructive text-base sm:text-lg">Farozon</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 sm:pt-0">
+                  <Button 
+                    variant="destructive" 
+                    className="w-full text-sm"
+                    onClick={handleDelete}
+                  >
+                    Ta bort order
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>

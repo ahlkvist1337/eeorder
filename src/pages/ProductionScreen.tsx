@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { DndContext, closestCenter, DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, rectSortingStrategy } from '@dnd-kit/sortable';
 import { useOrders } from '@/contexts/OrdersContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { SortableProductionTruckCard } from '@/components/SortableProductionTruckCard';
 import { format } from 'date-fns';
@@ -98,6 +99,7 @@ function sortTrucks(trucks: FlatTruck[]): FlatTruck[] {
 export default function ProductionScreen() {
   useDocumentTitle('Produktion');
   const { orders, refreshOrders, isLoading } = useOrders();
+  const { isProduction } = useAuth();
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [localTruckOrder, setLocalTruckOrder] = useState<string[]>([]);
 
@@ -120,8 +122,10 @@ export default function ProductionScreen() {
     })
   );
 
-  // Handle drag end
+  // Handle drag end - only for production/admin
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    if (!isProduction) return;
+    
     const { active, over } = event;
     
     if (!over || active.id === over.id) return;
@@ -148,10 +152,12 @@ export default function ProductionScreen() {
         .update({ sort_order: update.sort_order })
         .eq('id', update.id);
     }
-  }, [localTruckOrder]);
+  }, [localTruckOrder, isProduction]);
 
-  // Reset manual sorting
+  // Reset manual sorting - only for production/admin
   const handleResetSorting = useCallback(async () => {
+    if (!isProduction) return;
+    
     // Clear all sort_order values for active trucks
     for (const flatTruck of activeTrucks) {
       await supabase
@@ -162,7 +168,7 @@ export default function ProductionScreen() {
     
     // Refresh to get new order
     await refreshOrders();
-  }, [activeTrucks, refreshOrders]);
+  }, [activeTrucks, refreshOrders, isProduction]);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -227,7 +233,7 @@ export default function ProductionScreen() {
             Pausad
           </span>
           
-          {hasManualSorting && (
+          {hasManualSorting && isProduction && (
             <Button
               variant="outline"
               size="sm"
