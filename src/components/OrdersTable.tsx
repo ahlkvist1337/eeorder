@@ -40,7 +40,7 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
-      // Search filter - include truck numbers
+      // Search filter - include truck numbers and article part numbers
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         
@@ -48,12 +48,17 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
         const allTruckNumbers = (order.objects || [])
           .flatMap(obj => (obj.trucks || []).map(t => t.truckNumber.toLowerCase()));
         
+        // Get all article part numbers from the order
+        const allPartNumbers = (order.articleRows || [])
+          .map(row => row.partNumber.toLowerCase());
+        
         const matchesSearch = 
           order.orderNumber.toLowerCase().includes(query) ||
           order.customer.toLowerCase().includes(query) ||
           (order.comment && order.comment.toLowerCase().includes(query)) ||
           (order.customerReference && order.customerReference.toLowerCase().includes(query)) ||
-          allTruckNumbers.some(tn => tn.includes(query));
+          allTruckNumbers.some(tn => tn.includes(query)) ||
+          allPartNumbers.some(pn => pn.includes(query));
         if (!matchesSearch) return false;
       }
       
