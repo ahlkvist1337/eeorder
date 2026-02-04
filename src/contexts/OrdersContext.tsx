@@ -434,6 +434,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     if (order.steps && order.steps.length > 0) {
       const { error: stepsError } = await supabase.from('order_steps').insert(
         order.steps.map(step => ({
+          id: step.id,
           order_id: orderId,
           template_id: step.templateId,
           name: step.name,
