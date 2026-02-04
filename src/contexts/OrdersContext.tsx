@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus, TruckStatusChange, TruckStatus, Instruction } from '@/types/order';
+import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus, TruckStatusChange, TruckStatus, Instruction, TruckLifecycleEvent, TruckLifecycleEventType } from '@/types/order';
 
 // Database types (manual since types.ts may not be updated yet)
 interface DbOrder {
@@ -999,6 +999,9 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       }
     }
     
+    // Skip if no actual change - prevents duplicate history entries
+    if (currentStatus === newStatus) return;
+    
     // Calculate quantity changes
     let receivedDelta = 0;
     let completedDelta = 0;
@@ -1016,7 +1019,20 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     const newReceivedQuantity = currentObj ? Math.max(0, currentObj.receivedQuantity + receivedDelta) : 0;
     const newCompletedQuantity = currentObj ? Math.max(0, currentObj.completedQuantity + completedDelta) : 0;
     
-    // Optimistic update with quantities
+    // Find truck number for lifecycle event
+    const truck = order?.objects?.flatMap(obj => obj.trucks || []).find(t => t.id === truckId);
+    
+    // Create lifecycle event for optimistic update
+    const newLifecycleEvent: TruckLifecycleEvent = {
+      id: crypto.randomUUID(),
+      orderId,
+      truckId,
+      truckNumber: truck?.truckNumber || '',
+      eventType: newStatus as TruckLifecycleEventType,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Optimistic update with quantities AND lifecycle event
     setOrders(prev => prev.map(o => {
       if (o.id !== orderId) return o;
       return {
@@ -1033,6 +1049,10 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
             t.id === truckId ? { ...t, status: newStatus } : t
           ),
         })),
+        truckLifecycleEvents: [
+          ...(o.truckLifecycleEvents || []),
+          newLifecycleEvent,
+        ],
       };
     }));
 
@@ -1090,16 +1110,14 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Log lifecycle event - find truck number first
-    const truck = order?.objects?.flatMap(obj => obj.trucks || []).find(t => t.id === truckId);
-    if (truck) {
-      await supabase.from('truck_lifecycle_events').insert({
-        order_id: orderId,
-        truck_id: truckId,
-        truck_number: truck.truckNumber,
-        event_type: newStatus, // 'arrived', 'started', 'paused', 'completed'
-      });
-    }
+    // Log lifecycle event to database
+    await supabase.from('truck_lifecycle_events').insert({
+      id: newLifecycleEvent.id,
+      order_id: orderId,
+      truck_id: truckId,
+      truck_number: truck?.truckNumber || null,
+      event_type: newStatus,
+    });
   }, [orders]);
 
   const bulkUpdateOrders = useCallback(async (orderIds: string[], updates: BulkOrderUpdates) => {
