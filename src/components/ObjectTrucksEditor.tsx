@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, Pencil, Check, X, ChevronDown, ChevronRight, Package } from 'lucide-react';
+import { Plus, Trash2, Pencil, Check, X, ChevronDown, ChevronRight, Package, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -8,15 +8,21 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { cn } from '@/lib/utils';
 import type { ObjectTruck, OrderStep, StepStatus, TruckStatus } from '@/types/order';
 import { truckStatusLabels, getWorkUnitDisplayName } from '@/types/order';
+import { printWorkCard } from '@/lib/workCardPrint';
 
 interface ObjectTrucksEditorProps {
   trucks: ObjectTruck[];
   objectId: string;
-  objectName: string; // Added for fallback display
+  objectName: string;
   objectSteps: OrderStep[];
   onTrucksChange: (trucks: ObjectTruck[]) => void;
   onTruckStepStatusChange?: (truckId: string, stepId: string, status: StepStatus) => void;
   onTruckStatusChange?: (truckId: string, status: TruckStatus) => void;
+  orderInfo?: {
+    id: string;
+    orderNumber: string;
+    customer: string;
+  };
 }
 
 const stepStatusColors: Record<StepStatus, { bg: string; text: string; label: string }> = {
@@ -60,6 +66,7 @@ export function ObjectTrucksEditor({
   onTrucksChange,
   onTruckStepStatusChange,
   onTruckStatusChange,
+  orderInfo,
 }: ObjectTrucksEditorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [newTruckNumber, setNewTruckNumber] = useState('');
@@ -313,14 +320,36 @@ export function ObjectTrucksEditor({
                         size="icon"
                         className="h-6 w-6"
                         onClick={() => handleStartEdit(truck)}
+                        title="Redigera"
                       >
                         <Pencil className="h-3 w-3" />
                       </Button>
+                      {orderInfo && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await printWorkCard({
+                              truck,
+                              objectName,
+                              steps: objectSteps,
+                              order: orderInfo,
+                              baseUrl: window.location.origin,
+                            });
+                          }}
+                          title="Skriv ut arbetskort"
+                        >
+                          <Printer className="h-3 w-3" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-6 w-6 text-destructive hover:text-destructive"
                         onClick={() => handleRemoveTruck(truck.id)}
+                        title="Ta bort"
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
