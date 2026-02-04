@@ -33,7 +33,7 @@ export function ArticleRowsEditor({
   });
 
   // Price list lookup
-  const { findMatch } = usePriceListLookup();
+  const { findMatch, findAllMatches } = usePriceListLookup();
   const [editPriceHint, setEditPriceHint] = useState<PriceMatch | null>(null);
   const [newRowPriceHint, setNewRowPriceHint] = useState<PriceMatch | null>(null);
 
@@ -242,8 +242,7 @@ export function ArticleRowsEditor({
                         {row.text}
                         <div className="mt-1">
                           <PriceListBadge 
-                            partNumber={row.partNumber} 
-                            text={row.text}
+                            matches={findAllMatches(row.partNumber, row.text)}
                             onSelectPrice={!readOnly ? (price) => {
                               onRowsChange(rows.map(r => 
                                 r.id === row.id ? { ...r, price } : r

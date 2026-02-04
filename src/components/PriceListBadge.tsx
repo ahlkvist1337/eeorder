@@ -1,30 +1,22 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { List } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
-import { usePriceListLookup, type PriceMatch } from '@/hooks/usePriceListLookup';
+import type { PriceMatch } from '@/hooks/usePriceListLookup';
 
 interface PriceListBadgeProps {
-  partNumber: string;
-  text: string;
+  matches: PriceMatch[];
   onSelectPrice?: (price: number) => void;
   readOnly?: boolean;
 }
 
 export function PriceListBadge({ 
-  partNumber, 
-  text, 
+  matches, 
   onSelectPrice, 
   readOnly = false 
 }: PriceListBadgeProps) {
-  const { findAllMatches, isReady } = usePriceListLookup();
   const [open, setOpen] = useState(false);
-
-  const matches = useMemo(() => {
-    if (!isReady) return [];
-    return findAllMatches(partNumber, text);
-  }, [partNumber, text, findAllMatches, isReady]);
 
   if (matches.length === 0) return null;
 
