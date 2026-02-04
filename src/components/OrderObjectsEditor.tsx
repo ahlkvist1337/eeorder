@@ -31,12 +31,13 @@ import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
 import { useObjectTemplates } from '@/hooks/useObjectTemplates';
 import { useAuth } from '@/contexts/AuthContext';
 import { calculateObjectQuantities } from '@/types/order';
-import type { OrderStep, StepStatus, OrderObject, ObjectTruck, TruckStatus } from '@/types/order';
+import type { OrderStep, StepStatus, OrderObject, ObjectTruck, TruckStatus, ArticleRow } from '@/types/order';
 import { SortableStep } from '@/components/SortableStep';
 
 interface OrderObjectsEditorProps {
   objects: OrderObject[];
   steps: OrderStep[];
+  articleRows?: ArticleRow[];
   onObjectsChange: (objects: OrderObject[]) => void;
   onStepsChange: (steps: OrderStep[]) => void;
   onTruckStatusChange?: (truckId: string, status: TruckStatus) => void;
@@ -51,6 +52,7 @@ interface OrderObjectsEditorProps {
 export function OrderObjectsEditor({ 
   objects, 
   steps, 
+  articleRows,
   onObjectsChange, 
   onStepsChange,
   onTruckStatusChange,
@@ -450,6 +452,7 @@ export function OrderObjectsEditor({
                         objectId={obj.id}
                         objectName={obj.name}
                         objectSteps={objectSteps}
+                        articleRows={articleRows?.filter(r => r.objectId === obj.id)}
                         onTrucksChange={(newTrucks) => {
                           onObjectsChange(objects.map(o =>
                             o.id === obj.id ? { ...o, trucks: newTrucks } : o
