@@ -48,7 +48,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Loader2, UserPlus, MoreHorizontal, Trash2, KeyRound } from 'lucide-react';
+import { Loader2, UserPlus, MoreHorizontal, Trash2, KeyRound, Pencil } from 'lucide-react';
 import type { AppRole, Profile, UserWithRole } from '@/types/auth';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -78,6 +78,13 @@ export default function AdminPanel() {
   const [userToResetPassword, setUserToResetPassword] = useState<UserWithRole | null>(null);
   const [newUserPassword, setNewUserPassword] = useState('');
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+
+  // Edit user state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [userToEdit, setUserToEdit] = useState<UserWithRole | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [isEditingUser, setIsEditingUser] = useState(false);
 
   const fetchUsers = async () => {
     try {
@@ -273,6 +280,65 @@ export default function AdminPanel() {
     setPasswordDialogOpen(true);
   };
 
+  const openEditDialog = (userItem: UserWithRole) => {
+    setUserToEdit(userItem);
+    setEditFullName(userItem.full_name || '');
+    setEditEmail(userItem.email);
+    setEditDialogOpen(true);
+  };
+
+  const handleEditUser = async () => {
+    if (!userToEdit) return;
+
+    // Basic validation
+    if (!editEmail.trim()) {
+      toast.error('E-post krävs');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(editEmail)) {
+      toast.error('Ogiltig e-postadress');
+      return;
+    }
+
+    if (editFullName.length > 100) {
+      toast.error('Namnet får max vara 100 tecken');
+      return;
+    }
+
+    setIsEditingUser(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-user', {
+        body: {
+          action: 'updateProfile',
+          userId: userToEdit.id,
+          fullName: editFullName.trim(),
+          email: editEmail.trim(),
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success('Användare uppdaterad');
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userToEdit.id
+            ? { ...u, full_name: editFullName.trim(), email: editEmail.trim() }
+            : u
+        )
+      );
+      setEditDialogOpen(false);
+      setUserToEdit(null);
+    } catch (error: any) {
+      console.error('Error updating user:', error);
+      toast.error(error.message || 'Kunde inte uppdatera användare');
+    } finally {
+      setIsEditingUser(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <Layout>
@@ -434,6 +500,10 @@ export default function AdminPanel() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openEditDialog(userItem)}>
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Redigera
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openPasswordDialog(userItem)}>
                           <KeyRound className="h-4 w-4 mr-2" />
                           Ändra lösenord
@@ -479,6 +549,10 @@ export default function AdminPanel() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => openEditDialog(userItem)}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Redigera
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => openPasswordDialog(userItem)}>
                         <KeyRound className="h-4 w-4 mr-2" />
                         Ändra lösenord
@@ -610,6 +684,62 @@ export default function AdminPanel() {
                 </>
               ) : (
                 'Spara lösenord'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit user dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Redigera användare</DialogTitle>
+            <DialogDescription>
+              Ändra namn och e-post för{' '}
+              <strong>{userToEdit?.full_name || userToEdit?.email}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Namn</Label>
+              <Input
+                id="edit-name"
+                value={editFullName}
+                onChange={(e) => setEditFullName(e.target.value)}
+                placeholder="Förnamn Efternamn"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">E-post</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                placeholder="namn@exempel.se"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditDialogOpen(false)}
+              disabled={isEditingUser}
+            >
+              Avbryt
+            </Button>
+            <Button
+              onClick={handleEditUser}
+              disabled={isEditingUser || !editEmail}
+            >
+              {isEditingUser ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sparar...
+                </>
+              ) : (
+                'Spara'
               )}
             </Button>
           </DialogFooter>
