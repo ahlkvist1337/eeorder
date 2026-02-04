@@ -1,76 +1,112 @@
 
-# Plan: Fixa ID-mismatch vid orderskapande
+# Plan: Fixa historikvyn för arbetskort
 
-## Problemet
+## Identifierade problem
 
-### Vad händer nu
-1. Du lägger till objekt, steg och arbetskort i formuläret
-2. Varje steg får ett unikt ID i frontend (t.ex. `abc-123`)
-3. Arbetskorten kopplas till stegen via detta ID
-4. När ordern sparas: stegen skapas i databasen **utan** att skicka med ID:t
-5. Databasen genererar ETT NYTT ID (t.ex. `xyz-789`)
-6. Arbetskortens status försöker referera till det gamla ID:t (`abc-123`) som inte finns
-7. **Databaskrasch** → Order + Objekt skapas, men steg och arbetskort misslyckas
+### 1. Flera "Arbetskort ankommet" loggas
+**Orsak:** `updateTruckStatus` loggar en lifecycle-händelse varje gång funktionen anropas, utan att kontrollera om status faktiskt ändras.
 
-### Resultat
-- Order finns i listan
-- Objekt finns
-- Steg saknas helt
-- Arbetskort saknas
+**Lösning:** Lägg till en check som hoppar över loggning om nuvarande status redan är samma som ny status.
+
+### 2. "Målning Toyota Orange" visas konstigt
+**Orsak:** Detta är stegnamnet från `truck_status_history`. Det visas korrekt ("Målning Toyota Orange: Pågående/Klar") men det kommer från stegändringar, inte från arbetskortets huvudstatus.
+
+**Förklaring:** Detta är faktiskt korrekt beteende - det visar att steget "Målning Toyota Orange" ändrades till pågående/klar. Den enda förbättringen är att tydliggöra i UI:t vad som är steg-historik vs arbetskort-historik.
+
+### 3. Historiken uppdateras inte i realtid
+**Orsak:** `updateTruckStatus` saknar optimistisk uppdatering av `truckLifecycleEvents`. Data sparas till databasen men läggs inte till i lokalt state.
+
+**Lösning:** Lägg till optimistisk uppdatering av `truckLifecycleEvents` i `updateTruckStatus`.
 
 ---
 
-## Lösningen
+## Teknisk implementation
 
-Skicka med det frontend-genererade ID:t till databasen så att alla referenser stämmer.
+### Ändring 1: Skippa duplicerade lifecycle-events
 
-### Ändring i OrdersContext.tsx
+I `updateTruckStatus` (rad ~983-1103), lägg till check:
 
 ```typescript
-// RAD 435-448: Lägg till id i step-insert
+const updateTruckStatus = useCallback(async (
+  orderId: string,
+  truckId: string,
+  newStatus: TruckStatus
+) => {
+  // Find current status and object
+  const order = orders.find(o => o.id === orderId);
+  let objectId: string | undefined;
+  let currentStatus: TruckStatus = 'waiting';
+  
+  for (const obj of order?.objects || []) {
+    const truck = obj.trucks?.find(t => t.id === truckId);
+    if (truck) {
+      currentStatus = truck.status;
+      objectId = obj.id;
+      break;
+    }
+  }
+  
+  // Skip if no actual change - prevents duplicate history entries
+  if (currentStatus === newStatus) return;
+  
+  // ... rest of function
+```
 
-const { error: stepsError } = await supabase.from('order_steps').insert(
-  order.steps.map(step => ({
-    id: step.id,  // ← LÄGG TILL DENNA RAD
-    order_id: orderId,
-    template_id: step.templateId,
-    name: step.name,
-    status: step.status,
-    object_id: step.objectId || null,
-    planned_start: step.plannedStart || null,
-    planned_end: step.plannedEnd || null,
-    actual_start: step.actualStart || null,
-    actual_end: step.actualEnd || null,
-    price: step.price ?? null,
-  }))
-);
+### Ändring 2: Optimistisk uppdatering av lifecycle events
+
+I samma funktion, uppdatera `setOrders` för att inkludera ny lifecycle event:
+
+```typescript
+// Optimistic update with quantities AND lifecycle event
+setOrders(prev => prev.map(o => {
+  if (o.id !== orderId) return o;
+  
+  const newLifecycleEvent = {
+    id: crypto.randomUUID(),
+    orderId,
+    truckId,
+    truckNumber: o.objects
+      ?.flatMap(obj => obj.trucks || [])
+      .find(t => t.id === truckId)?.truckNumber || '',
+    eventType: newStatus as TruckLifecycleEventType,
+    timestamp: new Date().toISOString(),
+  };
+  
+  return {
+    ...o,
+    objects: o.objects?.map(obj => ({
+      ...obj,
+      receivedQuantity: obj.id === objectId 
+        ? Math.max(0, obj.receivedQuantity + receivedDelta) 
+        : obj.receivedQuantity,
+      completedQuantity: obj.id === objectId 
+        ? Math.max(0, obj.completedQuantity + completedDelta) 
+        : obj.completedQuantity,
+      trucks: obj.trucks?.map(t =>
+        t.id === truckId ? { ...t, status: newStatus } : t
+      ),
+    })),
+    truckLifecycleEvents: [
+      ...(o.truckLifecycleEvents || []),
+      newLifecycleEvent,
+    ],
+  };
+}));
 ```
 
 ---
 
-## Varför detta fungerar
+## Sammanfattning av ändringar
 
-| Data | Före | Efter |
-|------|------|-------|
-| **Objects** | Skickar med `id` ✓ | Skickar med `id` ✓ |
-| **Trucks** | Skickar med `id` ✓ | Skickar med `id` ✓ |
-| **Steps** | Skickar INTE med `id` ✗ | Skickar med `id` ✓ |
-| **TruckStepStatus** | Refererar till frontend-ID | Fungerar nu |
-
----
-
-## Teknisk sammanfattning
-
-### Fil att ändra
-`src/contexts/OrdersContext.tsx`
-
-### Förändring
-1 rad tillägg: `id: step.id` i step-insert på rad ~436
+| Fil | Ändring |
+|-----|---------|
+| `src/contexts/OrdersContext.tsx` | 1. Lägg till `if (currentStatus === newStatus) return;` i `updateTruckStatus` |
+| `src/contexts/OrdersContext.tsx` | 2. Lägg till optimistisk uppdatering av `truckLifecycleEvents` |
 
 ---
 
 ## Resultat
 
-- Alla ordrar skapas komplett (order + objekt + steg + arbetskort + status)
-- Inga "tomma" ordrar längre
-- Felet löses vid källan istället för att städa upp efteråt
+1. **Inga duplicerade "Arbetskort ankommet"** - Status loggas bara när den faktiskt ändras
+2. **Historiken uppdateras direkt** - Ingen sidladdning behövs för att se ändringar
+3. **Korrekt steg-historik** - "Målning Toyota Orange: Pågående" är korrekt och tydligt
