@@ -112,6 +112,17 @@ interface DbTruckStatusHistory {
   timestamp: string;
 }
 
+interface DbTruckLifecycleEvent {
+  id: string;
+  order_id: string;
+  truck_id: string;
+  truck_number: string | null;
+  event_type: string;
+  step_name: string | null;
+  timestamp: string;
+  note: string | null;
+}
+
 interface BulkOrderUpdates {
   productionStatus?: ProductionStatus;
   billingStatus?: BillingStatus;
@@ -147,7 +158,8 @@ function mapDbOrderToOrder(
   stepStatusHistory: DbStepStatusHistory[],
   trucks: DbObjectTruck[],
   truckStepStatuses: DbTruckStepStatus[],
-  truckStatusHistory: DbTruckStatusHistory[]
+  truckStatusHistory: DbTruckStatusHistory[],
+  lifecycleEvents: DbTruckLifecycleEvent[]
 ): Order {
   return {
     id: dbOrder.id,
@@ -249,6 +261,16 @@ function mapDbOrderToOrder(
       fromStatus: h.from_status,
       toStatus: h.to_status,
     })),
+    truckLifecycleEvents: lifecycleEvents.map(e => ({
+      id: e.id,
+      orderId: e.order_id,
+      truckId: e.truck_id,
+      truckNumber: e.truck_number || '',
+      eventType: e.event_type as import('@/types/order').TruckLifecycleEventType,
+      stepName: e.step_name || undefined,
+      timestamp: e.timestamp,
+      note: e.note || undefined,
+    })),
   };
 }
 
@@ -276,13 +298,14 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       const orderIds = ordersData.map(o => o.id);
 
       // Fetch related data in parallel (including order_objects, trucks, and truck statuses)
-      const [objectsResult, stepsResult, articleRowsResult, historyResult, stepHistoryResult, truckHistoryResult] = await Promise.all([
+      const [objectsResult, stepsResult, articleRowsResult, historyResult, stepHistoryResult, truckHistoryResult, lifecycleEventsResult] = await Promise.all([
         supabase.from('order_objects').select('*').in('order_id', orderIds),
         supabase.from('order_steps').select('*').in('order_id', orderIds),
         supabase.from('article_rows').select('*').in('order_id', orderIds),
         supabase.from('status_history').select('*').in('order_id', orderIds),
         supabase.from('step_status_history').select('*').in('order_id', orderIds),
         supabase.from('truck_status_history').select('*').in('order_id', orderIds),
+        supabase.from('truck_lifecycle_events').select('*').in('order_id', orderIds),
       ]);
 
       if (objectsResult.error) throw objectsResult.error;
@@ -291,6 +314,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       if (historyResult.error) throw historyResult.error;
       if (stepHistoryResult.error) throw stepHistoryResult.error;
       if (truckHistoryResult.error) throw truckHistoryResult.error;
+      if (lifecycleEventsResult.error) throw lifecycleEventsResult.error;
 
       // Fetch trucks and their step statuses
       const objectIds = (objectsResult.data || []).map(o => o.id);
@@ -319,6 +343,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         const orderTruckStatuses = truckStepStatusData.filter(s => orderTruckIds.includes(s.truck_id));
         const orderTruckHistory = (truckHistoryResult.data || []).filter(h => h.order_id === dbOrder.id) as DbTruckStatusHistory[];
         
+        const orderLifecycleEvents = (lifecycleEventsResult.data || []).filter(e => e.order_id === dbOrder.id) as DbTruckLifecycleEvent[];
+        
         return mapDbOrderToOrder(
           dbOrder as unknown as DbOrder,
           orderObjects,
@@ -328,7 +354,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           (stepHistoryResult.data || []).filter(h => h.order_id === dbOrder.id) as DbStepStatusHistory[],
           orderTrucks,
           orderTruckStatuses,
-          orderTruckHistory
+          orderTruckHistory,
+          orderLifecycleEvents
         );
       });
 

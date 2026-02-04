@@ -130,6 +130,7 @@ export interface Order {
   statusHistory: StatusChange[];
   stepStatusHistory: StepStatusChange[];
   truckStatusHistory?: TruckStatusChange[];
+  truckLifecycleEvents?: TruckLifecycleEvent[];
   hasDeviation: boolean;
   deviationComment?: string;
   comment?: string;
