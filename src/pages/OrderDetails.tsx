@@ -466,14 +466,13 @@ export default function OrderDetails() {
                   return (
                     <div className="space-y-6">
                       {allTrucks.map(truck => {
-                        // Collect events for this truck from truckStatusHistory
-                        const truckEvents = (order.truckStatusHistory || [])
+                        // Collect events from truck status history (step changes)
+                        const stepEvents = (order.truckStatusHistory || [])
                           .filter(h => h.truckId === truck.id)
                           .map(h => ({
                             id: h.id,
                             timestamp: h.timestamp,
                             type: h.toStatus === 'in_progress' ? 'step_started' : h.toStatus === 'completed' ? 'step_completed' : h.toStatus,
-                            stepName: h.stepName,
                             label: h.toStatus === 'in_progress' 
                               ? `${h.stepName}: Pågående`
                               : h.toStatus === 'completed'
@@ -481,8 +480,25 @@ export default function OrderDetails() {
                                 : h.stepName,
                           }));
                         
-                        // Sort by timestamp
-                        const sortedEvents = truckEvents.sort((a, b) => 
+                        // Collect events from lifecycle events (arrived, started, completed, etc.)
+                        const lifecycleEvents = (order.truckLifecycleEvents || [])
+                          .filter(e => e.truckId === truck.id)
+                          .map(e => ({
+                            id: e.id,
+                            timestamp: e.timestamp,
+                            type: e.eventType,
+                            label: e.stepName 
+                              ? `${e.stepName}: ${e.eventType === 'step_started' ? 'Pågående' : 'Klar'}`
+                              : e.eventType === 'arrived' ? 'Arbetskort ankommet'
+                              : e.eventType === 'started' ? 'Arbete påbörjat'
+                              : e.eventType === 'paused' ? 'Pausat'
+                              : e.eventType === 'completed' ? 'Arbetskort klart'
+                              : e.eventType === 'planned' ? 'Arbetskort planerat'
+                              : e.eventType,
+                          }));
+                        
+                        // Combine and sort by timestamp
+                        const allEvents = [...stepEvents, ...lifecycleEvents].sort((a, b) => 
                           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
                         );
                         
@@ -493,11 +509,11 @@ export default function OrderDetails() {
                               <span className="text-sm text-muted-foreground">• {truck.objectName}</span>
                             </div>
                             
-                            {sortedEvents.length === 0 ? (
+                            {allEvents.length === 0 ? (
                               <p className="text-sm text-muted-foreground">Ingen historik ännu</p>
                             ) : (
                               <div className="relative pl-4 border-l-2 border-muted space-y-2">
-                                {sortedEvents.map(event => (
+                                {allEvents.map(event => (
                                   <div key={event.id} className="relative">
                                     <div className="absolute -left-[9px] top-1.5 w-2 h-2 rounded-full bg-primary" />
                                     <div className="flex items-center gap-2 text-sm">
