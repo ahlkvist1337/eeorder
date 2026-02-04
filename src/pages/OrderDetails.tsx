@@ -178,7 +178,7 @@ export default function OrderDetails() {
 
   return (
     <Layout>
-      <div className="space-y-4 sm:space-y-6 overflow-hidden max-w-full">
+      <div className="space-y-4 sm:space-y-6 max-w-full min-w-0">
         {/* Header */}
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex items-start gap-2 sm:gap-4">
@@ -224,9 +224,9 @@ export default function OrderDetails() {
           })()}
         </div>
 
-        <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 max-w-full overflow-hidden">
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 max-w-full min-w-0">
           {/* Main content - 2 columns */}
-          <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0 overflow-hidden">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
             {/* Basic info */}
             <Card>
               <CardHeader className="pb-3 sm:pb-6">
