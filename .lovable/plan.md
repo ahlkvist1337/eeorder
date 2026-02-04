@@ -1,252 +1,222 @@
 
+# Plan: Behörighetsbegränsningar för Utförare + Avvikelsesystem
 
-# Plan: Nytt rollsystem för verkstaden
+## Sammanfattning
 
-## Översikt
-
-Byter ut det nuvarande abstrakta rollsystemet (`admin`, `redigera`, `lasa`) mot ett verkstadsanpassat system med tre tydliga roller som speglar hur arbetet faktiskt sker.
-
----
-
-## Nya roller
-
-| Roll | Svenska namn | Syfte |
-|------|--------------|-------|
-| `utforare` | Utförare | Golvpersonal som rapporterar arbete |
-| `produktion` | Produktion | Produktionschef som planerar flödet |
-| `admin` | Admin | Full kontroll över affär och ekonomi |
+Implementerar striktare behörighetskontroller för **Utförare**-rollen och utvecklar ett fullständigt **avvikelseloggsystem** där varje inrapporterad avvikelse sparas med vem som skapade den och när.
 
 ---
 
-## Behörighetsmatris
+## Del 1: Utförare-begränsningar
 
-### Vad varje roll kan göra
+### Vad som ska begränsas för Utförare
 
-| Funktion | Utförare | Produktion | Admin |
-|----------|:--------:|:----------:|:-----:|
-| **Se produktionsvyn** | ✓ | ✓ | ✓ |
-| **Se ordrar och arbetskort** | ✓ | ✓ | ✓ |
-| **Markera arbete som påbörjat** | ✓ | ✓ | ✓ |
-| **Markera arbetsmoment klara** | ✓ | ✓ | ✓ |
-| **Ändra arbetskortsstatus (Ankommen/Pausad/Klar)** | ✓ | ✓ | ✓ |
-| **Skapa/redigera arbetskort** | ✗ | ✓ | ✓ |
-| **Ta bort arbetskort** | ✗ | ✓ | ✓ |
-| **Ändra prioritering (drag-and-drop i produktion)** | ✗ | ✓ | ✓ |
-| **Skapa/redigera objekt** | ✗ | ✓ | ✓ |
-| **Skapa/redigera arbetsmoment** | ✗ | ✓ | ✓ |
-| **Skapa/importera ordrar** | ✗ | ✓ | ✓ |
-| **Ändra planerade datum** | ✗ | ✓ | ✓ |
-| **Ändra orderstatus (Aktiv/Avslutad/Avbruten)** | ✗ | ✗ | ✓ |
-| **Ändra priser på artikelrader** | ✗ | ✗ | ✓ |
-| **Hantera prislista** | ✗ | ✗ | ✓ |
-| **Ändra faktureringsstatus** | ✗ | ✗ | ✓ |
-| **Exportera fakturaunderlag** | ✗ | ✗ | ✓ |
-| **Ta bort ordrar permanent** | ✗ | ✗ | ✓ |
-| **Hantera användare** | ✗ | ✗ | ✓ |
+| Funktion | Nuvarande | Nytt |
+|----------|-----------|------|
+| Lägga till/ändra/ta bort behandlingssteg | Tillåtet | Blockerat |
+| Lägga till/ändra/ta bort objekt | Tillåtet | Blockerat |
+| Sortera steg i objekt (drag-and-drop) | Tillåtet | Blockerat |
+| Se statistik | Tillåtet | Blockerat |
+| Se prislista | Tillåtet | Blockerat |
+| Ändra/lägga till artikelrader | Tillåtet | Blockerat |
+| Skriva/ändra orderkommentar | Tillåtet | Endast läsa |
+| Ändra prioritering i produktionsvyn | Tillåtet | Blockerat |
+| Skapa avvikelser | Begränsat | Tillåtet |
+
+### Navigation (Layout.tsx)
+
+Dölj följande menyalternativ för Utförare:
+- **Inställningar** (behandlingssteg/objektmallar)
+- **Statistik**
+- **Prislista**
+
+### OrderDetails.tsx
+
+| Element | Utförare |
+|---------|----------|
+| Kommentarsfält | ReadOnly - visa text utan redigering |
+| Artikelrader | ReadOnly - visa utan edit/add/delete |
+| Planerade datum | ReadOnly - visa utan datumväljare |
+
+### OrderObjectsEditor.tsx
+
+| Element | Utförare |
+|---------|----------|
+| Lägg till objekt | Dolt |
+| Ta bort objekt | Dolt |
+| Lägg till behandlingssteg | Dolt |
+| Ta bort behandlingssteg | Dolt |
+| Drag-and-drop för sortering | Inaktiverat |
+
+### ObjectTrucksEditor.tsx
+
+| Element | Utförare |
+|---------|----------|
+| Lägg till arbetskort | Dolt |
+| Ta bort arbetskort | Dolt |
+| Redigera arbetskortsnummer | Dolt |
+| Ändra arbetskortsstatus | Tillåtet |
+| Klicka på steg för statusändring | Tillåtet |
+| Skriva ut arbetskort | Tillåtet |
+
+### ProductionScreen.tsx
+
+| Element | Utförare |
+|---------|----------|
+| Drag-and-drop prioritering | Blockerat (endast visuellt) |
+| "Återställ ordning"-knappen | Dolt |
+| Klicka på kort för att navigera | Tillåtet |
+
+---
+
+## Del 2: Produktion kan ändra orderstatus
+
+Produktion ska kunna ändra orderstatus (Aktiv/Avslutad/Avbruten). Nu är det endast Admin.
+
+**Ändring i OrderDetails.tsx:**
+- Ändra villkoret för orderstatus-dropdown från `isAdmin` till `isProduction`
+
+---
+
+## Del 3: Nytt Avvikelsesystem
+
+### Nuvarande implementation
+- Ett `has_deviation` boolean-fält
+- Ett `deviation_comment` textfält  
+- Överskriven vid varje sparning
+
+### Ny implementation
+
+Skapa en **avvikelselogg** där varje avvikelse är en separat post med:
+- Tidsstämpel
+- Vem som rapporterade
+- Avvikelsebeskrivning
+
+### Ny databastabell: `order_deviations`
+
+```sql
+CREATE TABLE public.order_deviations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+  message text NOT NULL,
+  created_by uuid NOT NULL REFERENCES auth.users(id),
+  created_by_name text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE public.order_deviations ENABLE ROW LEVEL SECURITY;
+
+-- All authenticated users can read
+CREATE POLICY "Authenticated users can read order_deviations"
+ON public.order_deviations FOR SELECT
+USING (true);
+
+-- All roles can insert (utförare ska kunna rapportera)
+CREATE POLICY "All roles can insert order_deviations"
+ON public.order_deviations FOR INSERT
+WITH CHECK (has_any_role(auth.uid()));
+
+-- Production can delete (för att rensa felaktiga)
+CREATE POLICY "Production can delete order_deviations"
+ON public.order_deviations FOR DELETE
+USING (is_production_or_admin(auth.uid()));
+```
+
+### Avvikelse-UI på OrderDetails
+
+Ersätt nuvarande deviation-checkbox + textarea med:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  ⚠️ AVVIKELSER                                          │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Problem med rostangrepp på undersidan.          │   │
+│  │ ──────────────────────────────────────────────  │   │
+│  │ Erik Nilsson • 3 feb 2026 kl 14:32              │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Saknas 2 st bultar på vänster sida.             │   │
+│  │ ──────────────────────────────────────────────  │   │
+│  │ Anna Svensson • 4 feb 2026 kl 09:15             │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ [Beskriv avvikelsen...]                         │   │
+│  │                                   [Rapportera]  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Funktionalitet:**
+- Alla roller kan lägga till nya avvikelser
+- Varje avvikelse visar meddelande + skaparens namn + tidsstämpel
+- Lista sorteras med senaste överst
+- `has_deviation` uppdateras automatiskt (true om det finns poster, kan behållas som snabbflagga för filtrering)
 
 ---
 
 ## Teknisk implementation
 
-### 1. Databasändringar
+### Nya filer
 
-**Migrera `app_role` enum:**
+| Fil | Beskrivning |
+|-----|-------------|
+| `src/hooks/useOrderDeviations.ts` | Hook för att hämta/skapa avvikelser |
+| `src/components/OrderDeviations.tsx` | UI-komponent för avvikelselistan |
 
-```sql
--- Steg 1: Lägg till nya värden
-ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'utforare';
-ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'produktion';
-
--- Steg 2: Migrera befintliga roller
--- 'lasa' → 'utforare' (minsta behörighet)
--- 'redigera' → 'produktion' (produktionschef)
--- 'admin' → 'admin' (oförändrat)
-
-UPDATE public.user_roles 
-SET role = 'utforare' 
-WHERE role = 'lasa';
-
-UPDATE public.user_roles 
-SET role = 'produktion' 
-WHERE role = 'redigera';
-
--- Steg 3: Ta bort gamla värden (kan göras senare)
--- OBS: Postgres stödjer inte direkt borttagning av enum-värden
--- De gamla värdena blir kvar men används inte
-```
-
-**Uppdatera `has_role` funktionen** för att hantera de nya rollerna.
-
-**Uppdatera RLS-policies:**
-- Utförare får UPDATE på `truck_step_status` och `object_trucks.status`
-- Produktion får INSERT/UPDATE/DELETE på arbetskort, objekt, steg
-- Admin behåller full access
-
-### 2. AuthContext - Nya behörighetsflaggor
-
-```typescript
-// src/contexts/AuthContext.tsx
-
-// Befintliga
-isAdmin: boolean;       // role === 'admin'
-
-// Nya flaggor
-isProduction: boolean;  // role === 'admin' || role === 'produktion'
-canManageOrders: boolean;  // isProduction - skapa/ändra ordrar
-canManagePrices: boolean;  // isAdmin - hantera priser
-canManageUsers: boolean;   // isAdmin - hantera användare
-canReportWork: boolean;    // alla roller - rapportera arbete
-
-// Ta bort eller byt namn på
-canEdit → canManageOrders (bredare användning)
-```
-
-### 3. types/auth.ts
-
-```typescript
-// Nya roller
-export type AppRole = 'admin' | 'produktion' | 'utforare';
-
-// Nya etiketter
-export const roleLabels: Record<AppRole, string> = {
-  admin: 'Admin',
-  produktion: 'Produktion', 
-  utforare: 'Utförare',
-};
-
-// Beskrivningar för AdminPanel
-export const roleDescriptions: Record<AppRole, string> = {
-  admin: 'Full kontroll över ordrar, priser, fakturering och användare',
-  produktion: 'Planerar produktion, skapar arbetskort, hanterar flöde',
-  utforare: 'Rapporterar arbete, markerar steg som klara',
-};
-```
-
-### 4. UI-anpassningar per sida
-
-**Layout.tsx (Navigation):**
-- "Ny order" visas endast för `isProduction`
-- Prislista visas för alla (men redigering bara för admin)
-- Admin-länken visas endast för `isAdmin`
-
-**Index.tsx (Orderlista):**
-- "Importera XML" / "Ny order" → endast `isProduction`
-- Bulk-redigering → endast `isProduction`
-- Faktureringsstatus → endast `isAdmin`
-
-**OrderDetails.tsx:**
-- Planerade datum → endast `isProduction`
-- Orderstatus (dropdown) → endast `isAdmin`
-- Faktureringsstatus → endast `isAdmin`
-- Priser på artikelrader → endast `isAdmin` (visa för alla, redigera för admin)
-- Avvikelse-checkbox → `isProduction`
-- Ta bort order → endast `isAdmin`
-
-**OrderObjectsEditor.tsx:**
-- Lägg till objekt → endast `isProduction`
-- Ta bort objekt → endast `isProduction`
-- Lägg till arbetsmoment → endast `isProduction`
-- Ta bort arbetsmoment → endast `isProduction`
-
-**ObjectTrucksEditor.tsx:**
-- Lägg till arbetskort → endast `isProduction`
-- Ta bort arbetskort → endast `isProduction`
-- Ändra arbetskortsnummer → endast `isProduction`
-- Ändra arbetskortsstatus (dropdown) → alla roller
-- Klicka på steg för att ändra status → alla roller
-- Utskriftsknapp → alla roller
-
-**ProductionScreen.tsx:**
-- Drag-and-drop för prioritering → endast `isProduction`
-- "Återställ ordning" → endast `isProduction`
-- Klicka på arbetskort → alla (navigerar till order)
-
-**PriceList.tsx:**
-- Lägg till pris → endast `isAdmin`
-- Redigera pris → endast `isAdmin`
-- Ta bort pris → endast `isAdmin`
-- Importera från ordrar → endast `isAdmin`
-- Exportera Excel → alla roller
-
-**Statistics.tsx:**
-- Alla kan se statistik
-
-**AdminPanel.tsx:**
-- Endast `isAdmin` (redan skyddad via route)
-- Uppdatera rollväljaren med nya roller
-
-### 5. Edge Functions
-
-**create-user/index.ts:**
-- Uppdatera för nya roller
-
-**manage-user/index.ts:**
-- Oförändrad (admin-only redan)
-
----
-
-## Fil-ändringar
+### Ändringar i befintliga filer
 
 | Fil | Ändring |
 |-----|---------|
-| `src/types/auth.ts` | Nya roller och etiketter |
-| `src/contexts/AuthContext.tsx` | Nya behörighetsflaggor |
-| `src/components/Layout.tsx` | Villkorlig navigation |
-| `src/pages/Index.tsx` | Begränsa bulk-redigering och knappar |
-| `src/pages/OrderDetails.tsx` | Rollbaserad UI |
-| `src/components/OrderObjectsEditor.tsx` | Rollbaserad UI |
-| `src/components/ObjectTrucksEditor.tsx` | Alla kan ändra status, bara prod kan hantera kort |
-| `src/pages/ProductionScreen.tsx` | Drag-drop endast för produktion |
-| `src/pages/PriceList.tsx` | Admin-only för redigering |
-| `src/pages/AdminPanel.tsx` | Nya roller i dropdown |
-| `supabase/functions/create-user/index.ts` | Nya roller |
-| **Migration** | Uppdatera enum och migrera data |
+| `src/components/Layout.tsx` | Dölj nav för Utförare (inställningar, statistik, prislista) |
+| `src/pages/OrderDetails.tsx` | ReadOnly comment, rollbaserad orderstatus, ersätt deviation UI |
+| `src/components/OrderObjectsEditor.tsx` | Dölj add/remove för Utförare, inaktivera drag-drop |
+| `src/components/ObjectTrucksEditor.tsx` | Dölj add/remove/edit för Utförare |
+| `src/components/ArticleRowsEditor.tsx` | Lägg till readOnly prop-stöd (redan finns) - använd det |
+| `src/components/SortableStep.tsx` | Inaktivera drag för Utförare |
+| `src/pages/ProductionScreen.tsx` | Blockera drag-and-drop för Utförare (redan implementerat) |
+| **Migration** | Skapa `order_deviations` tabell |
 
 ---
 
-## Migrationsplan för befintliga användare
+## Filändringar sammanfattning
 
-| Nuvarande roll | Ny roll | Motivering |
-|----------------|---------|------------|
-| `admin` | `admin` | Oförändrad |
-| `redigera` | `produktion` | Produktionschef |
-| `lasa` | `utforare` | Golvpersonal |
+### Databas
+- Ny tabell `order_deviations` med RLS-policies
 
----
-
-## Förväntad användarupplevelse
-
-**Utförare:**
-- Ser produktionsvyn med arbetskort
-- Klickar på steg för att markera som pågående/klart
-- Kan ändra arbetskortsstatus (Ankommen → Startad → Klar)
-- Ser ordrar men kan inte ändra struktur
-- Knappar för att skapa/ta bort är dolda
-
-**Produktionschef:**
-- Allt utförare kan plus:
-- Skapar och hanterar arbetskort
-- Drar och släpper för att prioritera
-- Lägger till objekt och arbetsmoment
-- Skapar ordrar via import eller manuellt
-
-**Admin:**
-- Allt produktion kan plus:
-- Hanterar priser och prislista
-- Ändrar faktureringsstatus
-- Exporterar fakturaunderlag
-- Tar bort ordrar permanent
-- Hanterar användarkonton
+### Frontend
+1. `src/components/Layout.tsx` - Dölj nav-items för Utförare
+2. `src/pages/OrderDetails.tsx` - ReadOnly för kommentar, isProduction för orderstatus, nytt avvikelse-UI
+3. `src/components/OrderObjectsEditor.tsx` - Rollbaserade kontroller
+4. `src/components/ObjectTrucksEditor.tsx` - Rollbaserade kontroller  
+5. `src/components/SortableStep.tsx` - Villkorlig drag-handle
+6. `src/hooks/useOrderDeviations.ts` - **NY FIL**
+7. `src/components/OrderDeviations.tsx` - **NY FIL**
 
 ---
 
-## Säkerhet
+## Resultat
 
-Alla behörighetskontroller sker på tre nivåer:
+### För Utförare:
+- Kan se produktion och ordrar
+- Kan ändra arbetskortsstatus och stegstatus
+- Kan rapportera avvikelser (men inte ta bort dem)
+- Kan läsa kommentarer men inte ändra
+- Kan INTE se statistik, prislista eller inställningar
+- Kan INTE ändra objekt, steg eller artikelrader
+- Kan INTE prioritera i produktionsvyn
 
-1. **UI** - Knappar och funktioner dolda
-2. **Hooks/Context** - Client-side validering
-3. **RLS/Edge Functions** - Server-side validering (säkerhetsbarriär)
+### För Produktion:
+- Allt Utförare kan + planering och struktur
+- Kan nu ändra orderstatus (Aktiv/Avslutad/Avbruten)
+- Kan ta bort avvikelser om de är felaktiga
 
-Även om UI manipuleras skyddar RLS-policyerna databasen.
-
+### Avvikelsesystemet:
+- Varje avvikelse är spårbar (vem, när, vad)
+- Fungerar som ett internt kommentarsystem för problem
+- Ingen data skrivs över - alla rapporter bevaras
