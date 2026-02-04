@@ -29,7 +29,7 @@ import { useOrderAttachments } from '@/hooks/useOrderAttachments';
 import { useAuth } from '@/contexts/AuthContext';
 import { orderAdminStatusLabels, billingStatusLabels, stepStatusLabels, getWorkUnitDisplayName, toAdminStatus } from '@/types/order';
 import type { ProductionStatus, BillingStatus, OrderStep, OrderObject, TruckStatus, StepStatus, OrderAdminStatus, ArticleRow, Instruction } from '@/types/order';
-import { StepStatusBadge } from '@/components/StatusBadge';
+
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
