@@ -19,10 +19,10 @@ interface LayoutProps {
 const navItems = [
   { to: '/', label: 'Ordrar', icon: ClipboardList },
   { to: '/create', label: 'Ny order', icon: Plus, requiresProduction: true },
-  { to: '/steps', label: 'Inställningar', icon: Settings },
-  { to: '/statistics', label: 'Statistik', icon: BarChart3 },
+  { to: '/steps', label: 'Inställningar', icon: Settings, requiresProduction: true },
+  { to: '/statistics', label: 'Statistik', icon: BarChart3, requiresProduction: true },
   { to: '/production', label: 'Produktion', icon: Tv },
-  { to: '/prices', label: 'Prislista', icon: Receipt },
+  { to: '/prices', label: 'Prislista', icon: Receipt, requiresProduction: true },
 ];
 
 export function Layout({ children }: LayoutProps) {
