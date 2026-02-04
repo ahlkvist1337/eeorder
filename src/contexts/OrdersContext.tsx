@@ -376,6 +376,52 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     }
   }, [user, fetchOrders]);
 
+  // Realtime subscription for live updates
+  useEffect(() => {
+    if (!user) return;
+    
+    const channel = supabase
+      .channel('orders-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+        },
+        () => {
+          fetchOrders();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'object_trucks',
+        },
+        () => {
+          fetchOrders();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'truck_step_status',
+        },
+        () => {
+          fetchOrders();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, fetchOrders]);
+
   const addOrder = useCallback(async (order: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>): Promise<Order> => {
     // Insert order
     const insertData = {
@@ -1118,6 +1164,42 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       truck_number: truck?.truckNumber || null,
       event_type: newStatus,
     });
+
+    // Auto-complete order when ALL trucks are completed
+    if (newStatus === 'completed' && order) {
+      const allTrucks = order.objects?.flatMap(obj => obj.trucks || []) || [];
+      
+      // Count completed trucks (including this one that we just updated)
+      const completedCount = allTrucks.filter(t => 
+        t.id === truckId ? true : t.status === 'completed'
+      ).length;
+      
+      // If all trucks are now completed, set order to completed
+      if (completedCount === allTrucks.length && allTrucks.length > 0) {
+        const statusesThatShouldChangeToCompleted = ['created', 'arrived', 'started', 'paused'];
+        
+        if (statusesThatShouldChangeToCompleted.includes(order.productionStatus)) {
+          // Log status change history
+          await supabase.from('status_history').insert({
+            order_id: orderId,
+            from_status: order.productionStatus,
+            to_status: 'completed',
+          });
+          
+          // Update order status in database
+          await supabase.from('orders')
+            .update({ production_status: 'completed' })
+            .eq('id', orderId);
+          
+          // Update optimistic state
+          setOrders(prev => prev.map(o => 
+            o.id === orderId 
+              ? { ...o, productionStatus: 'completed' as ProductionStatus }
+              : o
+          ));
+        }
+      }
+    }
   }, [orders]);
 
   const bulkUpdateOrders = useCallback(async (orderIds: string[], updates: BulkOrderUpdates) => {
