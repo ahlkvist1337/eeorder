@@ -409,6 +409,7 @@ export default function OrderDetails() {
                 <OrderObjectsEditor
                   objects={order.objects || []}
                   steps={order.steps}
+                  articleRows={order.articleRows}
                   onObjectsChange={(newObjects) => handleObjectsAndStepsChange(newObjects, order.steps)}
                   onStepsChange={(newSteps) => handleObjectsAndStepsChange(order.objects || [], newSteps)}
                   onTruckStatusChange={handleTruckStatusChange}

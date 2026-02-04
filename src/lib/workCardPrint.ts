@@ -1,12 +1,13 @@
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
-import type { ObjectTruck, OrderStep } from '@/types/order';
+import type { ObjectTruck, OrderStep, ArticleRow } from '@/types/order';
 import { getWorkUnitDisplayName } from '@/types/order';
 
 interface WorkCardPrintData {
   truck: ObjectTruck;
   objectName: string;
   steps: OrderStep[];
+  articleRows?: ArticleRow[];
   order: {
     id: string;
     orderNumber: string;
@@ -72,16 +73,54 @@ export async function printWorkCard(data: WorkCardPrintData): Promise<void> {
   doc.setLineWidth(0.5);
   doc.line(20, 105, pageWidth - 20, 105);
   
+  let yPos = 120;
+  
+  // Artikelbenämningar (om de finns)
+  if (data.articleRows && data.articleRows.length > 0) {
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0);
+    doc.text('ARTIKLAR', 20, yPos);
+    yPos += 12;
+    
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    
+    data.articleRows.forEach((row) => {
+      // Quantity and unit first, then article text
+      const quantityText = `${row.quantity} ${row.unit}`.trim();
+      const fullText = quantityText ? `${quantityText} - ${row.text}` : row.text;
+      
+      // Truncate if too long
+      const maxWidth = pageWidth - 40;
+      const lines = doc.splitTextToSize(fullText, maxWidth);
+      
+      lines.forEach((line: string) => {
+        doc.text(line, 25, yPos);
+        yPos += 7;
+      });
+      yPos += 2; // Extra spacing between rows
+    });
+    
+    yPos += 5;
+  }
+  
+  // Separator before steps
+  doc.setDrawColor(200);
+  doc.setLineWidth(0.5);
+  doc.line(20, yPos, pageWidth - 20, yPos);
+  yPos += 15;
+  
   // Arbetsmoment rubrik
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0);
-  doc.text('ARBETSMOMENT', 20, 120);
+  doc.text('ARBETSMOMENT', 20, yPos);
+  yPos += 12;
   
   // Lista stegen
   doc.setFontSize(14);
   doc.setFont('helvetica', 'normal');
-  let yPos = 135;
   
   data.steps.forEach((step, index) => {
     doc.text(`${index + 1}. ${step.name}`, 25, yPos);

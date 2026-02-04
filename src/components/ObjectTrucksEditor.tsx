@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
-import type { ObjectTruck, OrderStep, StepStatus, TruckStatus } from '@/types/order';
+import type { ObjectTruck, OrderStep, StepStatus, TruckStatus, ArticleRow } from '@/types/order';
 import { truckStatusLabels, getWorkUnitDisplayName } from '@/types/order';
 import { printWorkCard } from '@/lib/workCardPrint';
 
@@ -16,6 +16,7 @@ interface ObjectTrucksEditorProps {
   objectId: string;
   objectName: string;
   objectSteps: OrderStep[];
+  articleRows?: ArticleRow[];
   onTrucksChange: (trucks: ObjectTruck[]) => void;
   onTruckStepStatusChange?: (truckId: string, stepId: string, status: StepStatus) => void;
   onTruckStatusChange?: (truckId: string, status: TruckStatus) => void;
@@ -64,6 +65,7 @@ export function ObjectTrucksEditor({
   objectId,
   objectName,
   objectSteps,
+  articleRows,
   onTrucksChange,
   onTruckStepStatusChange,
   onTruckStatusChange,
@@ -341,6 +343,7 @@ export function ObjectTrucksEditor({
                               truck,
                               objectName,
                               steps: objectSteps,
+                              articleRows,
                               order: orderInfo,
                               baseUrl: window.location.origin,
                             });
