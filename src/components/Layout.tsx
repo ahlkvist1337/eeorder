@@ -43,7 +43,7 @@ export function Layout({ children }: LayoutProps) {
     return true;
   });
 
-  const NavLinks = ({ onClick }: { onClick?: () => void }) => (
+  const NavLinks = ({ onClick, isMobile }: { onClick?: () => void; isMobile?: boolean }) => (
     <>
       {visibleNavItems.map(item => {
         const Icon = item.icon;
@@ -54,7 +54,9 @@ export function Layout({ children }: LayoutProps) {
             to={item.to}
             onClick={onClick}
             className={cn(
-              'flex items-center justify-center p-2 rounded-sm transition-colors',
+              isMobile 
+                ? 'flex items-center gap-3 px-4 py-3 rounded-md transition-colors text-base'
+                : 'flex items-center justify-center p-2 rounded-sm transition-colors',
               isActive
                 ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                 : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -62,6 +64,7 @@ export function Layout({ children }: LayoutProps) {
             title={item.label}
           >
             <Icon className="h-5 w-5" />
+            {isMobile && <span>{item.label}</span>}
           </Link>
         );
       })}
@@ -72,7 +75,9 @@ export function Layout({ children }: LayoutProps) {
           to="/admin"
           onClick={onClick}
           className={cn(
-            'flex items-center justify-center p-2 rounded-sm transition-colors',
+            isMobile 
+              ? 'flex items-center gap-3 px-4 py-3 rounded-md transition-colors text-base'
+              : 'flex items-center justify-center p-2 rounded-sm transition-colors',
             location.pathname === '/admin'
               ? 'bg-sidebar-accent text-sidebar-accent-foreground'
               : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -80,6 +85,7 @@ export function Layout({ children }: LayoutProps) {
           title="Admin"
         >
           <Users className="h-5 w-5" />
+          {isMobile && <span>Admin</span>}
         </Link>
       )}
     </>
@@ -158,7 +164,7 @@ export function Layout({ children }: LayoutProps) {
             <SheetTitle className="text-sidebar-foreground">Meny</SheetTitle>
           </SheetHeader>
           <nav className="flex flex-col gap-1 mt-6">
-            <NavLinks onClick={() => setMobileMenuOpen(false)} />
+            <NavLinks onClick={() => setMobileMenuOpen(false)} isMobile />
           </nav>
           <div className="mt-6 pt-6 border-t border-sidebar-border">
             <p className="text-sm text-sidebar-foreground/70 px-3">

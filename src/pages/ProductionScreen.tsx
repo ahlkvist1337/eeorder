@@ -209,18 +209,26 @@ export default function ProductionScreen() {
   }, [activeTrucks, localTruckOrder]);
 
   return (
-    <div className="min-h-screen bg-background p-6 lg:p-8">
-      {/* Header */}
-      <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-        <div className="flex items-center gap-4">
-          <img src={eeLogo} alt="EE Logo" className="h-16 w-auto" />
-          <h1 className="text-3xl lg:text-4xl font-bold text-foreground">
-            Produktion
-          </h1>
+    <div className="min-h-screen bg-background p-4 lg:p-8">
+      {/* Header - compact on mobile */}
+      <header className="flex flex-col gap-3 mb-4 lg:mb-6">
+        {/* Row 1: Logo + Title + Time */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 lg:gap-4">
+            <img src={eeLogo} alt="EE Logo" className="h-10 lg:h-16 w-auto" />
+            <h1 className="text-xl lg:text-4xl font-bold text-foreground">
+              Produktion
+            </h1>
+          </div>
+          <div className="text-sm lg:text-lg text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {format(lastUpdated, 'HH:mm', { locale: sv })}
+            </span>
+          </div>
         </div>
         
-        {/* Legend and controls */}
-        <div className="flex flex-wrap items-center gap-4 text-sm">
+        {/* Row 2: Status legend - hidden on mobile */}
+        <div className="hidden lg:flex flex-wrap items-center gap-4 text-sm">
           <span className="text-muted-foreground">Status:</span>
           <span className="inline-block px-2 py-0.5 rounded-sm bg-[hsl(var(--status-arrived))] text-white text-xs font-medium">
             Ankommen
@@ -244,13 +252,6 @@ export default function ProductionScreen() {
               Återställ ordning
             </Button>
           )}
-        </div>
-
-        <div className="text-lg text-muted-foreground">
-          Uppdaterad:{' '}
-          <span className="font-medium text-foreground">
-            {format(lastUpdated, 'HH:mm:ss', { locale: sv })}
-          </span>
         </div>
       </header>
 
