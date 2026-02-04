@@ -1,170 +1,153 @@
 
-# Plan: Kompaktare objekt/steg med arbetskort i fokus
+# Plan: Kodstädning och kvalitetssäkring
 
 ## Sammanfattning
 
-Omstrukturerar UI:n för objekt och behandlingssteg så att arbetskortet blir det primära fokuset. Objektet blir mer av en rubrik/gruppering med behandlingssteg visade kompakt inline, medan arbetskorten är synliga från start och kan kollapsas vid behov.
+En grundlig granskning av projektet har gjorts med fokus på kodkvalitet, struktur och hållbarhet. Projektet är generellt välstrukturerat med tydlig separation mellan komponenter, hooks, contexts och sidor. Några förbättringsområden har identifierats som kan städas upp utan att ändra funktionalitet.
 
 ---
 
-## Nuvarande vs Nytt
+## Granskningsresultat
 
-| Aspekt | Nuvarande | Nytt |
-|--------|-----------|------|
-| **Objekt** | Stort collapsible block med header och content | Kompakt rubrikrad med steg inline |
-| **Behandlingssteg** | Vertikal lista, tar mycket plats | Horisontella badges/chips, kompakt |
-| **Arbetskort** | Gömd under "Arbetskort" collapse, stängt som default | Synligt direkt, öppet som default |
-| **Hierarki** | Objekt → Steg → Arbetskort (nedåt) | Objekt (rubrik) → Arbetskort (primärt) med steg inline |
+### Bedömning: Projektet är i gott skick
+
+Projektet har:
+- Tydlig mappstruktur (components, pages, hooks, contexts, lib, types)
+- Konsekvent användning av TypeScript med tydliga typningar
+- Bra separation av ansvar mellan context (OrdersContext) och hooks (useOrders)
+- Konsekvent namngivning på svenska för affärslogik-termer
 
 ---
 
-## Ny layout per objekt
+## Identifierade förbättringar
 
+### 1. OANVÄNDA KOMPONENTER OCH FILER
+
+| Fil | Problem | Åtgärd |
+|-----|---------|--------|
+| `src/components/OrderStepsEditor.tsx` | Används inte längre (steg hanteras nu via OrderObjectsEditor) | Ta bort |
+| `src/components/TruckTimeline.tsx` | Importeras inte någonstans | Ta bort |
+
+### 2. OANVÄNDA IMPORTER OCH EXPORTS
+
+| Fil | Problem | Åtgärd |
+|-----|---------|--------|
+| `src/pages/OrderDetails.tsx` | Importerar `StepStatusBadge` men använder den inte | Ta bort import |
+| `src/components/StatusBadge.tsx` | Exporterar `TruckStatusBadge` som inte används någonstans | Kan behållas för framtida bruk eller tas bort |
+| `src/types/order.ts` | Exporterar `ObjectTemplate` interface som inte används (hook har sin egen typ) | Ta bort från types, finns redan i useObjectTemplates.ts |
+
+### 3. DUPLICERAD TYPNING
+
+| Plats | Problem | Åtgärd |
+|-------|---------|--------|
+| `src/types/order.ts` rad 40-44 | `ObjectTemplate` definieras här | Behåll endast i `useObjectTemplates.ts` |
+| `src/hooks/useObjectTemplates.ts` rad 5-8 | Har sin egen `ObjectTemplate` definition | Behåll denna då den faktiskt används |
+
+### 4. KODKVALITET
+
+| Fil | Problem | Åtgärd |
+|-----|---------|--------|
+| `src/contexts/OrdersContext.tsx` rad 400 | `eslint-disable` kommentar för `@typescript-eslint/no-explicit-any` | Kan accepteras då det är för Supabase insert |
+
+### 5. KOMPONENTSTRUKTUR - Acceptabel
+
+Alla komponenter har tydligt avgränsade ansvarsområden:
+- `OrderObjectsEditor` - hanterar objekt med inline steg och arbetskort
+- `ObjectTrucksEditor` - hanterar arbetskort inom ett objekt
+- `ArticleRowsEditor` - hanterar artikelrader med prislistekoppling
+- `PriceListBadge` - visar prislista-matchningar
+
+---
+
+## Åtgärder att genomföra
+
+### Steg 1: Ta bort oanvända filer
 ```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│  ▾ MOTORHUV        [Målning] [SPZ] [Kontroll]    3 arbetskort • 1 klar  [✎][🗑]  │
-├──────────────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────────────────────────────┐ │
-│  │ #135  [Ankommen ▾]   Målning ✓  SPZ ●  Kontroll ○           [✎][🖨][🗑] │ │
-│  └─────────────────────────────────────────────────────────────────────────┘ │
-│  ┌─────────────────────────────────────────────────────────────────────────┐ │
-│  │ #136  [Väntande ▾]   Målning ○  SPZ ○  Kontroll ○           [✎][🖨][🗑] │ │
-│  └─────────────────────────────────────────────────────────────────────────┘ │
-│  ┌─────────────────────────────────────────────────────────────────────────┐ │
-│  │ Motor A3F2  [Klar ▾]   Målning ✓  SPZ ✓  Kontroll ✓          [✎][🖨][🗑] │ │
-│  └─────────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-│  [+ Lägg till arbetskort]                                                    │
-│                                                                              │
-│  ▸ Redigera steg...                   ← Dold section för att lägga till steg │
-└──────────────────────────────────────────────────────────────────────────────┘
+src/components/OrderStepsEditor.tsx  → Ta bort
+src/components/TruckTimeline.tsx     → Ta bort
 ```
 
----
-
-## Designprinciper
-
-### 1. Objekthuvudet blir kompaktare
-- Objektnamn + behandlingssteg som små chips (horisontellt)
-- Sammanfattning av arbetskort ("3 st • 1 klar") i slutet
-- Collapse-knapp för att dölja arbetskorten (inte objektet)
-
-### 2. Arbetskorten synliga från start
-- `isExpanded` default = `true` (öppet från start)
-- Varje arbetskort är en kompakt rad med:
-  - ID/namn (font-mono, bold)
-  - Status-dropdown
-  - Steg-badges inline
-  - Åtgärdsknappar (edit, print, delete)
-
-### 3. Steg-redigeringen gömd
-- "Redigera steg..." knapp som expanderar till steg-lista
-- Endast för production users
-- Förhindrar att steg-listan tar plats i det dagliga arbetet
-
-### 4. Kompaktare spacing
-- Mindre padding, tightare gap
-- Borders istället för bakgrundsfärger för separation
-- Arbetskort-rader med minimal höjd
-
----
-
-## Teknisk implementation
-
-### ObjectTrucksEditor.tsx - Omstrukturering
-
-**Ändring 1: Default expanded**
+### Steg 2: Städa importer i OrderDetails.tsx
 ```typescript
-// Ändra från false till true
-const [isExpanded, setIsExpanded] = useState(true);
+// Ta bort denna rad:
+import { StepStatusBadge } from '@/components/StatusBadge';
 ```
 
-**Ändring 2: Kompaktare layout**
-- Ta bort extra border-t och pt-3 mt-3
-- Integrera direkt i objekt-innehållet
-- Arbetskort-listan direkt synlig
-
-### OrderObjectsEditor.tsx - Ny struktur
-
-**Ändring 1: Kompaktare objekt-header**
-- Flytta behandlingssteg till header som chips/badges
-- Ta bort CollapsibleContent för steg
-- Arbetskorten hamnar direkt under header
-
-**Ändring 2: Steg i header**
-```tsx
-<div className="flex items-center gap-2 p-2 bg-muted/30 rounded-t-md">
-  <Button variant="ghost" size="sm" onClick={toggle}>
-    {isExpanded ? <ChevronDown /> : <ChevronRight />}
-  </Button>
-  <span className="font-medium">{obj.name}</span>
-  
-  {/* Behandlingssteg som kompakta chips */}
-  <div className="flex gap-1 flex-1 flex-wrap">
-    {objectSteps.map(step => (
-      <Badge key={step.id} variant="outline" className="text-xs py-0 h-5">
-        {step.name}
-      </Badge>
-    ))}
-  </div>
-  
-  {/* Sammanfattning + actions */}
-  <span className="text-xs text-muted-foreground">
-    {trucks.length} kort • {completed} klar
-  </span>
-  {/* Edit/delete buttons */}
-</div>
+### Steg 3: Ta bort oanvänd typ i types/order.ts
+```typescript
+// Ta bort rad 40-44:
+export interface ObjectTemplate {
+  id: string;
+  name: string;
+  createdAt: string;
+}
 ```
 
-**Ändring 3: "Redigera steg" collapse**
-```tsx
-{/* Dold sektion för steg-hantering */}
-{isProduction && (
-  <Collapsible>
-    <CollapsibleTrigger asChild>
-      <Button variant="ghost" size="sm" className="text-xs">
-        <Settings className="h-3 w-3 mr-1" />
-        Redigera steg...
-      </Button>
-    </CollapsibleTrigger>
-    <CollapsibleContent>
-      {/* Steg-lista med drag-drop */}
-    </CollapsibleContent>
-  </Collapsible>
-)}
-```
-
-### SortableStep.tsx - Kompaktare
-
-Minska padding och storlek:
-```tsx
-className="flex items-center gap-1 bg-background rounded py-0.5"
-```
+### Steg 4: Överväg att behålla eller ta bort
+- `TruckStatusBadge` i StatusBadge.tsx - kan behållas för framtida bruk
+- `StepStatusBadge` - kan behållas för framtida bruk
 
 ---
 
-## Filändringar
+## Saker som INTE behöver ändras
 
-| Fil | Ändring |
-|-----|---------|
-| `src/components/OrderObjectsEditor.tsx` | Ny layout med steg i header, arbetskort primärt |
-| `src/components/ObjectTrucksEditor.tsx` | Default expanded, ta bort extra wrapper |
-| `src/components/SortableStep.tsx` | Kompaktare styling |
+### Datamodellen
+Datamodellen är korrekt och väl genomtänkt:
+- Order → Objects → Trucks (work cards) → StepStatuses
+- Tydlig separation mellan affärsdata (ArticleRows) och produktion (Objects/Trucks)
+- Historik och lifecycle-events spåras korrekt
+
+### Hooks
+Alla hooks används och har tydliga ansvarsområden:
+- `useOrders` - re-export för bakåtkompatibilitet
+- `usePriceList` - CRUD för prislistan
+- `usePriceListLookup` - snabbsökning i prislistan
+- `useTreatmentSteps` - behandlingssteg-templates
+- `useObjectTemplates` - objektmallar
+- `useProductionStats` - statistik för produktion
+- `useOrderAttachments` - filhantering
+- `useOrderDeviations` - avvikelsehantering
+
+### Lib-filer
+Alla lib-filer används:
+- `invoiceExport.ts`, `invoiceExportExcel.ts`, `invoiceExportPdf.ts` - fakturaexport
+- `exportExcel.ts` - prisliste-export
+- `workCardPrint.ts` - utskrift av arbetskort
+- `xmlParser.ts` - import från Monitor ERP
+- `utils.ts` - cn() helper
+
+### Contexts
+Båda contexts är välstrukturerade:
+- `AuthContext` - autentisering och rollhantering
+- `OrdersContext` - all orderlogik på ett ställe
 
 ---
 
-## Mobil-anpassning
+## Resultat efter städning
 
-- På mobil wrappas steg-chips till ny rad
-- Arbetskort-raderna stackas vertikalt vid behov
-- Åtgärdsknappar förblir kompakta
+| Mått | Före | Efter |
+|------|------|-------|
+| Oanvända komponenter | 2 | 0 |
+| Oanvända importer | 1 | 0 |
+| Duplicerade typdefinitioner | 1 | 0 |
+| Totalt antal filer att ta bort | 2 | - |
 
 ---
 
-## Resultat
+## Teknisk sammanfattning
 
-1. **Arbetskorten i fokus** - Synliga direkt när man öppnar en order
-2. **Kompaktare objekt** - Behandlingssteg tar inte extra vertikalt utrymme
-3. **Snabbare överblick** - Ser alla arbetskort och deras status direkt
-4. **Flexibelt** - Kan kollapsa arbetskorten om man vill fokusera på annat
-5. **Steg-redigering gömd** - Finns men stör inte det dagliga arbetet
+### Filer att ta bort
+1. `src/components/OrderStepsEditor.tsx`
+2. `src/components/TruckTimeline.tsx`
+
+### Filer att redigera
+1. `src/pages/OrderDetails.tsx` - ta bort oanvänd import
+2. `src/types/order.ts` - ta bort oanvänd ObjectTemplate interface
+
+---
+
+## Slutsats
+
+Projektet är i mycket gott skick för skarp drift. De föreslagna ändringarna är minimala och handlar om att ta bort kod som inte längre används - ingen affärslogik eller funktionalitet påverkas.
+
+Koden följer konsekventa mönster, har tydlig typning, och separationen mellan olika ansvarsområden är välgjord. Efter dessa små städningar kommer all kod som finns i projektet att ha ett tydligt syfte.
