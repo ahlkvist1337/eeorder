@@ -150,9 +150,9 @@ export function ArticleRowsEditor({
   );
 
   return (
-    <div className="space-y-4">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+    <div className="space-y-4 min-w-0 max-w-full overflow-hidden">
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <table className="w-full text-sm min-w-[600px]">
           <thead>
             <tr className="border-b">
               <th className="text-left py-2 pr-2 font-medium text-muted-foreground w-16">Rad</th>
