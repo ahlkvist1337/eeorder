@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -24,6 +23,7 @@ import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
 import { OrderObjectsEditor } from '@/components/OrderObjectsEditor';
 import { OrderAttachments } from '@/components/OrderAttachments';
 import { InstructionsEditor } from '@/components/InstructionsEditor';
+import { OrderDeviations } from '@/components/OrderDeviations';
 import { useOrders } from '@/hooks/useOrders';
 import { useOrderAttachments } from '@/hooks/useOrderAttachments';
 import { useAuth } from '@/contexts/AuthContext';
@@ -56,10 +56,6 @@ export default function OrderDetails() {
   // Set dynamic page title
   useDocumentTitle(order ? `Order ${order.orderNumber}` : 'Order');
   
-  // Local state for deviation comment to avoid saving on every keystroke
-  const [localDeviationComment, setLocalDeviationComment] = useState(order?.deviationComment || '');
-  const [hasUnsavedDeviationComment, setHasUnsavedDeviationComment] = useState(false);
-  
   // Local state for order comment
   const [localComment, setLocalComment] = useState(order?.comment || '');
   const [hasUnsavedComment, setHasUnsavedComment] = useState(false);
@@ -67,12 +63,10 @@ export default function OrderDetails() {
   // Sync local state when order changes
   useEffect(() => {
     if (order) {
-      setLocalDeviationComment(order.deviationComment || '');
-      setHasUnsavedDeviationComment(false);
       setLocalComment(order.comment || '');
       setHasUnsavedComment(false);
     }
-  }, [order?.deviationComment, order?.comment]);
+  }, [order?.comment]);
 
   if (isLoading) {
     return (
@@ -145,23 +139,6 @@ export default function OrderDetails() {
         truck.truckNumber, 
         step.name
       );
-    }
-  };
-
-  const handleDeviationChange = async (hasDeviation: boolean) => {
-    try {
-      await updateOrder(order.id, { hasDeviation });
-    } catch (error) {
-      console.error('Error updating deviation:', error);
-    }
-  };
-
-  const handleSaveDeviationComment = async () => {
-    try {
-      await updateOrder(order.id, { deviationComment: localDeviationComment });
-      setHasUnsavedDeviationComment(false);
-    } catch (error) {
-      console.error('Error updating deviation comment:', error);
     }
   };
 
@@ -388,24 +365,32 @@ export default function OrderDetails() {
                   
                   <div className="sm:col-span-2 space-y-2">
                     <Label className="text-xs sm:text-sm text-muted-foreground">Kommentar</Label>
-                    <Textarea
-                      value={localComment}
-                      onChange={(e) => {
-                        setLocalComment(e.target.value);
-                        setHasUnsavedComment(e.target.value !== (order.comment || ''));
-                      }}
-                      placeholder="Skriv en kommentar..."
-                      rows={3}
-                      className="text-sm"
-                    />
-                    {hasUnsavedComment && (
-                      <Button 
-                        size="sm" 
-                        onClick={handleSaveComment}
-                      >
-                        <Save className="h-4 w-4 mr-2" />
-                        Spara
-                      </Button>
+                    {isProduction ? (
+                      <>
+                        <Textarea
+                          value={localComment}
+                          onChange={(e) => {
+                            setLocalComment(e.target.value);
+                            setHasUnsavedComment(e.target.value !== (order.comment || ''));
+                          }}
+                          placeholder="Skriv en kommentar..."
+                          rows={3}
+                          className="text-sm"
+                        />
+                        {hasUnsavedComment && (
+                          <Button 
+                            size="sm" 
+                            onClick={handleSaveComment}
+                          >
+                            <Save className="h-4 w-4 mr-2" />
+                            Spara
+                          </Button>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-sm whitespace-pre-wrap bg-muted/30 rounded-md p-3 min-h-[80px]">
+                        {order.comment || <span className="text-muted-foreground italic">Ingen kommentar</span>}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -450,6 +435,7 @@ export default function OrderDetails() {
                   rows={order.articleRows || []}
                   onRowsChange={handleArticleRowsChange}
                   showTotal={true}
+                  readOnly={!isProduction}
                 />
               </CardContent>
             </Card>
@@ -543,7 +529,7 @@ export default function OrderDetails() {
               <CardContent className="space-y-3 sm:space-y-4 pt-0 sm:pt-0">
                 <div className="space-y-1.5 sm:space-y-2">
                   <Label className="text-xs sm:text-sm">Orderstatus</Label>
-                  {isAdmin ? (
+                  {isProduction ? (
                     <Select 
                       value={toAdminStatus(order.productionStatus)} 
                       onValueChange={handleProductionStatusChange}
@@ -583,49 +569,11 @@ export default function OrderDetails() {
                   </div>
                 )}
 
-                <div className="border-t my-4" />
-
-                {isProduction && (
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="deviation"
-                        checked={order.hasDeviation}
-                        onCheckedChange={(checked) => handleDeviationChange(!!checked)}
-                      />
-                      <Label htmlFor="deviation" className="font-medium cursor-pointer flex items-center gap-2 text-sm">
-                        <AlertTriangle className="h-4 w-4 text-destructive" />
-                        Avvikelse
-                      </Label>
-                    </div>
-                    {order.hasDeviation && (
-                      <div className="space-y-2">
-                        <Textarea
-                          value={localDeviationComment}
-                          onChange={(e) => {
-                            setLocalDeviationComment(e.target.value);
-                            setHasUnsavedDeviationComment(e.target.value !== (order.deviationComment || ''));
-                          }}
-                          placeholder="Beskriv avvikelsen..."
-                          rows={3}
-                          className="text-sm"
-                        />
-                        {hasUnsavedDeviationComment && (
-                          <Button 
-                            size="sm" 
-                            onClick={handleSaveDeviationComment}
-                            className="w-full"
-                          >
-                            <Save className="h-4 w-4 mr-2" />
-                            Spara
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
               </CardContent>
             </Card>
+
+            {/* Deviations */}
+            <OrderDeviations orderId={order.id} />
 
             {/* File attachments */}
             <OrderAttachments

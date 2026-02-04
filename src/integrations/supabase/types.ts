@@ -159,6 +159,41 @@ export type Database = {
           },
         ]
       }
+      order_deviations: {
+        Row: {
+          created_at: string
+          created_by: string
+          created_by_name: string
+          id: string
+          message: string
+          order_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          created_by_name: string
+          id?: string
+          message: string
+          order_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          created_by_name?: string
+          id?: string
+          message?: string
+          order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_deviations_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_objects: {
         Row: {
           completed_quantity: number
