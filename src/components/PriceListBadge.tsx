@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { List } from 'lucide-react';
+import { List, Hash, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
@@ -22,6 +22,7 @@ export function PriceListBadge({
 
   // Använd första matchens info för rubrik
   const primaryMatch = matches[0];
+  const isExactMatch = primaryMatch.matchType === 'exact_part';
 
   const handleSelectPrice = (price: number) => {
     onSelectPrice?.(price);
@@ -46,8 +47,23 @@ export function PriceListBadge({
             <span>Priser i prislistan</span>
           </div>
           
-          <div className="mt-2 text-sm text-muted-foreground">
-            {primaryMatch.partNumber} - {primaryMatch.description}
+          {/* Visa matchtyp tydligt */}
+          <div className="mt-2 flex items-start gap-2 text-sm">
+            {isExactMatch ? (
+              <>
+                <Hash className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <span className="text-muted-foreground">
+                  Matchat på artikelnr: <span className="font-medium text-foreground">{primaryMatch.partNumber}</span>
+                </span>
+              </>
+            ) : (
+              <>
+                <FileText className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                <span className="text-muted-foreground">
+                  Matchat på liknande beskrivning: <span className="font-medium text-foreground">"{primaryMatch.description}"</span>
+                </span>
+              </>
+            )}
           </div>
         </div>
         

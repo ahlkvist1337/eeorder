@@ -1,7 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { ClipboardList, Plus, Settings, BarChart3, Tv, Users, LogOut, Menu, Receipt } from 'lucide-react';
+import { ClipboardList, Plus, Settings, BarChart3, Tv, Users, LogOut, Menu, Receipt, FileText } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +23,7 @@ const navItems = [
   { to: '/statistics', label: 'Statistik', icon: BarChart3, requiresProduction: true },
   { to: '/production', label: 'Produktion', icon: Tv },
   { to: '/prices', label: 'Prislista', icon: Receipt, requiresProduction: true },
+  { to: '/documents', label: 'Dokument', icon: FileText },
 ];
 
 export function Layout({ children }: LayoutProps) {
