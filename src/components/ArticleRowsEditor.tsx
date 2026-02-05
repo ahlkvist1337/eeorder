@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Plus, Trash2, Edit2, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent } from '@/components/ui/card';
-import { usePriceListLookup, type PriceMatch } from '@/hooks/usePriceListLookup';
+import { usePriceListLookup } from '@/hooks/usePriceListLookup';
 import { PriceListBadge } from '@/components/PriceListBadge';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { ArticleRow } from '@/types/order';
@@ -36,39 +36,7 @@ export function ArticleRowsEditor({
   });
 
   // Price list lookup
-  const { findMatch, findAllMatches } = usePriceListLookup();
-  const [editPriceHint, setEditPriceHint] = useState<PriceMatch | null>(null);
-  const [newRowPriceHint, setNewRowPriceHint] = useState<PriceMatch | null>(null);
-
-  // Update price hint when editing a row
-  useEffect(() => {
-    if (!editingRowId) {
-      setEditPriceHint(null);
-      return;
-    }
-
-    const match = findMatch(editForm.partNumber || '', editForm.text || '');
-    if (match && match.price !== editForm.price) {
-      setEditPriceHint(match);
-    } else {
-      setEditPriceHint(null);
-    }
-  }, [editForm.partNumber, editForm.text, editForm.price, editingRowId, findMatch]);
-
-  // Update price hint when adding a new row
-  useEffect(() => {
-    if (!isAdding) {
-      setNewRowPriceHint(null);
-      return;
-    }
-
-    const match = findMatch(newRow.partNumber || '', newRow.text || '');
-    if (match && match.price !== (newRow.price || 0)) {
-      setNewRowPriceHint(match);
-    } else {
-      setNewRowPriceHint(null);
-    }
-  }, [newRow.partNumber, newRow.text, newRow.price, isAdding, findMatch]);
+  const { findAllMatches } = usePriceListLookup();
 
   const handleAddRow = () => {
     if (!newRow.text?.trim()) return;
@@ -93,7 +61,6 @@ export function ArticleRowsEditor({
       price: 0,
     });
     setIsAdding(false);
-    setNewRowPriceHint(null);
   };
 
   const handleDeleteRow = (rowId: string) => {
@@ -112,44 +79,14 @@ export function ArticleRowsEditor({
     ));
     setEditingRowId(null);
     setEditForm({});
-    setEditPriceHint(null);
   };
 
   const handleCancelEdit = () => {
     setEditingRowId(null);
     setEditForm({});
-    setEditPriceHint(null);
-  };
-
-  const handleUsePriceFromList = (price: number) => {
-    setEditForm({ ...editForm, price });
-    setEditPriceHint(null);
-  };
-
-  const handleUseNewRowPriceFromList = (price: number) => {
-    setNewRow({ ...newRow, price });
-    setNewRowPriceHint(null);
   };
 
   const total = rows.reduce((sum, row) => sum + (row.price * row.quantity), 0);
-
-  // Price hint component
-  const PriceHint = ({ match, onUsePrice }: { match: PriceMatch; onUsePrice: (price: number) => void }) => (
-    <div className="flex items-center gap-2 text-xs text-warning mt-1">
-      <span>
-        Prislistan: {match.price.toLocaleString('sv-SE')} kr
-        {match.matchType === 'similar_desc' && ' (liknande)'}
-      </span>
-      <Button 
-        variant="link" 
-        size="sm" 
-        className="h-auto p-0 text-xs text-warning hover:text-warning/80"
-        onClick={() => onUsePrice(match.price)}
-      >
-        Använd
-      </Button>
-    </div>
-  );
 
   // Mobile card layout for article rows
   if (isMobile) {
@@ -217,9 +154,6 @@ export function ArticleRowsEditor({
                       />
                     </div>
                   </div>
-                  {editPriceHint && (
-                    <PriceHint match={editPriceHint} onUsePrice={handleUsePriceFromList} />
-                  )}
                   <div className="flex gap-2 pt-2">
                     <Button className="flex-1 h-11" onClick={handleSaveEdit}>
                       <Check className="h-4 w-4 mr-2" />
@@ -373,9 +307,6 @@ export function ArticleRowsEditor({
                   />
                 </div>
               </div>
-              {newRowPriceHint && (
-                <PriceHint match={newRowPriceHint} onUsePrice={handleUseNewRowPriceFromList} />
-              )}
               <div className="flex gap-2 pt-2">
                 <Button className="flex-1 h-11" onClick={handleAddRow}>
                   <Check className="h-4 w-4 mr-2" />
@@ -471,17 +402,12 @@ export function ArticleRowsEditor({
                       />
                     </td>
                     <td className="py-2 pr-2">
-                      <div>
-                        <Input
-                          type="number"
-                          value={editForm.price || ''}
-                          onChange={(e) => setEditForm({ ...editForm, price: parseFloat(e.target.value) || 0 })}
-                          className="h-8 w-full text-right"
-                        />
-                        {editPriceHint && (
-                          <PriceHint match={editPriceHint} onUsePrice={handleUsePriceFromList} />
-                        )}
-                      </div>
+                      <Input
+                        type="number"
+                        value={editForm.price || ''}
+                        onChange={(e) => setEditForm({ ...editForm, price: parseFloat(e.target.value) || 0 })}
+                        className="h-8 w-full text-right"
+                      />
                     </td>
                     <td className="py-2 pr-2 text-right font-medium">
                       {((editForm.price || 0) * (editForm.quantity || 0)).toLocaleString('sv-SE')} kr
@@ -593,17 +519,12 @@ export function ArticleRowsEditor({
                   />
                 </td>
                 <td className="py-2 pr-2">
-                  <div>
-                    <Input
-                      type="number"
-                      value={newRow.price || ''}
-                      onChange={(e) => setNewRow({ ...newRow, price: parseFloat(e.target.value) || 0 })}
-                      className="h-8 w-full text-right"
-                    />
-                    {newRowPriceHint && (
-                      <PriceHint match={newRowPriceHint} onUsePrice={handleUseNewRowPriceFromList} />
-                    )}
-                  </div>
+                  <Input
+                    type="number"
+                    value={newRow.price || ''}
+                    onChange={(e) => setNewRow({ ...newRow, price: parseFloat(e.target.value) || 0 })}
+                    className="h-8 w-full text-right"
+                  />
                 </td>
                 <td className="py-2 pr-2 text-right font-medium">
                   {((newRow.price || 0) * (newRow.quantity || 0)).toLocaleString('sv-SE')} kr

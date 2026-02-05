@@ -68,6 +68,36 @@ export type Database = {
           },
         ]
       }
+      documents: {
+        Row: {
+          category: string
+          created_at: string | null
+          file_path: string
+          file_size: number | null
+          id: string
+          name: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string | null
+          file_path: string
+          file_size?: number | null
+          id?: string
+          name: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          name?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       object_templates: {
         Row: {
           created_at: string

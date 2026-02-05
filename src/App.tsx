@@ -14,13 +14,21 @@ import TreatmentSteps from "./pages/TreatmentSteps";
 import Statistics from "./pages/Statistics";
 import ProductionScreen from "./pages/ProductionScreen";
 import PriceList from "./pages/PriceList";
+import Documents from "./pages/Documents";
 import Login from "./pages/Login";
 import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 
 const App = () => {
-  // Initialize QueryClient with stable reference
-  const [queryClient] = useState(() => new QueryClient());
+  // Initialize QueryClient with stable reference - disable refetch on window focus
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        refetchOnWindowFocus: false,
+        staleTime: 30000,
+      },
+    },
+  }));
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -39,6 +47,7 @@ const App = () => {
                 <Route path="/statistics" element={<ProtectedRoute><Statistics /></ProtectedRoute>} />
                 <Route path="/production" element={<ProtectedRoute><ProductionScreen /></ProtectedRoute>} />
                 <Route path="/prices" element={<ProtectedRoute><PriceList /></ProtectedRoute>} />
+                <Route path="/documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AdminPanel /></ProtectedRoute>} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
