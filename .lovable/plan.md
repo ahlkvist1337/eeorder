@@ -1,204 +1,220 @@
 
-# Plan: Automatisk orderstatus och realtidsuppdateringar
+
+# Plan: Fyra förbättringar (uppdaterad)
 
 ## Sammanfattning
 
-Två separata problem identifierades:
-
-| Problem | Orsak |
-|---------|-------|
-| Orderstatus ändras inte automatiskt till "Avslutad" | Logiken kollar bara `order_steps`, inte `truck_step_status` |
-| Uppdateringar visas inte i realtid | Ingen Supabase realtime-prenumeration existerar |
-
----
-
-## Åtgärd 1: Automatisk orderstatus "Avslutad"
-
-### Problemet i detalj
-- Nuvarande logik i `updateOrder()` kontrollerar om alla `order_steps` är `completed`
-- Men produktionen använder `truck_step_status` (arbetskort-nivå), inte `order_steps`
-- När ett arbetskort markeras som klart via `updateTruckStatus()` kontrolleras aldrig om hela ordern ska bli "Avslutad"
-
-### Lösning
-Lägg till kontroll i `updateTruckStatus()` i OrdersContext.tsx:
-
-```typescript
-// After marking truck as completed, check if ALL trucks in the order are completed
-if (newStatus === 'completed') {
-  // Get updated state after this change
-  const allTrucks = order.objects?.flatMap(obj => obj.trucks || []) || [];
-  
-  // Count how many will be completed after this change
-  const completedCount = allTrucks.filter(t => 
-    t.id === truckId ? true : t.status === 'completed'
-  ).length;
-  
-  // If all trucks are now completed, set order to completed
-  if (completedCount === allTrucks.length && allTrucks.length > 0) {
-    const statusesThatShouldChangeToCompleted = ['created', 'arrived', 'started', 'paused'];
-    
-    if (statusesThatShouldChangeToCompleted.includes(order.productionStatus)) {
-      await supabase.from('status_history').insert({
-        order_id: orderId,
-        from_status: order.productionStatus,
-        to_status: 'completed',
-      });
-      
-      await supabase.from('orders')
-        .update({ production_status: 'completed' })
-        .eq('id', orderId);
-      
-      // Update optimistic state
-      setOrders(prev => prev.map(o => 
-        o.id === orderId 
-          ? { ...o, productionStatus: 'completed' }
-          : o
-      ));
-    }
-  }
-}
-```
-
-### Var i koden
-- Fil: `src/contexts/OrdersContext.tsx`
-- Funktion: `updateTruckStatus` (efter rad 1120)
+| Punkt | Problem | Lösning |
+|-------|---------|---------|
+| 1. Sidladdning vid flikbyte | React Query refetchar vid fokus | Stäng av `refetchOnWindowFocus` |
+| 2. Ta bort PriceHint vid redigering | Varning vid prisinput är överflödig | Ta bort PriceHint-komponenten |
+| 3. Bättre prisförklaring | Otydligt var prismatchning kommer ifrån | Visa matchtyp tydligt i PriceListBadge |
+| 4. Dokumentbibliotek | Saknas | Ny sida med tre kategorier + admin-uppladdning |
 
 ---
 
-## Åtgärd 2: Realtidsuppdateringar
+## 1. Stoppa sidladdning vid flikbyte
 
-### Problemet i detalj
-- Ingen prenumeration på Postgres changes
-- Om någon annan ändrar data syns det inte förrän man laddar om sidan
+### Problem
+React Query har `refetchOnWindowFocus: true` som standard. När du byter till en annan flik och tillbaka triggas en ny fetch, vilket orsakar att sidan "blinkar".
 
 ### Lösning
-Lägg till Supabase realtime channel i OrdersProvider:
+Konfigurera QueryClient i `src/App.tsx` med:
 
 ```typescript
-// In OrdersProvider useEffect, add realtime subscription
-useEffect(() => {
-  if (!user) return;
-  
-  const channel = supabase
-    .channel('orders-realtime')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'orders',
-      },
-      () => {
-        // Refetch on any order change
-        fetchOrders();
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'object_trucks',
-      },
-      () => {
-        // Refetch on truck status changes
-        fetchOrders();
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'truck_step_status',
-      },
-      () => {
-        // Refetch on step status changes
-        fetchOrders();
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [user, fetchOrders]);
+const [queryClient] = useState(() => new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      staleTime: 30000,
+    },
+  },
+}));
 ```
 
-### Krävs även: Aktivera realtime på tabellerna
-SQL-migration behövs:
+### Fil som ändras
+- `src/App.tsx`
+
+---
+
+## 2. Ta bort PriceHint vid redigering
+
+### Problem
+När man klickar "Redigera" på en artikelrad visas en orange varning ("Prislistan: X kr") under prisinputen. Denna är onödig eftersom `PriceListBadge` ("Prislista finns") redan finns på raden i visa-läge.
+
+### Lösning
+Ta bort:
+- `PriceHint`-komponenten (rad 137-152)
+- `editPriceHint` och `newRowPriceHint` states
+- useEffect-hooks som uppdaterar price hints (rad 44-71)
+- Alla användningar av `<PriceHint ... />` (rad 220-222, 376-378, 494, 596)
+
+### Fil som ändras
+- `src/components/ArticleRowsEditor.tsx`
+
+---
+
+## 3. Bättre förklaring på prismatchning i PriceListBadge
+
+### Problem
+`PriceListBadge` visar bara "Prislista finns" utan att förklara:
+- Om det matchades på artikelnummer (exakt match)
+- Om det matchades på beskrivning (vilken beskrivning?)
+
+### Lösning
+Uppdatera `PriceListBadge` för att visa matchtyp tydligt:
+
+**Vid exakt artikelnummer-match:**
+```
+Matchat på artikelnr
+```
+
+**Vid beskrivningsmatchning:**
+```
+Matchat på liknande beskrivning: "Pulverlackering RAL 7035"
+```
+
+### Ändringar i PriceListBadge.tsx
+- Visa matchtyp i popover-headern
+- Om `matchType === 'exact_part'`: Visa "Matchat på artikelnr: {partNumber}"
+- Om `matchType === 'similar_desc'`: Visa "Matchat på liknande beskrivning: {description}"
+
+---
+
+## 4. Dokumentbibliotek
+
+### Ny funktionalitet
+En enkel sida där alla användare kan hitta dokument (PDF/DOCX) sorterade i tre kategorier.
+
+### Kategorier
+1. **Lathundar** - Snabbguider och instruktioner
+2. **Rutiner** - Arbetsrutiner och processer  
+3. **Tolkningar / Förklaringar** - Förklarande dokument
+
+### Databas (ny tabell)
 
 ```sql
--- Enable realtime for relevant tables
-ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.object_trucks;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.truck_step_status;
+CREATE TABLE public.documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  category TEXT NOT NULL CHECK (category IN ('lathundar', 'rutiner', 'tolkningar')),
+  file_path TEXT NOT NULL,
+  file_size INTEGER,
+  uploaded_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- RLS: Alla inloggade kan läsa, bara admin kan skriva/ta bort
+ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Alla kan läsa dokument"
+  ON public.documents FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Admin kan skapa dokument"
+  ON public.documents FOR INSERT
+  TO authenticated
+  WITH CHECK (public.has_role(auth.uid(), 'admin'));
+
+CREATE POLICY "Admin kan ta bort dokument"
+  ON public.documents FOR DELETE
+  TO authenticated
+  USING (public.has_role(auth.uid(), 'admin'));
 ```
 
-### Var i koden
-- Fil: `src/contexts/OrdersContext.tsx`
-- Lägg till ny `useEffect` efter rad 377
+### Storage bucket
+
+```sql
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('documents', 'documents', true);
+
+CREATE POLICY "Alla kan läsa dokument-filer"
+  ON storage.objects FOR SELECT
+  TO authenticated
+  USING (bucket_id = 'documents');
+
+CREATE POLICY "Admin kan ladda upp dokument"
+  ON storage.objects FOR INSERT
+  TO authenticated
+  WITH CHECK (bucket_id = 'documents' AND public.has_role(auth.uid(), 'admin'));
+
+CREATE POLICY "Admin kan ta bort dokument"
+  ON storage.objects FOR DELETE
+  TO authenticated
+  USING (bucket_id = 'documents' AND public.has_role(auth.uid(), 'admin'));
+```
+
+### Ny fil: `src/pages/Documents.tsx`
+
+**Funktioner:**
+- Lista dokument grupperade per kategori (accordion)
+- Klickbara länkar för nedladdning
+- Admin-sektion med uppladdning (filväljare)
+- Välja kategori vid uppladdning
+- Ta bort-knapp för admin
+
+**Design:**
+- Enkel layout med tre sektioner
+- Varje dokument visas med filnamn, datum och nedladdningslänk
+- Responsiv för mobil
+
+### Nya filer
+- `src/pages/Documents.tsx` - Dokumentbibliotekssidan
+- `src/hooks/useDocuments.ts` - Hook för CRUD-operationer
+
+### Ändrade filer
+- `src/App.tsx` - Lägg till route `/documents`
+- `src/components/Layout.tsx` - Lägg till nav-item "Dokument"
 
 ---
 
-## Tekniska ändringar
+## Teknisk översikt
 
-### Fil 1: src/contexts/OrdersContext.tsx
-
-| Ändring | Plats |
-|---------|-------|
-| Lägg till auto-complete logik | I `updateTruckStatus()` efter rad 1120 |
-| Lägg till realtime subscription | Ny `useEffect` efter rad 377 |
-| Importera inget extra | Supabase redan importerad |
-
-### Fil 2: SQL Migration
-
-| Ändring | Effekt |
-|---------|--------|
-| Aktivera realtime på 3 tabeller | Gör att ändringar pushes till klienter |
-
----
-
-## Översikt
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                      FÖRE (Nuvarande)                        │
-├──────────────────────────────────────────────────────────────┤
-│  Arbetskort klart → truck.status = 'completed'               │
-│  ❌ Ingen check om alla trucks är klara                      │
-│  ❌ Ingen realtime - måste ladda om sidan                    │
-└──────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────┐
-│                      EFTER (Med fix)                         │
-├──────────────────────────────────────────────────────────────┤
-│  Arbetskort klart → truck.status = 'completed'               │
-│  ✅ Check: Alla trucks klara? → order.status = 'completed'   │
-│  ✅ Realtime: Ändringar syns direkt utan refresh             │
-└──────────────────────────────────────────────────────────────┘
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                      ÄNDRINGAR                               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  src/App.tsx                                                │
+│  ├─ QueryClient config: refetchOnWindowFocus: false         │
+│  └─ Ny route: /documents                                    │
+│                                                             │
+│  src/components/Layout.tsx                                  │
+│  └─ Ny nav-item: Dokument (FileText-ikon)                   │
+│                                                             │
+│  src/components/ArticleRowsEditor.tsx                       │
+│  └─ Ta bort PriceHint (vid redigering)                      │
+│  └─ Behålla PriceListBadge (i visa-läge)                    │
+│                                                             │
+│  src/components/PriceListBadge.tsx                          │
+│  └─ Visa matchtyp: artnr vs beskrivning                     │
+│                                                             │
+│  src/pages/Documents.tsx (NY)                               │
+│  └─ Dokumentbibliotek med 3 kategorier                      │
+│                                                             │
+│  src/hooks/useDocuments.ts (NY)                             │
+│  └─ Hook för hämta/ladda upp/ta bort dokument               │
+│                                                             │
+│  Databas                                                    │
+│  ├─ Ny tabell: documents                                    │
+│  └─ Ny bucket: documents (public)                           │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Testplan
 
-1. **Automatisk orderstatus:**
-   - Skapa en order med ett objekt och ett arbetskort
-   - Lägg till behandlingssteg
-   - Markera alla steg som klara
-   - Verifiera att arbetskortet blir "Klart"
-   - Verifiera att orderns status ändras till "Avslutad"
+1. **Flikbyte:** Öppna orderlistan, byt till annan flik, kom tillbaka - sidan ska INTE ladda om
+2. **Prisvarning borta:** Redigera en artikelrad - ingen orange "Prislistan: X kr" ska visas vid prisinputen
+3. **PriceListBadge kvar:** I visa-läge ska "Prislista finns" fortfarande visas på rader som har matchningar
+4. **Prismatchning förklaring:** Klicka på "Prislista finns" - se tydlig text om det matchades på artikelnr eller beskrivning
+5. **Dokumentbibliotek:**
+   - Navigera till /documents
+   - Se tre kategorier
+   - (Som admin) Ladda upp en PDF till "Lathundar"
+   - Ladda ner dokumentet
+   - (Som admin) Ta bort dokumentet
 
-2. **Realtidsuppdateringar:**
-   - Öppna samma order i två flikar
-   - Ändra status i en flik
-   - Verifiera att ändringen syns i den andra fliken inom 1-2 sekunder
-
----
-
-## Resultat efter implementation
-
-- Orderstatus sätts automatiskt till "Avslutad" när alla arbetskort är klara
-- Ändringar i produktionsvy och orderdetaljer visas i realtid utan siduppdatering
-- Produktionsarbetare ser korrekta statusar direkt
