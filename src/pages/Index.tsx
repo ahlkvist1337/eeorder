@@ -15,6 +15,7 @@ import { useOrders } from '@/contexts/OrdersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { ProductionStatus, BillingStatus, OrderAdminStatus } from '@/types/order';
+import { toAdminStatus } from '@/types/order';
 import { canExportOrders } from '@/lib/invoiceExport';
 
 const Index = () => {
@@ -24,7 +25,7 @@ const Index = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [archiveSearchQuery, setArchiveSearchQuery] = useState('');
   const [filters, setFilters] = useState<{
-    productionStatus: ProductionStatus | 'all';
+    productionStatus: OrderAdminStatus | 'all';
     billingStatus: BillingStatus | 'all';
     hasDeviation: boolean | null;
   }>({

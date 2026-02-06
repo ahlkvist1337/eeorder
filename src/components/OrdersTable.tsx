@@ -15,13 +15,13 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { ProductionStatusBadge, BillingStatusBadge } from '@/components/StatusBadge';
-import type { Order, ProductionStatus, BillingStatus, TruckStatus } from '@/types/order';
-import { truckStatusLabels } from '@/types/order';
+import type { Order, ProductionStatus, BillingStatus, TruckStatus, OrderAdminStatus } from '@/types/order';
+import { truckStatusLabels, toAdminStatus } from '@/types/order';
 
 interface OrdersTableProps {
   orders: Order[];
   filters: {
-    productionStatus: ProductionStatus | 'all';
+    productionStatus: OrderAdminStatus | 'all';
     billingStatus: BillingStatus | 'all';
     hasDeviation: boolean | null;
   };
@@ -62,8 +62,8 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
         if (!matchesSearch) return false;
       }
       
-      // Status filters
-      if (filters.productionStatus !== 'all' && order.productionStatus !== filters.productionStatus) {
+      // Status filters - map order's productionStatus to admin status for comparison
+      if (filters.productionStatus !== 'all' && toAdminStatus(order.productionStatus) !== filters.productionStatus) {
         return false;
       }
       if (filters.billingStatus !== 'all' && order.billingStatus !== filters.billingStatus) {

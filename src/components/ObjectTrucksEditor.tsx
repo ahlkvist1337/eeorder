@@ -257,7 +257,7 @@ export function ObjectTrucksEditor({
                         key={step.id}
                         onClick={() => handleStepStatusClick(truck.id, step.id, status)}
                         className={cn(
-                          'px-4 py-2 rounded-md text-sm font-medium transition-colors hover:opacity-80 min-h-[44px] whitespace-normal break-words text-left leading-tight max-w-full',
+                          'px-3 py-1.5 sm:px-2 sm:py-1 rounded-md text-sm font-medium transition-colors hover:opacity-80 min-h-[44px] sm:min-h-0 whitespace-normal break-words text-left leading-tight max-w-full',
                           colors.bg,
                           colors.text
                         )}
