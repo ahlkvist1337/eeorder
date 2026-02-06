@@ -136,6 +136,17 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
   doc.setFont('helvetica', 'bold');
   doc.text(`TOTALT: ${formatCurrency(data.grandTotal)}`, pageWidth / 2, yPosition, { align: 'center' });
   
+  // Add page numbers to all pages
+  const pageCount = doc.getNumberOfPages();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(128);
+    doc.text(`Sida ${i} av ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+  }
+  
   // Save the PDF
   doc.save(`fakturaunderlag-${data.exportId}.pdf`);
 }

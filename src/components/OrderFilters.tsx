@@ -8,12 +8,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { productionStatusLabels, billingStatusLabels } from '@/types/order';
-import type { ProductionStatus, BillingStatus } from '@/types/order';
+import { orderAdminStatusLabels, billingStatusLabels } from '@/types/order';
+import type { OrderAdminStatus, BillingStatus } from '@/types/order';
 
 interface OrderFiltersProps {
   filters: {
-    productionStatus: ProductionStatus | 'all';
+    productionStatus: OrderAdminStatus | 'all';
     billingStatus: BillingStatus | 'all';
     hasDeviation: boolean | null;
   };
@@ -26,7 +26,7 @@ export function OrderFilters({ filters, onFiltersChange, searchQuery, onSearchCh
   const handleProductionStatusChange = (value: string) => {
     onFiltersChange({
       ...filters,
-      productionStatus: value as ProductionStatus | 'all',
+      productionStatus: value as OrderAdminStatus | 'all',
     });
   };
 
@@ -90,7 +90,7 @@ export function OrderFilters({ filters, onFiltersChange, searchQuery, onSearchCh
             </SelectTrigger>
             <SelectContent className="bg-popover">
               <SelectItem value="all">Alla statusar</SelectItem>
-              {Object.entries(productionStatusLabels).map(([value, label]) => (
+              {Object.entries(orderAdminStatusLabels).map(([value, label]) => (
                 <SelectItem key={value} value={value}>{label}</SelectItem>
               ))}
             </SelectContent>
