@@ -1,171 +1,114 @@
 
-
-# Plan: Fyra förbättringar (uppdaterad)
+# Plan: Tre förbättringar
 
 ## Sammanfattning
 
 | Punkt | Problem | Lösning |
 |-------|---------|---------|
-| 1. Sidladdning vid flikbyte | React Query refetchar vid fokus | Stäng av `refetchOnWindowFocus` |
-| 2. Ta bort PriceHint vid redigering | Varning vid prisinput är överflödig | Ta bort PriceHint-komponenten |
-| 3. Bättre prisförklaring | Otydligt var prismatchning kommer ifrån | Visa matchtyp tydligt i PriceListBadge |
-| 4. Dokumentbibliotek | Saknas | Ny sida med tre kategorier + admin-uppladdning |
+| 1. Sidnummer i PDF | Fakturaunderlag saknar sidnumrering | Lägg till "Sida X av Y" i sidfot |
+| 2. Stora stegknappar på desktop | min-h-[44px] och stor padding är för stora | Minska storlek på desktop, behåll mobilvänligt |
+| 3. Dubletter "Aktiv" i filter | 4 statusar visar alla "Aktiv" | Visa endast unika statusar i dropdown |
 
 ---
 
-## 1. Stoppa sidladdning vid flikbyte
+## 1. Lägg till sidnummer i PDF-export
 
 ### Problem
-React Query har `refetchOnWindowFocus: true` som standard. När du byter till en annan flik och tillbaka triggas en ny fetch, vilket orsakar att sidan "blinkar".
+PDF-export av fakturaunderlag har ingen sidnumrering, vilket gör det svårt att navigera i längre dokument.
 
 ### Lösning
-Konfigurera QueryClient i `src/App.tsx` med:
+Lägg till "Sida X av Y" i sidfoten på varje sida efter att dokumentet är färdigt.
+
+### Ändringar i src/lib/invoiceExportPdf.ts
 
 ```typescript
-const [queryClient] = useState(() => new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      staleTime: 30000,
-    },
-  },
-}));
+// After all content is added, loop through pages and add page numbers
+const pageCount = doc.getNumberOfPages();
+for (let i = 1; i <= pageCount; i++) {
+  doc.setPage(i);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(128);
+  doc.text(
+    `Sida ${i} av ${pageCount}`,
+    pageWidth / 2,
+    doc.internal.pageSize.getHeight() - 10,
+    { align: 'center' }
+  );
+}
+```
+
+---
+
+## 2. Minska storlek på stegknappar (desktop)
+
+### Problem
+Stegknapparna i arbetskort har `min-h-[44px]` och `py-2 px-4` vilket är bra för mobil men onödigt stort på desktop.
+
+### Nuvarande kod (rad 259-267)
+```typescript
+className={cn(
+  'px-4 py-2 rounded-md text-sm font-medium transition-colors hover:opacity-80 min-h-[44px] whitespace-normal break-words text-left leading-tight max-w-full',
+  colors.bg,
+  colors.text
+)}
+```
+
+### Lösning
+Använd responsiva klasser: mindre padding och höjd på desktop, behåll 44px på mobil för touch.
+
+```typescript
+className={cn(
+  'px-3 py-1.5 sm:px-2 sm:py-1 rounded-md text-sm font-medium transition-colors hover:opacity-80 min-h-[44px] sm:min-h-0 whitespace-normal break-words text-left leading-tight max-w-full',
+  colors.bg,
+  colors.text
+)}
 ```
 
 ### Fil som ändras
-- `src/App.tsx`
+- `src/components/ObjectTrucksEditor.tsx`
 
 ---
 
-## 2. Ta bort PriceHint vid redigering
+## 3. Ta bort dubletter i statusfilter
 
 ### Problem
-När man klickar "Redigera" på en artikelrad visas en orange varning ("Prislistan: X kr") under prisinputen. Denna är onödig eftersom `PriceListBadge` ("Prislista finns") redan finns på raden i visa-läge.
+`productionStatusLabels` mappar 4 olika statusar (`created`, `arrived`, `started`, `paused`) till samma text "Aktiv", vilket skapar 4 identiska "Aktiv"-alternativ i dropdown.
+
+```typescript
+// Nuvarande kod i OrderFilters.tsx rad 93-95:
+{Object.entries(productionStatusLabels).map(([value, label]) => (
+  <SelectItem key={value} value={value}>{label}</SelectItem>
+))}
+```
 
 ### Lösning
-Ta bort:
-- `PriceHint`-komponenten (rad 137-152)
-- `editPriceHint` och `newRowPriceHint` states
-- useEffect-hooks som uppdaterar price hints (rad 44-71)
-- Alla användningar av `<PriceHint ... />` (rad 220-222, 376-378, 494, 596)
+Använd `orderAdminStatusLabels` istället som bara har 3 unika värden:
+- `created` → "Aktiv"
+- `completed` → "Avslutad"
+- `cancelled` → "Avbruten"
 
-### Fil som ändras
-- `src/components/ArticleRowsEditor.tsx`
+### Ändringar i src/components/OrderFilters.tsx
 
----
+```typescript
+// Ändra import (rad 11)
+import { orderAdminStatusLabels, billingStatusLabels } from '@/types/order';
+import type { OrderAdminStatus, BillingStatus } from '@/types/order';
 
-## 3. Bättre förklaring på prismatchning i PriceListBadge
+// Uppdatera interface (rad 15)
+productionStatus: OrderAdminStatus | 'all';
 
-### Problem
-`PriceListBadge` visar bara "Prislista finns" utan att förklara:
-- Om det matchades på artikelnummer (exakt match)
-- Om det matchades på beskrivning (vilken beskrivning?)
+// Uppdatera handler (rad 28-29)
+productionStatus: value as OrderAdminStatus | 'all',
 
-### Lösning
-Uppdatera `PriceListBadge` för att visa matchtyp tydligt:
-
-**Vid exakt artikelnummer-match:**
-```
-Matchat på artikelnr
+// Byt ut loop (rad 93-95)
+{Object.entries(orderAdminStatusLabels).map(([value, label]) => (
+  <SelectItem key={value} value={value}>{label}</SelectItem>
+))}
 ```
 
-**Vid beskrivningsmatchning:**
-```
-Matchat på liknande beskrivning: "Pulverlackering RAL 7035"
-```
-
-### Ändringar i PriceListBadge.tsx
-- Visa matchtyp i popover-headern
-- Om `matchType === 'exact_part'`: Visa "Matchat på artikelnr: {partNumber}"
-- Om `matchType === 'similar_desc'`: Visa "Matchat på liknande beskrivning: {description}"
-
----
-
-## 4. Dokumentbibliotek
-
-### Ny funktionalitet
-En enkel sida där alla användare kan hitta dokument (PDF/DOCX) sorterade i tre kategorier.
-
-### Kategorier
-1. **Lathundar** - Snabbguider och instruktioner
-2. **Rutiner** - Arbetsrutiner och processer  
-3. **Tolkningar / Förklaringar** - Förklarande dokument
-
-### Databas (ny tabell)
-
-```sql
-CREATE TABLE public.documents (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  category TEXT NOT NULL CHECK (category IN ('lathundar', 'rutiner', 'tolkningar')),
-  file_path TEXT NOT NULL,
-  file_size INTEGER,
-  uploaded_by UUID REFERENCES auth.users(id),
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- RLS: Alla inloggade kan läsa, bara admin kan skriva/ta bort
-ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Alla kan läsa dokument"
-  ON public.documents FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Admin kan skapa dokument"
-  ON public.documents FOR INSERT
-  TO authenticated
-  WITH CHECK (public.has_role(auth.uid(), 'admin'));
-
-CREATE POLICY "Admin kan ta bort dokument"
-  ON public.documents FOR DELETE
-  TO authenticated
-  USING (public.has_role(auth.uid(), 'admin'));
-```
-
-### Storage bucket
-
-```sql
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('documents', 'documents', true);
-
-CREATE POLICY "Alla kan läsa dokument-filer"
-  ON storage.objects FOR SELECT
-  TO authenticated
-  USING (bucket_id = 'documents');
-
-CREATE POLICY "Admin kan ladda upp dokument"
-  ON storage.objects FOR INSERT
-  TO authenticated
-  WITH CHECK (bucket_id = 'documents' AND public.has_role(auth.uid(), 'admin'));
-
-CREATE POLICY "Admin kan ta bort dokument"
-  ON storage.objects FOR DELETE
-  TO authenticated
-  USING (bucket_id = 'documents' AND public.has_role(auth.uid(), 'admin'));
-```
-
-### Ny fil: `src/pages/Documents.tsx`
-
-**Funktioner:**
-- Lista dokument grupperade per kategori (accordion)
-- Klickbara länkar för nedladdning
-- Admin-sektion med uppladdning (filväljare)
-- Välja kategori vid uppladdning
-- Ta bort-knapp för admin
-
-**Design:**
-- Enkel layout med tre sektioner
-- Varje dokument visas med filnamn, datum och nedladdningslänk
-- Responsiv för mobil
-
-### Nya filer
-- `src/pages/Documents.tsx` - Dokumentbibliotekssidan
-- `src/hooks/useDocuments.ts` - Hook för CRUD-operationer
-
-### Ändrade filer
-- `src/App.tsx` - Lägg till route `/documents`
-- `src/components/Layout.tsx` - Lägg till nav-item "Dokument"
+### Behöver även uppdatera typen i gränssnittet
+- `src/pages/Index.tsx` - uppdatera filter state type
 
 ---
 
@@ -176,29 +119,17 @@ CREATE POLICY "Admin kan ta bort dokument"
 │                      ÄNDRINGAR                               │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  src/App.tsx                                                │
-│  ├─ QueryClient config: refetchOnWindowFocus: false         │
-│  └─ Ny route: /documents                                    │
+│  src/lib/invoiceExportPdf.ts                                │
+│  └─ Lägg till sidnummer i sidfot efter innehåll             │
 │                                                             │
-│  src/components/Layout.tsx                                  │
-│  └─ Ny nav-item: Dokument (FileText-ikon)                   │
+│  src/components/ObjectTrucksEditor.tsx                      │
+│  └─ Minska padding/höjd på stegknappar för desktop          │
 │                                                             │
-│  src/components/ArticleRowsEditor.tsx                       │
-│  └─ Ta bort PriceHint (vid redigering)                      │
-│  └─ Behålla PriceListBadge (i visa-läge)                    │
+│  src/components/OrderFilters.tsx                            │
+│  └─ Byt productionStatusLabels → orderAdminStatusLabels     │
 │                                                             │
-│  src/components/PriceListBadge.tsx                          │
-│  └─ Visa matchtyp: artnr vs beskrivning                     │
-│                                                             │
-│  src/pages/Documents.tsx (NY)                               │
-│  └─ Dokumentbibliotek med 3 kategorier                      │
-│                                                             │
-│  src/hooks/useDocuments.ts (NY)                             │
-│  └─ Hook för hämta/ladda upp/ta bort dokument               │
-│                                                             │
-│  Databas                                                    │
-│  ├─ Ny tabell: documents                                    │
-│  └─ Ny bucket: documents (public)                           │
+│  src/pages/Index.tsx                                        │
+│  └─ Uppdatera filter type till OrderAdminStatus             │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -207,14 +138,6 @@ CREATE POLICY "Admin kan ta bort dokument"
 
 ## Testplan
 
-1. **Flikbyte:** Öppna orderlistan, byt till annan flik, kom tillbaka - sidan ska INTE ladda om
-2. **Prisvarning borta:** Redigera en artikelrad - ingen orange "Prislistan: X kr" ska visas vid prisinputen
-3. **PriceListBadge kvar:** I visa-läge ska "Prislista finns" fortfarande visas på rader som har matchningar
-4. **Prismatchning förklaring:** Klicka på "Prislista finns" - se tydlig text om det matchades på artikelnr eller beskrivning
-5. **Dokumentbibliotek:**
-   - Navigera till /documents
-   - Se tre kategorier
-   - (Som admin) Ladda upp en PDF till "Lathundar"
-   - Ladda ner dokumentet
-   - (Som admin) Ta bort dokumentet
-
+1. **Sidnummer PDF**: Exportera fakturaunderlag med flera ordrar → kontrollera att "Sida 1 av X" visas i sidfoten på varje sida
+2. **Stegknappar**: Öppna en order på desktop → stegknapparna ska vara kompaktare; på mobil ska de fortfarande vara touchvänliga
+3. **Statusfilter**: Öppna orderöversikten → statusfiltret ska visa "Alla statusar", "Aktiv", "Avslutad", "Avbruten" (inga dubletter)
