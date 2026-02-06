@@ -48,9 +48,12 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
         const allTruckNumbers = (order.objects || [])
           .flatMap(obj => (obj.trucks || []).map(t => t.truckNumber.toLowerCase()));
         
-        // Get all article part numbers from the order
-        const allPartNumbers = (order.articleRows || [])
-          .map(row => row.partNumber.toLowerCase());
+        // Get all article part numbers and descriptions from the order
+        const allArticleData = (order.articleRows || [])
+          .map(row => ({
+            partNumber: row.partNumber.toLowerCase(),
+            text: row.text.toLowerCase()
+          }));
         
         const matchesSearch = 
           order.orderNumber.toLowerCase().includes(query) ||
@@ -58,7 +61,7 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
           (order.comment && order.comment.toLowerCase().includes(query)) ||
           (order.customerReference && order.customerReference.toLowerCase().includes(query)) ||
           allTruckNumbers.some(tn => tn.includes(query)) ||
-          allPartNumbers.some(pn => pn.includes(query));
+          allArticleData.some(a => a.partNumber.includes(query) || a.text.includes(query));
         if (!matchesSearch) return false;
       }
       
