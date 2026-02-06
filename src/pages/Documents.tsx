@@ -171,7 +171,7 @@ export default function Documents() {
         {/* Document categories */}
         <Card>
           <CardContent className="p-0">
-            <Accordion type="multiple" defaultValue={['lathundar', 'rutiner', 'tolkningar']} className="w-full">
+            <Accordion type="multiple" className="w-full">
               {(Object.keys(categoryConfig) as DocumentCategory[]).map((category) => {
                 const config = categoryConfig[category];
                 const Icon = config.icon;
