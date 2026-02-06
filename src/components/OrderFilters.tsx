@@ -65,7 +65,7 @@ export function OrderFilters({ filters, onFiltersChange, searchQuery, onSearchCh
       <div className="relative w-full md:w-[360px]">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Sök på ordernr, kund, truck, artikelnr..."
+          placeholder="Sök på ordernr, kund, truck, artikelnr, benämning..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           className="pl-9 pr-9 h-9"
