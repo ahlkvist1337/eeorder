@@ -59,15 +59,29 @@ export function usePriceListLookup() {
 
     // 2. Beskrivningsmatchning - alla priser för matchande artiklar
     if (description.trim()) {
-      const descWords = description.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-      
-      if (descWords.length >= 2) {
+      // Identifiera "modell-token" (ord med siffror, t.ex. LWE200, 9005, #150)
+      const isModelToken = (w: string) => /\d/.test(w);
+      const descWords = description.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+      const modelTokens = descWords.filter(isModelToken);
+      const categoryWords = descWords.filter(w => !isModelToken(w) && w.length > 2);
+
+      if (modelTokens.length > 0 || categoryWords.length >= 2) {
         const matchingPartNumbers = new Set<string>();
         
         prices.forEach(p => {
           const priceWords = p.description.toLowerCase().split(/\s+/);
-          const overlap = descWords.filter(w => priceWords.includes(w));
-          if (overlap.length >= 2) {
+          const priceModelTokens = priceWords.filter(isModelToken);
+          const priceCategoryWords = priceWords.filter(w => !isModelToken(w) && w.length > 2);
+
+          // Om sökningen har modell-token: kräv att minst ett matchar exakt
+          if (modelTokens.length > 0) {
+            const modelMatch = modelTokens.some(t => priceModelTokens.includes(t));
+            if (!modelMatch) return; // hoppa över – fel modell
+          }
+
+          // Kräv minst 1 överlapp på kategoriord (Galvtruck, Målad, osv.)
+          const catOverlap = categoryWords.filter(w => priceCategoryWords.includes(w));
+          if (catOverlap.length >= 1) {
             matchingPartNumbers.add(p.part_number);
           }
         });
