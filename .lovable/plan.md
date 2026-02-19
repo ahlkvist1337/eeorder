@@ -1,67 +1,54 @@
 
-# Förenkla matchningslogiken – matcha enbart på modellbeteckning
+# Automatisk statusuppdatering till "Startad" vid momentpåbörjande
 
-## Problem
+## Vad ska hända
 
-Nuvarande logik kräver **två saker** för träff:
-1. Modelltoken (t.ex. `SWE120`) matchar ✓
-2. Minst 1 kategoriord (t.ex. `Galvtruck`) matchar ✓
+När en användare klickar på ett moment (behandlingssteg) och det byter status till "Pågående" (`in_progress`), ska arbetskortet automatiskt sätta sin status till **Startad** – oavsett om kortet är i "Väntande" eller "Ankommen" läge.
 
-Men om prislistans beskrivning är formulerad lite annorlunda och inte delar kategoriord med söktermen, missar vi giltiga träffar. Dessutom är det onödigt komplext – modellbeteckningen räcker.
+Flödet blir:
+- Väntande → klickar moment → **Startad** (hoppar över Ankommen)
+- Ankommen → klickar moment → **Startad**
+- Startad → klickar moment → **Startad** (ingen förändring av kortstatus)
+- Pausad → klickar moment → **Startad** (återupptas)
 
-## Lösning
+## Var i koden ändringen sker
 
-Ta bort kravet på kategoriords-överlapp helt. Om beskrivningen innehåller ett modelltoken (bokstäver + siffror, t.ex. `SWE120`, `LWE200`):
+**Fil:** `src/components/ObjectTrucksEditor.tsx`
 
-- Kräv att minst ett modelltoken matchar i prislistans beskrivning → träff
-- Inget krav på kategoriord alls
+I funktionen `handleStepStatusClick` (rad 102–150) finns idag redan logik som automatiskt sätter status till `completed` när alla steg är klara. Samma mönster används för att lägga till `started`-logik.
 
-Om beskrivningen **inte** innehåller något modelltoken (t.ex. "Galvtruck Målad") → returnera inga förslag (för vagt, för mycket brus).
-
-### Ny algoritm
-
-```text
-1. Extrahera modell-tokens = ord med BÅDE bokstäver och siffror (SWE120, LWE200, EC25)
-2. Om inga modell-tokens finns → returnera [] (beskrivningen är för generell)
-3. För varje rad i prislistan:
-   - Om prislistans beskrivning innehåller minst ett av modell-tokens → TRÄFF
-4. Returnera alla priser för matchande artikelnummer
-```
-
-### Effekt
-
-| Sökt beskrivning | Modell-token | Prislistans rad | Resultat |
-|---|---|---|---|
-| Galvtruck SWE120 Omålad | SWE120 | Galvtruck SWE120 Omålad | ✅ Träff |
-| Galvtruck SWE120 Omålad | SWE120 | Galvtruck LWE200 Omålad | ❌ Ingen träff |
-| Galvtruck SWE120 Omålad | SWE120 | SWE120 Lackerad RAL9005 | ✅ Träff |
-| Galvtruck Omålad | *(inga)* | — | ❌ Inga förslag (för vagt) |
-
-### Kod
-
-**Fil:** `src/hooks/usePriceListLookup.ts` – steg 2 i `findAllMatches`
+### Nuläge (förenklat)
 
 ```typescript
-// Modelltoken = ord med BÅDE bokstäver och siffror
-const isModelToken = (w: string) => /[a-zåäö]/i.test(w) && /\d/.test(w);
-const descWords = description.toLowerCase().split(/\s+/).filter(w => w.length > 1);
-const modelTokens = descWords.filter(isModelToken);
-
-// Om inga modelltoken → hoppa över (för generell beskrivning)
-if (modelTokens.length === 0) return [];
-
-const matchingPartNumbers = new Set<string>();
-
-prices.forEach(p => {
-  const priceWords = p.description.toLowerCase().split(/\s+/);
-  // Kräv att minst ett modelltoken finns i prislistans beskrivning
-  const modelMatch = modelTokens.some(t => priceWords.includes(t));
-  if (modelMatch) {
-    matchingPartNumbers.add(p.part_number);
-  }
-});
+// Idag: hanterar bara auto-completed
+if (nextStatus === 'completed') {
+  // kontrollera om alla steg är klara → sätt truck-status till 'completed'
+}
 ```
+
+### Nytt beteende
+
+```typescript
+// Nytt: om ett steg sätts till in_progress och kortet inte är started/completed
+if (nextStatus === 'in_progress') {
+  const truckStatus = truck.status;
+  if (truckStatus === 'waiting' || truckStatus === 'arrived' || truckStatus === 'paused') {
+    onTruckStatusChange(truckId, 'started');
+  }
+}
+
+// Befintlig: om ett steg sätts till completed och alla steg klara
+if (nextStatus === 'completed') {
+  // ... existerande logik ...
+}
+```
+
+Ändringen görs på **två ställen** i funktionen – dels i grenen som använder `onTruckStepStatusChange` (callback till OrdersContext, raden som sparar till databasen), dels i den lokala uppdateringsgrenen (när callback saknas, t.ex. vid skapande av ny order).
 
 ## Filer som ändras
 
-- `src/hooks/usePriceListLookup.ts` – ersätt steg 2-logiken (rad 60–110)
+- `src/components/ObjectTrucksEditor.tsx` – lägg till auto-`started` logik i `handleStepStatusClick`
+
+## Ingen databasändring krävs
+
+Statusändringen för arbetskortet går redan via `onTruckStatusChange` som i sin tur anropar `OrdersContext` och sparar till databasen via upsert-logiken – samma väg som används när man manuellt ändrar status.
