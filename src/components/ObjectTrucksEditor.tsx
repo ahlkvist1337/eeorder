@@ -109,6 +109,14 @@ export function ObjectTrucksEditor({
     if (onTruckStepStatusChange) {
       onTruckStepStatusChange(truckId, stepId, nextStatus);
       
+      if (truck && nextStatus === 'in_progress') {
+        if (truck.status === 'waiting' || truck.status === 'arrived' || truck.status === 'paused') {
+          if (onTruckStatusChange) {
+            onTruckStatusChange(truckId, 'started');
+          }
+        }
+      }
+      
       if (truck && nextStatus === 'completed') {
         const allStepsCompleted = objectSteps.every(step => {
           if (step.id === stepId) return true;
@@ -129,6 +137,12 @@ export function ObjectTrucksEditor({
             s.stepId === stepId ? { ...s, status: nextStatus } : s
           ),
         };
+        
+        if (nextStatus === 'in_progress') {
+          if (updatedTruck.status === 'waiting' || updatedTruck.status === 'arrived' || updatedTruck.status === 'paused') {
+            updatedTruck.status = 'started';
+          }
+        }
         
         if (nextStatus === 'completed') {
           const allStepsCompleted = objectSteps.every(step => {
