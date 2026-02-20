@@ -1,54 +1,42 @@
 
-# Automatisk statusuppdatering till "Startad" vid momentpåbörjande
+## Ändra standardfilter till "Aktiv"
 
-## Vad ska hända
+### Vad ska ändras
 
-När en användare klickar på ett moment (behandlingssteg) och det byter status till "Pågående" (`in_progress`), ska arbetskortet automatiskt sätta sin status till **Startad** – oavsett om kortet är i "Väntande" eller "Ankommen" läge.
+I `src/pages/Index.tsx` initieras filtret idag med `productionStatus: 'all'`, vilket visar alla ordrar oavsett status. Användaren vill att standardvärdet istället ska vara `'created'` (som i UI visas som "Aktiv" och inkluderar alla aktiva produktionsstatusar: skapad, ankommen, startad, pausad).
 
-Flödet blir:
-- Väntande → klickar moment → **Startad** (hoppar över Ankommen)
-- Ankommen → klickar moment → **Startad**
-- Startad → klickar moment → **Startad** (ingen förändring av kortstatus)
-- Pausad → klickar moment → **Startad** (återupptas)
-
-## Var i koden ändringen sker
-
-**Fil:** `src/components/ObjectTrucksEditor.tsx`
-
-I funktionen `handleStepStatusClick` (rad 102–150) finns idag redan logik som automatiskt sätter status till `completed` när alla steg är klara. Samma mönster används för att lägga till `started`-logik.
-
-### Nuläge (förenklat)
+### Nuläge
 
 ```typescript
-// Idag: hanterar bara auto-completed
-if (nextStatus === 'completed') {
-  // kontrollera om alla steg är klara → sätt truck-status till 'completed'
-}
+const [filters, setFilters] = useState({
+  productionStatus: 'all',   // ← visas alla statusar
+  billingStatus: 'all',
+  hasDeviation: null,
+});
 ```
 
-### Nytt beteende
+### Efter ändringen
 
 ```typescript
-// Nytt: om ett steg sätts till in_progress och kortet inte är started/completed
-if (nextStatus === 'in_progress') {
-  const truckStatus = truck.status;
-  if (truckStatus === 'waiting' || truckStatus === 'arrived' || truckStatus === 'paused') {
-    onTruckStatusChange(truckId, 'started');
-  }
-}
-
-// Befintlig: om ett steg sätts till completed och alla steg klara
-if (nextStatus === 'completed') {
-  // ... existerande logik ...
-}
+const [filters, setFilters] = useState({
+  productionStatus: 'created', // ← visar bara aktiva ordrar som standard
+  billingStatus: 'all',
+  hasDeviation: null,
+});
 ```
 
-Ändringen görs på **två ställen** i funktionen – dels i grenen som använder `onTruckStepStatusChange` (callback till OrdersContext, raden som sparar till databasen), dels i den lokala uppdateringsgrenen (när callback saknas, t.ex. vid skapande av ny order).
+### Effekt
 
-## Filer som ändras
+- Tabellen "Aktuella ordrar" visar direkt vid inladdning enbart aktiva ordrar (Aktiv-status)
+- Avslutade och avbrutna ordrar döljs tills användaren manuellt väljer annan status i filtret
+- "Rensa filter"-knappen återställer tillbaka till `'created'` (Aktiv) – inte `'all'`
+- Arkiv-fliken påverkas inte alls
 
-- `src/components/ObjectTrucksEditor.tsx` – lägg till auto-`started` logik i `handleStepStatusClick`
+### Fil som ändras
 
-## Ingen databasändring krävs
+- `src/pages/Index.tsx` – rad 28, ändra `productionStatus: 'all'` → `productionStatus: 'created'`
+- `src/pages/Index.tsx` – rad 60 i `clearFilters`-funktionen i `OrderFilters`, återställ till `'created'` istället för `'all'` vid rensning
 
-Statusändringen för arbetskortet går redan via `onTruckStatusChange` som i sin tur anropar `OrdersContext` och sparar till databasen via upsert-logiken – samma väg som används när man manuellt ändrar status.
+### Notering om "Rensa filter"
+
+`clearFilters`-funktionen sitter i `src/components/OrderFilters.tsx`. Den återställer idag till `'all'`. Fråga är om "rensa filter" ska återgå till `'all'` eller `'created'`. Rimligt är att den återgår till `'created'` (aktiva) eftersom det är standardvyn – annars är det förvirrande att "rensa" leder till en annan vy än startläget. Denna ändring görs i `OrderFilters.tsx`.
