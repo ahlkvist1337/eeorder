@@ -32,12 +32,6 @@ export function Layout({ children }: LayoutProps) {
   const { profile, isAdmin, isProduction } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const handleSignOut = async () => {
-    const { signOut } = useAuth();
-    await signOut();
-    navigate('/login');
-  };
-
   // Filter nav items based on role
   const visibleNavItems = navItems.filter(item => {
     if (item.requiresProduction && !isProduction) return false;

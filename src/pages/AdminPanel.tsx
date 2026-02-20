@@ -395,7 +395,7 @@ export default function AdminPanel() {
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Minst 6 tecken"
+                    placeholder="Minst 8 tecken"
                   />
                 </div>
 
