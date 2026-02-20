@@ -91,9 +91,9 @@ export default function Documents() {
     setDocumentToDelete(null);
   };
 
-  const handleDownload = (doc: Document) => {
-    const url = getDownloadUrl(doc.file_path);
-    window.open(url, '_blank');
+  const handleDownload = async (doc: Document) => {
+    const url = await getDownloadUrl(doc.file_path);
+    if (url) window.open(url, '_blank');
   };
 
   if (isLoading) {
