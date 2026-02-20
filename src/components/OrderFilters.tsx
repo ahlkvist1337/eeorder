@@ -46,7 +46,7 @@ export function OrderFilters({ filters, onFiltersChange, searchQuery, onSearchCh
 
   const clearFilters = () => {
     onFiltersChange({
-      productionStatus: 'all',
+      productionStatus: 'created',
       billingStatus: 'all',
       hasDeviation: null,
     });

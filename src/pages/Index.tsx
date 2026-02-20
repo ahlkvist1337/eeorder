@@ -29,7 +29,7 @@ const Index = () => {
     billingStatus: BillingStatus | 'all';
     hasDeviation: boolean | null;
   }>({
-    productionStatus: 'all',
+    productionStatus: 'created',
     billingStatus: 'all',
     hasDeviation: null,
   });
