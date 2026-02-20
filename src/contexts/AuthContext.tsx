@@ -55,7 +55,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (profileData) {
-        setProfile(profileData as Profile);
+        const typedProfile = profileData as Profile;
+        
+        // If user is deactivated, sign them out immediately
+        if (typedProfile.is_active === false) {
+          await supabase.auth.signOut();
+          setUser(null);
+          setSession(null);
+          setProfile(null);
+          setRoles([]);
+          return;
+        }
+        
+        setProfile(typedProfile);
       }
 
       // Fetch roles

@@ -10,7 +10,7 @@ import { useProductionStats } from '@/hooks/useProductionStats';
 export default function Statistics() {
   useDocumentTitle('Statistik');
   const { orders } = useOrders();
-  const productionStats = useProductionStats();
+  const productionStats = useProductionStats(orders);
 
   const stats = useMemo(() => {
     const activeStatuses = ['created', 'planned', 'started', 'paused', 'arrived'];

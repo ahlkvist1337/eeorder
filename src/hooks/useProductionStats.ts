@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { startOfDay, differenceInDays } from 'date-fns';
+import type { Order } from '@/types/order';
 
 interface OldestActiveInfo {
   days: number;
@@ -17,7 +18,7 @@ interface ProductionStats {
   isLoading: boolean;
 }
 
-export function useProductionStats(): ProductionStats {
+export function useProductionStats(orders: Order[]): ProductionStats {
   const [trucks, setTrucks] = useState<Array<{ id: string; status: string; object_id: string; truck_number: string | null }>>([]);
   const [lifecycleEvents, setLifecycleEvents] = useState<Array<{ 
     truck_id: string; 
@@ -26,23 +27,20 @@ export function useProductionStats(): ProductionStats {
     truck_number: string | null;
     order_id: string;
   }>>([]);
-  const [orders, setOrders] = useState<Array<{ id: string; planned_end: string | null }>>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       
-      // Fetch all data in parallel
-      const [trucksResult, eventsResult, ordersResult] = await Promise.all([
+      // Fetch trucks and lifecycle events in parallel (orders come from context)
+      const [trucksResult, eventsResult] = await Promise.all([
         supabase.from('object_trucks').select('id, status, object_id, truck_number'),
         supabase.from('truck_lifecycle_events').select('truck_id, event_type, timestamp, truck_number, order_id'),
-        supabase.from('orders').select('id, planned_end')
       ]);
 
       if (trucksResult.data) setTrucks(trucksResult.data);
       if (eventsResult.data) setLifecycleEvents(eventsResult.data);
-      if (ordersResult.data) setOrders(ordersResult.data);
       
       setIsLoading(false);
     };
@@ -91,7 +89,7 @@ export function useProductionStats(): ProductionStats {
     }
 
     // Count overdue trucks (active trucks past order planned_end)
-    const orderEndDates = new Map(orders.map(o => [o.id, o.planned_end]));
+    const orderEndDates = new Map(orders.map(o => [o.id, o.plannedEnd ?? null]));
     const truckOrderMap = new Map<string, string>();
     
     // Build truck -> order mapping from lifecycle events

@@ -859,6 +859,11 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     // Skip if status is the same (no actual change)
     if (order.productionStatus === newStatus) return;
 
+    // Optimistic update
+    setOrders(prev => prev.map(o => 
+      o.id === id ? { ...o, productionStatus: newStatus } : o
+    ));
+
     // Insert status history
     await supabase.from('status_history').insert({
       order_id: id,
@@ -866,25 +871,30 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       to_status: newStatus,
     });
 
-    // Update order status
+    // Update order status in background
     await supabase
       .from('orders')
       .update({ production_status: newStatus })
       .eq('id', id);
 
-    await fetchOrders();
+    fetchOrders(); // Background refresh (no await)
   }, [orders, fetchOrders]);
 
   const updateBillingStatus = useCallback(async (id: string, newStatus: BillingStatus) => {
     markLocalUpdate(); // Prevent realtime refetch for our own changes
+
+    // Optimistic update
+    setOrders(prev => prev.map(o =>
+      o.id === id ? { ...o, billingStatus: newStatus } : o
+    ));
     
     await supabase
       .from('orders')
       .update({ billing_status: newStatus })
       .eq('id', id);
 
-    await fetchOrders();
-  }, [fetchOrders]);
+    fetchOrders(); // Background refresh (no await)
+  }, [orders, fetchOrders]);
 
   const updateOrderStep = useCallback(async (orderId: string, stepId: string, updates: Partial<OrderStep>) => {
     markLocalUpdate(); // Prevent realtime refetch for our own changes

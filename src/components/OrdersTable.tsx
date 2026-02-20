@@ -85,10 +85,17 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
       let bValue: string | number = '';
 
       switch (sortField) {
-        case 'orderNumber':
+        case 'orderNumber': {
+          // Sort numerically if both values are numeric, otherwise alphabetically
+          const aNum = Number(a.orderNumber);
+          const bNum = Number(b.orderNumber);
+          if (!isNaN(aNum) && !isNaN(bNum)) {
+            return sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
+          }
           aValue = a.orderNumber;
           bValue = b.orderNumber;
           break;
+        }
         case 'customer':
           aValue = a.customer.toLowerCase();
           bValue = b.customer.toLowerCase();

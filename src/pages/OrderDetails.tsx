@@ -18,6 +18,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { ProductionStatusBadge, BillingStatusBadge } from '@/components/StatusBadge';
 import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
 import { OrderObjectsEditor } from '@/components/OrderObjectsEditor';
@@ -166,13 +177,11 @@ export default function OrderDetails() {
   };
 
   const handleDelete = async () => {
-    if (confirm('Är du säker på att du vill ta bort denna order?')) {
-      try {
-        await deleteOrder(order.id);
-        navigate('/');
-      } catch (error) {
-        console.error('Error deleting order:', error);
-      }
+    try {
+      await deleteOrder(order.id);
+      navigate('/');
+    } catch (error) {
+      console.error('Error deleting order:', error);
     }
   };
 
@@ -470,9 +479,8 @@ export default function OrderDetails() {
                         const stepEvents = (order.truckStatusHistory || [])
                           .filter(h => h.truckId === truck.id)
                           .map(h => ({
-                            id: h.id,
+                            id: `step-${h.id}`,
                             timestamp: h.timestamp,
-                            type: h.toStatus === 'in_progress' ? 'step_started' : h.toStatus === 'completed' ? 'step_completed' : h.toStatus,
                             label: h.toStatus === 'in_progress' 
                               ? `${h.stepName}: Pågående`
                               : h.toStatus === 'completed'
@@ -480,16 +488,14 @@ export default function OrderDetails() {
                                 : h.stepName,
                           }));
                         
-                        // Collect events from lifecycle events (arrived, started, completed, etc.)
+                        // Collect lifecycle events – exclude step_started/step_completed
+                        // since those are already covered by truck_status_history above
                         const lifecycleEvents = (order.truckLifecycleEvents || [])
-                          .filter(e => e.truckId === truck.id)
+                          .filter(e => e.truckId === truck.id && e.eventType !== 'step_started' && e.eventType !== 'step_completed')
                           .map(e => ({
-                            id: e.id,
+                            id: `lifecycle-${e.id}`,
                             timestamp: e.timestamp,
-                            type: e.eventType,
-                            label: e.stepName 
-                              ? `${e.stepName}: ${e.eventType === 'step_started' ? 'Pågående' : 'Klar'}`
-                              : e.eventType === 'arrived' ? 'Arbetskort ankommet'
+                            label: e.eventType === 'arrived' ? 'Arbetskort ankommet'
                               : e.eventType === 'started' ? 'Arbete påbörjat'
                               : e.eventType === 'paused' ? 'Pausat'
                               : e.eventType === 'completed' ? 'Arbetskort klart'
@@ -497,7 +503,7 @@ export default function OrderDetails() {
                               : e.eventType,
                           }));
                         
-                        // Combine and sort by timestamp
+                        // Combine and sort by timestamp, deduplicate by label+timestamp proximity
                         const allEvents = [...stepEvents, ...lifecycleEvents].sort((a, b) => 
                           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
                         );
@@ -623,13 +629,30 @@ export default function OrderDetails() {
                   <CardTitle className="text-destructive text-base sm:text-lg">Farozon</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0 sm:pt-0">
-                  <Button 
-                    variant="destructive" 
-                    className="w-full text-sm"
-                    onClick={handleDelete}
-                  >
-                    Ta bort order
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" className="w-full text-sm">
+                        Ta bort order
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Ta bort order {order.orderNumber}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Denna åtgärd kan inte ångras. Ordern och all tillhörande data (objekt, arbetskort, artikelrader, bilagor) kommer att raderas permanent.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleDelete}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Ta bort
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </CardContent>
               </Card>
             )}
