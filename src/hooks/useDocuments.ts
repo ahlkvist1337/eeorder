@@ -137,11 +137,15 @@ export function useDocuments() {
     }
   };
 
-  const getDownloadUrl = (filePath: string): string => {
-    const { data } = supabase.storage
+  const getDownloadUrl = async (filePath: string): Promise<string> => {
+    const { data, error } = await supabase.storage
       .from('documents')
-      .getPublicUrl(filePath);
-    return data.publicUrl;
+      .createSignedUrl(filePath, 3600); // 1 hour expiry
+    if (error || !data?.signedUrl) {
+      console.error('Error creating signed URL:', error);
+      return '';
+    }
+    return data.signedUrl;
   };
 
   const getByCategory = (category: DocumentCategory): Document[] => {
