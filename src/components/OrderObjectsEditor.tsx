@@ -42,6 +42,7 @@ interface OrderObjectsEditorProps {
   onStepsChange: (steps: OrderStep[]) => void;
   onTruckStatusChange?: (truckId: string, status: TruckStatus) => void;
   onTruckStepStatusChange?: (truckId: string, stepId: string, status: StepStatus) => void;
+  onTruckBillingStatusChange?: (truckId: string, status: import('@/types/order').TruckBillingStatus) => void;
   orderInfo?: {
     id: string;
     orderNumber: string;
@@ -57,6 +58,7 @@ export function OrderObjectsEditor({
   onStepsChange,
   onTruckStatusChange,
   onTruckStepStatusChange,
+  onTruckBillingStatusChange,
   orderInfo,
 }: OrderObjectsEditorProps) {
   const { isProduction } = useAuth();
@@ -415,6 +417,7 @@ export function OrderObjectsEditor({
                       }}
                       onTruckStatusChange={onTruckStatusChange}
                       onTruckStepStatusChange={onTruckStepStatusChange}
+                      onTruckBillingStatusChange={onTruckBillingStatusChange}
                       orderInfo={orderInfo}
                     />
                     

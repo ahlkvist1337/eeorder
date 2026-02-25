@@ -22,6 +22,8 @@ const truckStatusColors: Record<TruckStatus, { bg: string; text: string; border:
   started: { bg: 'bg-[hsl(var(--status-started)/0.15)]', text: 'text-foreground', border: 'border-[hsl(var(--status-started))]' },
   paused: { bg: 'bg-[hsl(var(--status-paused)/0.15)]', text: 'text-[hsl(var(--status-paused))]', border: 'border-[hsl(var(--status-paused))]' },
   completed: { bg: 'bg-[hsl(var(--status-completed)/0.15)]', text: 'text-[hsl(var(--status-completed))]', border: 'border-[hsl(var(--status-completed))]' },
+  packed: { bg: 'bg-amber-500/15', text: 'text-amber-600', border: 'border-amber-500' },
+  delivered: { bg: 'bg-emerald-600/15', text: 'text-emerald-600', border: 'border-emerald-600' },
 };
 
 const stepStatusColors: Record<StepStatus, { bg: string; ring: string; label: string }> = {

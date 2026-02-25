@@ -7,10 +7,11 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   
-  // Title
+  // Title - DELFAKTURA or SLUTFAKTURA
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
-  doc.text('FAKTURAUNDERLAG', pageWidth / 2, 25, { align: 'center' });
+  const title = data.isPartial ? 'DELFAKTURA' : 'FAKTURAUNDERLAG';
+  doc.text(title, pageWidth / 2, 25, { align: 'center' });
   
   // Export metadata
   doc.setFontSize(10);
@@ -20,13 +21,16 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
   doc.text(`Antal ordrar: ${data.orders.length}`, 14, 52);
   doc.text(`Totalt belopp: ${formatCurrency(data.grandTotal)}`, 14, 58);
   
-  let yPosition = 70;
+  if (data.previouslyBilledGrandTotal > 0) {
+    doc.text(`Tidigare fakturerat: ${formatCurrency(data.previouslyBilledGrandTotal)}`, 14, 64);
+  }
+  
+  let yPosition = data.previouslyBilledGrandTotal > 0 ? 76 : 70;
   
   // Process each order
   for (let i = 0; i < data.orders.length; i++) {
     const order = data.orders[i];
     
-    // Check if we need a new page
     if (yPosition > 250) {
       doc.addPage();
       yPosition = 20;
@@ -59,6 +63,12 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
       yPosition += 5;
     }
     
+    // Show which trucks are included
+    if (order.truckNumbers.length > 0) {
+      doc.text(`Arbetskort: ${order.truckNumbers.map(n => `#${n}`).join(', ')}`, 14, yPosition);
+      yPosition += 5;
+    }
+    
     if (order.instructions && order.instructions.length > 0) {
       doc.text('Instruktioner:', 14, yPosition);
       yPosition += 5;
@@ -75,7 +85,7 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
       const tableData = order.articleRows.map(row => [
         row.partNumber,
         row.text,
-        row.quantity.toString(),
+        `${row.quantity}${row.previouslyBilled > 0 ? ` (av ${row.totalQuantity})` : ''}`,
         formatCurrency(row.price),
         formatCurrency(row.total),
       ]);
@@ -96,14 +106,13 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
         columnStyles: {
           0: { cellWidth: 25 },
           1: { cellWidth: 'auto' },
-          2: { cellWidth: 20, halign: 'right' },
+          2: { cellWidth: 25, halign: 'right' },
           3: { cellWidth: 25, halign: 'right' },
           4: { cellWidth: 28, halign: 'right' },
         },
         margin: { left: 14, right: 14 },
       });
       
-      // Get table end position
       yPosition = (doc as any).lastAutoTable.finalY + 3;
     } else {
       doc.setFontSize(9);
@@ -113,20 +122,30 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
       yPosition += 5;
     }
     
+    // Previously billed info
+    if (order.previouslyBilledTotal > 0) {
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(100);
+      doc.text(`Tidigare fakturerat: ${formatCurrency(order.previouslyBilledTotal)}`, pageWidth - 14, yPosition, { align: 'right' });
+      doc.setTextColor(0);
+      doc.setFont('helvetica', 'normal');
+      yPosition += 5;
+    }
+    
     // Order total
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Ordersumma: ${formatCurrency(order.orderTotal)}`, pageWidth - 14, yPosition, { align: 'right' });
+    doc.text(`Ordersumma denna faktura: ${formatCurrency(order.orderTotal)}`, pageWidth - 14, yPosition, { align: 'right' });
     yPosition += 12;
   }
   
-  // Grand total at the end
+  // Grand total
   if (yPosition > 260) {
     doc.addPage();
     yPosition = 30;
   }
   
-  // Final separator
   doc.setDrawColor(0);
   doc.setLineWidth(1);
   doc.line(14, yPosition, pageWidth - 14, yPosition);
@@ -136,7 +155,7 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
   doc.setFont('helvetica', 'bold');
   doc.text(`TOTALT: ${formatCurrency(data.grandTotal)}`, pageWidth / 2, yPosition, { align: 'center' });
   
-  // Add page numbers to all pages
+  // Page numbers
   const pageCount = doc.getNumberOfPages();
   const pageHeight = doc.internal.pageSize.getHeight();
   for (let i = 1; i <= pageCount; i++) {
@@ -147,6 +166,6 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
     doc.text(`Sida ${i} av ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
   }
   
-  // Save the PDF
-  doc.save(`fakturaunderlag-${data.exportId}.pdf`);
+  const prefix = data.isPartial ? 'delfaktura' : 'fakturaunderlag';
+  doc.save(`${prefix}-${data.exportId}.pdf`);
 }
