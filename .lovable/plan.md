@@ -1,95 +1,142 @@
 
-# Projektkoll – Sammanfattning
+# Delleverans med avräkningsstöd i fakturering
 
-## Vad som fungerar bra
+## Problemet
 
-Applikationen är välstrukturerad och har en solid grund:
-- Databaslagret (OrdersContext) är komplex men välorganiserat med optimistisk uppdatering och debounce-logik för realtid
-- RLS-policyer är genomtänkta och konsekventa
-- Responsiv design för både desktop och mobil finns på de flesta sidor
-- Produktionsskärmen med DnD-sortering fungerar korrekt
-- Rollbaserad åtkomst är konsekvent implementerad
+Nuvarande fakturering exporterar ALLA artikelrader för en order. Med delleveranser behövs:
+1. Exportera fakturaunderlag enbart för de arbetskort som levereras nu
+2. Spara vad som redan fakturerats
+3. Vid nästa fakturering: automatiskt räkna av det som redan fakturerats, så inget dubbelfaktureras
 
----
+## Lösning: Proportionell avräkning via arbetskort
 
-## Problem & förbättringsförslag
+Artikelrader kopplas till objekt via `object_id` (redan implementerat i databasen). Varje objekt har N arbetskort. Fakturabeloppet beräknas proportionellt:
 
-### 1. Döda kod / oanvändbar komponent
+```text
+Exempel:
+  Artikelrad: "Gaffelvagn SWE120L" qty=5, pris=3200, totalt=16 000 kr
+  Objekt har 5 arbetskort
 
-**`src/components/NavLink.tsx`** är en wrapper för `react-router-dom`s `NavLink`, men används **ingenstans** i projektet. `Layout.tsx` använder istället direkt `<Link>`. Filen kan tas bort.
+  Delleverans 1: 3 arbetskort levererade och klara for fakturering
+    -> Fakturerar: 3/5 x 16 000 = 9 600 kr
+    -> Markeras som "billed"
 
-### 2. Bugg: `useAuth()` anropas felaktigt inuti en eventhandler i Layout
-
-I `src/components/Layout.tsx` rad 36–38 finns detta:
-```typescript
-const handleSignOut = async () => {
-  const { signOut } = useAuth();  // ← FEL! Hooks kan inte anropas inuti funktioner
-  await signOut();
+  Delleverans 2: 2 kvarvarande arbetskort levererade
+    -> Fakturerar: 2/5 x 16 000 = 6 400 kr
+    -> Totalt fakturerat: 16 000 kr (stämmer!)
 ```
-Detta bryter mot React hooks-reglerna. Det kompilerar och verkar funka eftersom `signOut` definieras korrekt på rad 95 (`const { signOut } = useAuth();`), men den defekta `handleSignOut`-funktionen existerar och kan potentiellt orsaka problem. Den oanvända `handleSignOut`-funktionen bör tas bort – `handleSignOutClick` (rad 97–100) är den korrekta versionen.
 
-### 3. Inkonsekvent lösenordskravsbeskrivning i AdminPanel
+## Databasändringar
 
-I `src/pages/AdminPanel.tsx` visas `"Minst 6 tecken"` som placeholder för lösenordsfältet (rad 398), men `create-user` edge function kräver **minst 8 tecken** efter den senaste säkerhetsförbättringen. Detta är ett UI-fel som kan förvirra admins.
+### 1. Utöka truck_status enum
+```sql
+ALTER TYPE truck_status ADD VALUE 'packed';
+ALTER TYPE truck_status ADD VALUE 'delivered';
+```
 
-**Fix:** Ändra placeholder och ev. valideringsfeedback till "Minst 8 tecken".
+### 2. Billing-status per arbetskort
+```sql
+CREATE TYPE truck_billing_status AS ENUM ('not_billable', 'ready_for_billing', 'billed');
+ALTER TABLE object_trucks ADD COLUMN billing_status truck_billing_status NOT NULL DEFAULT 'not_billable';
+```
 
-### 4. `is_active`-flaggan blockerar inte inloggning
+### 3. Spåra faktureringshistorik (för avräkning)
+```sql
+CREATE TABLE invoice_exports (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  export_id text NOT NULL,          -- EXP-20260225-ABC
+  exported_at timestamptz NOT NULL DEFAULT now(),
+  exported_by uuid NOT NULL,
+  total_amount numeric NOT NULL DEFAULT 0
+);
 
-I `AdminPanel` kan admin inaktivera en användare (`is_active = false` i `profiles`-tabellen), men autentiseringen i `AuthContext` kontrollerar **aldrig** denna flagga. En inaktiverad användare kan alltså fortfarande logga in och använda systemet fullt ut.
+CREATE TABLE invoice_export_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_export_id uuid NOT NULL REFERENCES invoice_exports(id),
+  order_id uuid NOT NULL,
+  truck_id uuid NOT NULL,           -- vilket arbetskort som fakturerades
+  article_row_id uuid,              -- kopplad artikelrad
+  billed_quantity numeric NOT NULL,  -- fakturerad andel av qty
+  billed_amount numeric NOT NULL,    -- fakturerat belopp
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+```
 
-För att åtgärda detta korrekt behövs en kontroll i `AuthContext`s `onAuthStateChange` – om `profile.is_active === false`, kör `signOut()` direkt.
+Detta ger full spårbarhet: man kan alltid se exakt vilka arbetskort som ingick i vilken faktura.
 
-### 5. `useProductionStats` gör dubbla databas-fetcher
+## Fakturaexport -- nytt flöde
 
-`useProductionStats.ts` hämtar `orders` separat (`supabase.from('orders').select('id, planned_end')`), trots att `OrdersContext` redan har alla ordrar i minnet. Statistiksidan importerar dessutom `useOrders()` direkt **och** `useProductionStats()` – data hämtas alltså från databasen två gånger för ordrarna.
+### Steg 1: Välj vad som ska faktureras
 
-**Fix:** Skicka in de redan laddade ordrarna som parameter till `useProductionStats`, eller refaktorera den så att den tar emot `orders: Order[]` som input istället för att hämta på nytt.
+I stället för att välja hela ordrar, kan användaren nu:
+- **Alternativ A**: Välja specifika arbetskort (de som har `billing_status = ready_for_billing`)
+- **Alternativ B**: Välja en order och systemet inkluderar automatiskt alla `ready_for_billing`-kort
 
-### 6. `handleDelete` i OrderDetails använder `confirm()` (native browser dialog)
+### Steg 2: Beräkna belopp med avräkning
 
-`confirm('Är du säker...')` på rad 169 ger en ful och blockerande browser-dialog. Applikationen har redan `AlertDialog` från Radix UI. Konsekvensvärdet för att ta bort en hel order är högt – detta bör ersättas med ett riktig `AlertDialog`.
+För varje artikelrad kopplad till ett objekt:
+```text
+redan_fakturerat = SUM(billed_quantity) FROM invoice_export_items WHERE article_row_id = X
+kvarvarande_qty = artikelrad.quantity - redan_fakturerat
+kort_att_fakturera = antal ready_for_billing kort i detta objekt
+totalt_kort = totalt antal kort i objektet
+fakturera_qty = MIN(kort_att_fakturera / totalt_kort * artikelrad.quantity, kvarvarande_qty)
+fakturera_belopp = fakturera_qty * artikelrad.price
+```
 
-### 7. Historik-sektionen i OrderDetails visar dubbletter
+### Steg 3: Exportera och markera
 
-Historikkortet "Historik per arbetskort" på OrderDetails (rad 444–536) kombinerar `truckStatusHistory` (steg-statusändringar) och `truckLifecycleEvents`. Problemet är att step-events kan dyka upp **i båda listorna** – en `step_started/step_completed`-händelse loggas både i `truck_status_history` OCH i `truck_lifecycle_events` (om lifecycle events också skrivs för steg). Beroende på implementationen kan samma händelse visas dubbelt i UI:t. Bör ses över och dedupliceras.
+- Exportera PDF/Excel med tydlig markering "DELFAKTURA" eller "SLUTFAKTURA"
+- Automatiskt markera de fakturerade arbetskorten som `billed`
+- Spara i `invoice_exports` + `invoice_export_items` för historik
 
-### 8. `fetchOrders` vid varje liten statusuppdatering
+### Steg 4: PDF-utseende för delfaktura
 
-I `updateProductionStatus` och `updateBillingStatus` (rad 875 resp. 886 i OrdersContext) anropas `fetchOrders()` – en fullständig re-fetch av **alla** ordrar från databasen. Jämfört med `updateTruckStatus` och `updateTruckStepStatus` som gör optimistisk lokal uppdatering. Dessa bör uppgraderas till optimistisk uppdatering + `fetchOrders` i bakgrunden för bättre UX.
+PDF:n visar tydligt:
+- "DELFAKTURA" eller "SLUTFAKTURA" i rubriken
+- Per order: vilka arbetskort som ingår
+- Per artikelrad: fakturerad mängd (inte total mängd)
+- Rad "Tidigare fakturerat: X kr" om det finns
+- Nettosumma för denna faktura
 
-### 9. Sortering av ordrar i OrdersTable: ordernummer sorteras som text
+## Arbetskortens pack/leveransflöde
 
-I `OrdersTable` sorteras ordernummer som strängar (rad 88–89). Om ordernummer är numeriska (t.ex. "1000", "999", "1001") sorteras de fel: "1000" < "999" när man sorterar alfabetiskt. Om ordernumren är numeriska bör sorteringen konvertera till tal.
+Nya statusar i UI efter att alla steg är klara:
 
-### 10. Ingen "is_active"-check i nav-menyns länksynlighet
+```text
+[completed] -> Knapp: "Markera packat" -> [packed]
+[packed]    -> Knapp: "Markera levererat" -> [delivered]
+[delivered] -> Dropdown: Fakturastatus [Klar for fakturering / Fakturerad]
+```
 
-En inaktiverad användare (`is_active: false`) kan se alla menylänkar och sidor lika som en aktiv användare (se punkt 4). Hänger ihop med punkt 4.
+Stora, tydliga knappar med ikoner. Packed = gul/orange badge, Delivered = grön badge.
 
----
+## Översiktstabell
 
-## Tekniska åtgärder (prioritetsordning)
+Ny kolumn "Leverans" i ordertabellen:
+```text
+| Order | Kund    | Leverans       | Fakturering       |
+|-------|---------|----------------|-------------------|
+| 1001  | ACME AB | 3/5 levererat  | Delvis fakturerad |
+```
 
-| Prioritet | Åtgärd | Fil |
-|-----------|--------|-----|
-| Hög | Fixa `is_active` blockerar inte inloggning | `AuthContext.tsx` |
-| Hög | Fixa lösenordsplaceholder (6→8 tecken) | `AdminPanel.tsx` |
-| Hög | Ta bort buggy `handleSignOut` i Layout | `Layout.tsx` |
-| Medium | Ersätt `confirm()` med AlertDialog för borttagning av order | `OrderDetails.tsx` |
-| Medium | Ta bort oanvänd `NavLink.tsx` | `NavLink.tsx` |
-| Låg | Refaktorera `useProductionStats` att inte göra egen orders-fetch | `useProductionStats.ts` |
-| Låg | Kontrollera/deduplicera historik-sektionen | `OrderDetails.tsx` |
-| Låg | Numerisk sortering av ordernummer | `OrdersTable.tsx` |
+Orderns fakturastatus beräknas dynamiskt:
+- Alla kort `billed` -> "Fakturerad"
+- Några `billed` eller `ready_for_billing` -> "Delvis fakturerad"
+- Inga -> "Ej klar"
 
----
+## Filändringar
 
-## Inga allvarliga fel hittades i
-
-- RLS-policyer (korrekt och täckande)
-- Realtidslogiken (korrekt debounce)
-- Exportfunktionerna (PDF, Excel, CSV)
-- Produktionsskärmen och DnD-logiken
-- XML-importen
-- Formulärvalidering på skapandeformulär
-- Edge functions (hanterar auth + validering korrekt)
-
+| Fil | Ändring |
+|-----|---------|
+| `src/types/order.ts` | Nya TruckStatus-värden, TruckBillingStatus, beräkningshjälpare |
+| `src/contexts/OrdersContext.tsx` | Hantera packed/delivered/billing_status, fetch invoice_exports |
+| `src/components/OrderObjectsEditor.tsx` | Pack/leverans-knappar per arbetskort |
+| `src/components/ProductionTruckCard.tsx` | Pack/leverans i produktionsvyn |
+| `src/components/StatusBadge.tsx` | Badges för packed, delivered, billing |
+| `src/components/OrdersTable.tsx` | Leverans-kolumn, beräknad fakturastatus |
+| `src/components/InvoiceExportDialog.tsx` | Nytt flöde: välj kort, visa avräkning, del/slutfaktura |
+| `src/lib/invoiceExport.ts` | Proportionell beräkning med avräkning |
+| `src/lib/invoiceExportPdf.ts` | Del/slutfaktura-layout |
+| `src/lib/invoiceExportExcel.ts` | Inkludera fakturerad mängd, inte total |
+| Migration | Nya enum-värden, billing_status kolumn, invoice_exports tabeller |
