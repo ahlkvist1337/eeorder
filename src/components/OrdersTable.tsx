@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
 import { ArrowUpDown, AlertTriangle, MessageSquare, Truck } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import {
   Table,
   TableBody,
@@ -16,7 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { ProductionStatusBadge, BillingStatusBadge } from '@/components/StatusBadge';
 import type { Order, ProductionStatus, BillingStatus, TruckStatus, OrderAdminStatus } from '@/types/order';
-import { truckStatusLabels, toAdminStatus } from '@/types/order';
+import { truckStatusLabels, toAdminStatus, getDeliverySummary, calculateOrderBillingStatus } from '@/types/order';
 
 interface OrdersTableProps {
   orders: Order[];
@@ -275,6 +276,7 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
               </TableHead>
               <TableHead className="w-[160px]">Nästa steg</TableHead>
               <TableHead className="w-[140px]">Arbetskort</TableHead>
+              <TableHead className="w-[120px]">Leverans</TableHead>
               <TableHead className="w-[200px]">Kommentar</TableHead>
               <TableHead className="w-[150px]">
                 <SortButton field="billingStatus">Fakturering</SortButton>
@@ -336,6 +338,21 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
                       );
                     })()}
                   </TableCell>
+                  {/* Delivery column */}
+                  <TableCell className="text-sm">
+                    {(() => {
+                      const delivery = getDeliverySummary(order);
+                      if (delivery.total === 0) return <span className="text-muted-foreground">-</span>;
+                      return (
+                        <span className={cn(
+                          'text-xs font-medium',
+                          delivery.delivered === delivery.total ? 'text-emerald-600' : 'text-muted-foreground'
+                        )}>
+                          {delivery.delivered}/{delivery.total} levererat
+                        </span>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground max-w-[200px]" title={order.comment || ''}>
                     {order.comment ? (
                       <span className="flex items-center gap-1">
@@ -345,7 +362,10 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
                     ) : '-'}
                   </TableCell>
                   <TableCell>
-                    <BillingStatusBadge status={order.billingStatus} />
+                    {(() => {
+                      const computedBilling = calculateOrderBillingStatus(order);
+                      return <BillingStatusBadge status={computedBilling} />;
+                    })()}
                   </TableCell>
                   <TableCell>
                     {order.hasDeviation && (

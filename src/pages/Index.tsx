@@ -16,7 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { ProductionStatus, BillingStatus, OrderAdminStatus } from '@/types/order';
 import { toAdminStatus } from '@/types/order';
-import { canExportOrders } from '@/lib/invoiceExport';
+import { getReadyTrucks } from '@/lib/invoiceExport';
 
 const Index = () => {
   useDocumentTitle('Ordrar');
@@ -60,7 +60,7 @@ const Index = () => {
     [orders, selectedOrderIds]
   );
   const canExportSelectedOrders = useMemo(() => 
-    canExportOrders(selectedOrders), 
+    selectedOrders.length > 0 && getReadyTrucks(selectedOrders).length > 0, 
     [selectedOrders]
   );
 

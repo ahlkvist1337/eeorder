@@ -98,6 +98,92 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_export_items: {
+        Row: {
+          article_row_id: string | null
+          billed_amount: number
+          billed_quantity: number
+          created_at: string
+          id: string
+          invoice_export_id: string
+          order_id: string
+          truck_id: string
+        }
+        Insert: {
+          article_row_id?: string | null
+          billed_amount: number
+          billed_quantity: number
+          created_at?: string
+          id?: string
+          invoice_export_id: string
+          order_id: string
+          truck_id: string
+        }
+        Update: {
+          article_row_id?: string | null
+          billed_amount?: number
+          billed_quantity?: number
+          created_at?: string
+          id?: string
+          invoice_export_id?: string
+          order_id?: string
+          truck_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_export_items_article_row_id_fkey"
+            columns: ["article_row_id"]
+            isOneToOne: false
+            referencedRelation: "article_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_export_items_invoice_export_id_fkey"
+            columns: ["invoice_export_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_exports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_export_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_export_items_truck_id_fkey"
+            columns: ["truck_id"]
+            isOneToOne: false
+            referencedRelation: "object_trucks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_exports: {
+        Row: {
+          export_id: string
+          exported_at: string
+          exported_by: string
+          id: string
+          total_amount: number
+        }
+        Insert: {
+          export_id: string
+          exported_at?: string
+          exported_by: string
+          id?: string
+          total_amount?: number
+        }
+        Update: {
+          export_id?: string
+          exported_at?: string
+          exported_by?: string
+          id?: string
+          total_amount?: number
+        }
+        Relationships: []
+      }
       object_templates: {
         Row: {
           created_at: string
@@ -118,6 +204,7 @@ export type Database = {
       }
       object_trucks: {
         Row: {
+          billing_status: Database["public"]["Enums"]["truck_billing_status"]
           created_at: string
           id: string
           object_id: string
@@ -126,6 +213,7 @@ export type Database = {
           truck_number: string | null
         }
         Insert: {
+          billing_status?: Database["public"]["Enums"]["truck_billing_status"]
           created_at?: string
           id?: string
           object_id: string
@@ -134,6 +222,7 @@ export type Database = {
           truck_number?: string | null
         }
         Update: {
+          billing_status?: Database["public"]["Enums"]["truck_billing_status"]
           created_at?: string
           id?: string
           object_id?: string
@@ -723,7 +812,15 @@ export type Database = {
         | "completed"
         | "cancelled"
       step_status: "pending" | "in_progress" | "completed"
-      truck_status: "waiting" | "arrived" | "started" | "paused" | "completed"
+      truck_billing_status: "not_billable" | "ready_for_billing" | "billed"
+      truck_status:
+        | "waiting"
+        | "arrived"
+        | "started"
+        | "paused"
+        | "completed"
+        | "packed"
+        | "delivered"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -863,7 +960,16 @@ export const Constants = {
         "cancelled",
       ],
       step_status: ["pending", "in_progress", "completed"],
-      truck_status: ["waiting", "arrived", "started", "paused", "completed"],
+      truck_billing_status: ["not_billable", "ready_for_billing", "billed"],
+      truck_status: [
+        "waiting",
+        "arrived",
+        "started",
+        "paused",
+        "completed",
+        "packed",
+        "delivered",
+      ],
     },
   },
 } as const

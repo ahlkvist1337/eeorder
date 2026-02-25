@@ -56,6 +56,7 @@ export default function OrderDetails() {
     updateOrderStep,
     updateTruckStatus,
     updateTruckStepStatus,
+    updateTruckBillingStatus,
     deleteOrder,
     isLoading 
   } = useOrders();
@@ -129,6 +130,10 @@ export default function OrderDetails() {
 
   const handleTruckStatusChange = async (truckId: string, status: TruckStatus) => {
     await updateTruckStatus(order.id, truckId, status);
+  };
+
+  const handleTruckBillingStatusChange = async (truckId: string, status: import('@/types/order').TruckBillingStatus) => {
+    await updateTruckBillingStatus(order.id, truckId, status);
   };
 
   const handleTruckStepStatusChange = async (
@@ -421,8 +426,9 @@ export default function OrderDetails() {
                   articleRows={order.articleRows}
                   onObjectsChange={(newObjects) => handleObjectsAndStepsChange(newObjects, order.steps)}
                   onStepsChange={(newSteps) => handleObjectsAndStepsChange(order.objects || [], newSteps)}
-                  onTruckStatusChange={handleTruckStatusChange}
-                  onTruckStepStatusChange={handleTruckStepStatusChange}
+                   onTruckStatusChange={handleTruckStatusChange}
+                   onTruckStepStatusChange={handleTruckStepStatusChange}
+                   onTruckBillingStatusChange={handleTruckBillingStatusChange}
                   orderInfo={{
                     id: order.id,
                     orderNumber: order.orderNumber,

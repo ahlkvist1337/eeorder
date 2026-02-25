@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus, TruckStatusChange, TruckStatus, Instruction, TruckLifecycleEvent, TruckLifecycleEventType } from '@/types/order';
+import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus, TruckStatusChange, TruckStatus, Instruction, TruckLifecycleEvent, TruckLifecycleEventType, TruckBillingStatus } from '@/types/order';
 
 // Database types (manual since types.ts may not be updated yet)
 interface DbOrder {
@@ -54,8 +54,9 @@ interface DbOrderObject {
 interface DbObjectTruck {
   id: string;
   object_id: string;
-  truck_number: string | null; // Now nullable for work units without truck numbers
-  status: 'waiting' | 'arrived' | 'started' | 'paused' | 'completed';
+  truck_number: string | null;
+  status: 'waiting' | 'arrived' | 'started' | 'paused' | 'completed' | 'packed' | 'delivered';
+  billing_status: 'not_billable' | 'ready_for_billing' | 'billed';
   sort_order: number | null;
   created_at: string;
 }
@@ -144,6 +145,7 @@ interface OrdersContextType {
   refreshOrders: () => Promise<void>;
   updateTruckStepStatus: (orderId: string, truckId: string, stepId: string, newStatus: StepStatus, truckNumber: string, stepName: string) => Promise<void>;
   updateTruckStatus: (orderId: string, truckId: string, newStatus: TruckStatus) => Promise<void>;
+  updateTruckBillingStatus: (orderId: string, truckId: string, newStatus: TruckBillingStatus) => Promise<void>;
   bulkUpdateOrders: (orderIds: string[], updates: BulkOrderUpdates) => Promise<void>;
 }
 
@@ -189,6 +191,7 @@ function mapDbOrderToOrder(
         objectId: t.object_id,
         truckNumber: t.truck_number,
         status: t.status,
+        billingStatus: t.billing_status || 'not_billable',
         sortOrder: t.sort_order ?? undefined,
         createdAt: t.created_at,
         stepStatuses: truckStepStatuses
@@ -1253,6 +1256,33 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     }
   }, [orders]);
 
+  const updateTruckBillingStatus = useCallback(async (
+    orderId: string,
+    truckId: string,
+    newStatus: TruckBillingStatus
+  ) => {
+    markLocalUpdate();
+    
+    // Optimistic update
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      return {
+        ...o,
+        objects: o.objects?.map(obj => ({
+          ...obj,
+          trucks: obj.trucks?.map(t =>
+            t.id === truckId ? { ...t, billingStatus: newStatus } : t
+          ),
+        })),
+      };
+    }));
+
+    // Update in DB
+    await supabase.from('object_trucks')
+      .update({ billing_status: newStatus } as any)
+      .eq('id', truckId);
+  }, [orders]);
+
   const bulkUpdateOrders = useCallback(async (orderIds: string[], updates: BulkOrderUpdates) => {
     markLocalUpdate(); // Prevent realtime refetch for our own changes
     
@@ -1316,6 +1346,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       refreshOrders: fetchOrders,
       updateTruckStepStatus,
       updateTruckStatus,
+      updateTruckBillingStatus,
       bulkUpdateOrders,
     }}>
       {children}

@@ -1,7 +1,9 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import type { ProductionStatus, BillingStatus, StepStatus, TruckStatus } from '@/types/order';
-import { productionStatusLabels, billingStatusLabels, stepStatusLabels, truckStatusLabels } from '@/types/order';
+import type { ProductionStatus, BillingStatus, StepStatus, TruckStatus, TruckBillingStatus } from '@/types/order';
+import { productionStatusLabels, billingStatusLabels, stepStatusLabels, truckStatusLabels, truckBillingStatusLabels } from '@/types/order';
+
+// ... keep existing code (ProductionStatusBadge, BillingStatusBadge, StepStatusBadge unchanged)
 
 interface ProductionStatusBadgeProps {
   status: ProductionStatus;
@@ -92,6 +94,8 @@ const truckStatusColors: Record<TruckStatus, string> = {
   started: 'bg-[hsl(var(--status-started))] text-black',
   paused: 'bg-[hsl(var(--status-paused))] text-white',
   completed: 'bg-[hsl(var(--status-completed))] text-white',
+  packed: 'bg-amber-500 text-white',
+  delivered: 'bg-emerald-600 text-white',
 };
 
 export function TruckStatusBadge({ status, className }: TruckStatusBadgeProps) {
@@ -104,6 +108,31 @@ export function TruckStatusBadge({ status, className }: TruckStatusBadgeProps) {
       )}
     >
       {truckStatusLabels[status]}
+    </Badge>
+  );
+}
+
+interface TruckBillingStatusBadgeProps {
+  status: TruckBillingStatus;
+  className?: string;
+}
+
+const truckBillingStatusColors: Record<TruckBillingStatus, string> = {
+  not_billable: 'bg-muted text-muted-foreground',
+  ready_for_billing: 'bg-[hsl(var(--billing-ready))] text-black',
+  billed: 'bg-[hsl(var(--billing-billed))] text-white',
+};
+
+export function TruckBillingStatusBadge({ status, className }: TruckBillingStatusBadgeProps) {
+  return (
+    <Badge 
+      className={cn(
+        'font-medium rounded-sm',
+        truckBillingStatusColors[status],
+        className
+      )}
+    >
+      {truckBillingStatusLabels[status]}
     </Badge>
   );
 }

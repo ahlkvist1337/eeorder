@@ -29,7 +29,12 @@ export type TruckStatus =
   | 'arrived'     // Ankommen
   | 'started'     // Arbete påbörjat
   | 'paused'      // Pausad
-  | 'completed';  // Klar
+  | 'completed'   // Klar
+  | 'packed'      // Packat
+  | 'delivered';  // Levererat
+
+// Billing status per work card (truck)
+export type TruckBillingStatus = 'not_billable' | 'ready_for_billing' | 'billed';
 
 export interface TreatmentStepTemplate {
   id: string;
@@ -51,6 +56,7 @@ export interface ObjectTruck {
   objectId: string;
   truckNumber: string;
   status: TruckStatus; // Production status for this truck
+  billingStatus: TruckBillingStatus; // Billing status for this truck
   stepStatuses: TruckStepStatus[];
   sortOrder?: number; // Manual prioritization order
   createdAt?: string;
@@ -218,6 +224,14 @@ export const truckStatusLabels: Record<TruckStatus, string> = {
   started: 'Startad',
   paused: 'Pausad',
   completed: 'Klar',
+  packed: 'Packat',
+  delivered: 'Levererat',
+};
+
+export const truckBillingStatusLabels: Record<TruckBillingStatus, string> = {
+  not_billable: 'Ej fakturerbar',
+  ready_for_billing: 'Klar för fakturering',
+  billed: 'Fakturerad',
 };
 
 // Truck lifecycle events for unified history
@@ -227,6 +241,8 @@ export type TruckLifecycleEventType =
   | 'started'
   | 'paused'
   | 'completed'
+  | 'packed'
+  | 'delivered'
   | 'step_started'
   | 'step_completed';
 
@@ -247,6 +263,8 @@ export const truckLifecycleEventLabels: Record<TruckLifecycleEventType, string> 
   started: 'Arbete påbörjat',
   paused: 'Pausat',
   completed: 'Arbetskort klart',
+  packed: 'Packat',
+  delivered: 'Levererat',
   step_started: 'Steg påbörjat',
   step_completed: 'Steg klart',
 };
@@ -265,6 +283,8 @@ export function calculateObjectQuantities(trucks: ObjectTruck[] | undefined): {
   planned: number;
   received: number;
   completed: number;
+  packed: number;
+  delivered: number;
 } {
   const allTrucks = trucks || [];
   return {
@@ -273,8 +293,39 @@ export function calculateObjectQuantities(trucks: ObjectTruck[] | undefined): {
       t.status === 'arrived' || 
       t.status === 'started' || 
       t.status === 'paused' || 
-      t.status === 'completed'
+      t.status === 'completed' ||
+      t.status === 'packed' ||
+      t.status === 'delivered'
     ).length,
-    completed: allTrucks.filter(t => t.status === 'completed').length,
+    completed: allTrucks.filter(t => 
+      t.status === 'completed' || 
+      t.status === 'packed' || 
+      t.status === 'delivered'
+    ).length,
+    packed: allTrucks.filter(t => t.status === 'packed' || t.status === 'delivered').length,
+    delivered: allTrucks.filter(t => t.status === 'delivered').length,
+  };
+}
+
+// Calculate computed billing status for an order based on its trucks
+export function calculateOrderBillingStatus(order: Order): BillingStatus {
+  const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
+  if (allTrucks.length === 0) return order.billingStatus;
+  
+  const allBilled = allTrucks.every(t => t.billingStatus === 'billed');
+  if (allBilled) return 'billed';
+  
+  const someBilledOrReady = allTrucks.some(t => t.billingStatus === 'billed' || t.billingStatus === 'ready_for_billing');
+  if (someBilledOrReady) return 'ready_for_billing';
+  
+  return 'not_ready';
+}
+
+// Get delivery summary for an order
+export function getDeliverySummary(order: Order): { delivered: number; total: number } {
+  const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
+  return {
+    delivered: allTrucks.filter(t => t.status === 'delivered').length,
+    total: allTrucks.length,
   };
 }

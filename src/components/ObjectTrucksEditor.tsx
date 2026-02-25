@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Plus, Trash2, Pencil, Check, X, Printer } from 'lucide-react';
+import { Plus, Trash2, Pencil, Check, X, Printer, Package, Truck as TruckIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
-import type { ObjectTruck, OrderStep, StepStatus, TruckStatus, ArticleRow } from '@/types/order';
-import { truckStatusLabels, getWorkUnitDisplayName } from '@/types/order';
+import type { ObjectTruck, OrderStep, StepStatus, TruckStatus, TruckBillingStatus, ArticleRow } from '@/types/order';
+import { truckStatusLabels, truckBillingStatusLabels, getWorkUnitDisplayName } from '@/types/order';
 import { printWorkCard } from '@/lib/workCardPrint';
 
 interface ObjectTrucksEditorProps {
@@ -18,6 +18,7 @@ interface ObjectTrucksEditorProps {
   onTrucksChange: (trucks: ObjectTruck[]) => void;
   onTruckStepStatusChange?: (truckId: string, stepId: string, status: StepStatus) => void;
   onTruckStatusChange?: (truckId: string, status: TruckStatus) => void;
+  onTruckBillingStatusChange?: (truckId: string, status: TruckBillingStatus) => void;
   orderInfo?: {
     id: string;
     orderNumber: string;
@@ -37,6 +38,8 @@ const truckStatusColors: Record<TruckStatus, string> = {
   started: 'text-[hsl(var(--status-started))]',
   paused: 'text-[hsl(var(--status-paused))]',
   completed: 'text-[hsl(var(--status-completed))]',
+  packed: 'text-amber-500',
+  delivered: 'text-emerald-600',
 };
 
 export function ObjectTrucksEditor({
@@ -48,6 +51,7 @@ export function ObjectTrucksEditor({
   onTrucksChange,
   onTruckStepStatusChange,
   onTruckStatusChange,
+  onTruckBillingStatusChange,
   orderInfo,
 }: ObjectTrucksEditorProps) {
   const { isProduction } = useAuth();
@@ -63,6 +67,7 @@ export function ObjectTrucksEditor({
       objectId,
       truckNumber: newTruckNumber.trim(),
       status: 'waiting',
+      billingStatus: 'not_billable',
       stepStatuses: objectSteps.map(step => ({
         id: crypto.randomUUID(),
         truckId: truckId,
@@ -281,6 +286,56 @@ export function ObjectTrucksEditor({
                       </button>
                     );
                   })}
+                </div>
+
+                {/* Pack/Deliver buttons + Billing status */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* Pack button - show when completed */}
+                  {truck.status === 'completed' && onTruckStatusChange && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 bg-amber-500/10 border-amber-500 text-amber-700 hover:bg-amber-500/20"
+                      onClick={() => onTruckStatusChange(truck.id, 'packed')}
+                    >
+                      <Package className="h-4 w-4 mr-1" />
+                      Packa
+                    </Button>
+                  )}
+                  
+                  {/* Deliver button - show when packed */}
+                  {truck.status === 'packed' && onTruckStatusChange && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 bg-emerald-600/10 border-emerald-600 text-emerald-700 hover:bg-emerald-600/20"
+                      onClick={() => onTruckStatusChange(truck.id, 'delivered')}
+                    >
+                      <TruckIcon className="h-4 w-4 mr-1" />
+                      Leverera
+                    </Button>
+                  )}
+                  
+                  {/* Billing status dropdown - show when delivered */}
+                  {truck.status === 'delivered' && onTruckBillingStatusChange && (
+                    <Select
+                      value={truck.billingStatus}
+                      onValueChange={(value: TruckBillingStatus) => {
+                        onTruckBillingStatusChange(truck.id, value);
+                      }}
+                    >
+                      <SelectTrigger className="h-9 w-40 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.keys(truckBillingStatusLabels) as TruckBillingStatus[]).map(s => (
+                          <SelectItem key={s} value={s} className="text-xs">
+                            {truckBillingStatusLabels[s]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
 
                 {/* Row 3 on mobile: Actions */}

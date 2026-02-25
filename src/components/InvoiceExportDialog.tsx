@@ -11,10 +11,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import type { Order } from '@/types/order';
-import { prepareInvoiceExportData, formatCurrency } from '@/lib/invoiceExport';
+import type { Order, ObjectTruck } from '@/types/order';
+import { prepareInvoiceExportData, formatCurrency, getReadyTrucks } from '@/lib/invoiceExport';
+import type { PreviouslyBilledItem } from '@/lib/invoiceExport';
 import { exportInvoiceToPdf } from '@/lib/invoiceExportPdf';
 import { exportInvoiceToExcel } from '@/lib/invoiceExportExcel';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface InvoiceExportDialogProps {
@@ -28,14 +30,31 @@ export function InvoiceExportDialog({ open, onOpenChange, orders }: InvoiceExpor
   const [exportExcel, setExportExcel] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
 
-  // Calculate total from article rows
-  const totalAmount = orders.reduce((sum, order) => {
-    const orderTotal = order.articleRows?.reduce(
-      (rowSum, row) => rowSum + (row.quantity * row.price), 
-      0
-    ) || 0;
-    return sum + orderTotal;
-  }, 0);
+  // Get ready trucks grouped by order
+  const readyTrucks = getReadyTrucks(orders);
+  const trucksByOrder: Record<string, ObjectTruck[]> = {};
+  for (const order of orders) {
+    const orderTrucks = (order.objects || []).flatMap(obj =>
+      (obj.trucks || []).filter(t => t.billingStatus === 'ready_for_billing')
+    );
+    if (orderTrucks.length > 0) {
+      trucksByOrder[order.id] = orderTrucks;
+    }
+  }
+
+  // Calculate total from ready trucks proportionally (simplified preview)
+  const totalAmount = readyTrucks.length > 0
+    ? orders.reduce((sum, order) => {
+        const orderTrucks = trucksByOrder[order.id] || [];
+        if (orderTrucks.length === 0) return sum;
+        const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
+        const ratio = allTrucks.length > 0 ? orderTrucks.length / allTrucks.length : 0;
+        const orderTotal = (order.articleRows || []).reduce(
+          (rowSum, row) => rowSum + (row.quantity * row.price), 0
+        );
+        return sum + (orderTotal * ratio);
+      }, 0)
+    : 0;
 
   const handleExport = async () => {
     if (!exportPdf && !exportExcel) {
@@ -46,7 +65,36 @@ export function InvoiceExportDialog({ open, onOpenChange, orders }: InvoiceExpor
     setIsExporting(true);
     
     try {
-      const exportData = prepareInvoiceExportData(orders);
+      // Fetch previously billed items for all orders
+      const orderIds = orders.map(o => o.id);
+      const { data: billedItems } = await supabase
+        .from('invoice_export_items')
+        .select('order_id, article_row_id, billed_quantity, billed_amount')
+        .in('order_id', orderIds);
+
+      // Group by order and aggregate by article_row_id
+      const previouslyBilledByOrder: Record<string, PreviouslyBilledItem[]> = {};
+      for (const item of billedItems || []) {
+        if (!item.article_row_id) continue;
+        if (!previouslyBilledByOrder[item.order_id]) {
+          previouslyBilledByOrder[item.order_id] = [];
+        }
+        const existing = previouslyBilledByOrder[item.order_id].find(
+          p => p.article_row_id === item.article_row_id
+        );
+        if (existing) {
+          existing.total_billed_quantity += Number(item.billed_quantity);
+          existing.total_billed_amount += Number(item.billed_amount);
+        } else {
+          previouslyBilledByOrder[item.order_id].push({
+            article_row_id: item.article_row_id,
+            total_billed_quantity: Number(item.billed_quantity),
+            total_billed_amount: Number(item.billed_amount),
+          });
+        }
+      }
+
+      const exportData = prepareInvoiceExportData(orders, trucksByOrder, previouslyBilledByOrder);
       
       if (exportPdf) {
         exportInvoiceToPdf(exportData);
@@ -56,8 +104,46 @@ export function InvoiceExportDialog({ open, onOpenChange, orders }: InvoiceExpor
         exportInvoiceToExcel(exportData);
       }
 
+      // Save export record and mark trucks as billed
+      const { data: exportRecord } = await supabase
+        .from('invoice_exports')
+        .insert({
+          export_id: exportData.exportId,
+          exported_by: (await supabase.auth.getUser()).data.user?.id || '',
+          total_amount: exportData.grandTotal,
+        } as any)
+        .select('id')
+        .single();
+
+      if (exportRecord) {
+        // Save export items for tracking
+        const exportItems = exportData.orders.flatMap(order =>
+          order.articleRows.map(row => ({
+            invoice_export_id: exportRecord.id,
+            order_id: order.orderId,
+            truck_id: order.truckIds[0] || '', // Primary truck
+            article_row_id: row.articleRowId || null,
+            billed_quantity: row.quantity,
+            billed_amount: row.total,
+          }))
+        );
+
+        if (exportItems.length > 0) {
+          await supabase.from('invoice_export_items').insert(exportItems as any);
+        }
+
+        // Mark trucks as billed
+        const allTruckIds = exportData.orders.flatMap(o => o.truckIds);
+        if (allTruckIds.length > 0) {
+          await supabase.from('object_trucks')
+            .update({ billing_status: 'billed' } as any)
+            .in('id', allTruckIds);
+        }
+      }
+
+      const typeLabel = exportData.isPartial ? 'Delfaktura' : 'Fakturaunderlag';
       const formats = [exportPdf && 'PDF', exportExcel && 'Excel'].filter(Boolean).join(' och ');
-      toast.success(`Fakturaunderlag exporterat (${orders.length} ${orders.length === 1 ? 'order' : 'ordrar'}) som ${formats}`);
+      toast.success(`${typeLabel} exporterat (${readyTrucks.length} arbetskort) som ${formats}`);
       onOpenChange(false);
     } catch (error) {
       console.error('Export failed:', error);
@@ -73,7 +159,7 @@ export function InvoiceExportDialog({ open, onOpenChange, orders }: InvoiceExpor
         <DialogHeader>
           <DialogTitle>Exportera fakturaunderlag</DialogTitle>
           <DialogDescription>
-            Skapa fakturaunderlag för granskning och ekonomiimport.
+            Skapa fakturaunderlag för arbetskort markerade som "Klar för fakturering".
           </DialogDescription>
         </DialogHeader>
 
@@ -81,10 +167,13 @@ export function InvoiceExportDialog({ open, onOpenChange, orders }: InvoiceExpor
           {/* Summary */}
           <div className="rounded-lg bg-muted p-4 space-y-1">
             <p className="font-medium">
-              {orders.length} {orders.length === 1 ? 'order vald' : 'ordrar valda'}
+              {readyTrucks.length} arbetskort klara för fakturering
             </p>
             <p className="text-2xl font-bold">
-              {formatCurrency(totalAmount)}
+              ~{formatCurrency(Math.round(totalAmount))}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Belopp beräknas proportionellt baserat på antal arbetskort. Eventuell avräkning sker automatiskt.
             </p>
           </div>
 
@@ -128,7 +217,7 @@ export function InvoiceExportDialog({ open, onOpenChange, orders }: InvoiceExpor
           </Button>
           <Button 
             onClick={handleExport} 
-            disabled={isExporting || (!exportPdf && !exportExcel)}
+            disabled={isExporting || (!exportPdf && !exportExcel) || readyTrucks.length === 0}
           >
             {isExporting ? 'Exporterar...' : 'Exportera'}
           </Button>
