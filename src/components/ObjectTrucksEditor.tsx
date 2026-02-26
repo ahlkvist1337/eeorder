@@ -133,19 +133,6 @@ export function ObjectTrucksEditor({
           onTruckStatusChange(truckId, 'completed');
         }
       }
-
-      if (truck && nextStatus === 'pending') {
-        const allOthersPending = objectSteps.every(step => {
-          if (step.id === stepId) return true;
-          const s = truck.stepStatuses.find(ss => ss.stepId === step.id);
-          return !s || s.status === 'pending';
-        });
-        if (allOthersPending && (truck.status === 'started' || truck.status === 'paused')) {
-          if (onTruckStatusChange) {
-            onTruckStatusChange(truckId, 'arrived');
-          }
-        }
-      }
     } else {
       const updatedTrucks = trucks.map(t => {
         if (t.id !== truckId) return t;
@@ -171,17 +158,6 @@ export function ObjectTrucksEditor({
           
           if (allStepsCompleted) {
             updatedTruck.status = 'completed';
-          }
-        }
-
-        if (nextStatus === 'pending') {
-          const allPending = objectSteps.every(step => {
-            if (step.id === stepId) return true;
-            const s = updatedTruck.stepStatuses.find(ss => ss.stepId === step.id);
-            return !s || s.status === 'pending';
-          });
-          if (allPending && (updatedTruck.status === 'started' || updatedTruck.status === 'paused')) {
-            updatedTruck.status = 'arrived';
           }
         }
         

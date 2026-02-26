@@ -8,16 +8,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { orderAdminStatusLabels } from '@/types/order';
-import type { OrderAdminStatus } from '@/types/order';
+import { orderAdminStatusLabels, billingStatusLabels } from '@/types/order';
+import type { ProductionStatus, BillingStatus, OrderAdminStatus } from '@/types/order';
 
-export type BulkEditType = 'productionStatus' | 'deviation';
+export type BulkEditType = 'productionStatus' | 'billingStatus' | 'deviation';
 
 interface BulkEditConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editType: BulkEditType | null;
-  newValue: OrderAdminStatus | boolean | null;
+  newValue: OrderAdminStatus | BillingStatus | boolean | null;
   orderCount: number;
   onConfirm: () => void;
 }
@@ -34,6 +34,8 @@ export function BulkEditConfirmDialog({
     switch (editType) {
       case 'productionStatus':
         return 'Ändra produktionsstatus';
+      case 'billingStatus':
+        return 'Ändra faktureringsstatus';
       case 'deviation':
         return 'Ändra avvikelse';
       default:
@@ -47,6 +49,8 @@ export function BulkEditConfirmDialog({
     switch (editType) {
       case 'productionStatus':
         return `Du är på väg att ändra orderstatus till "${orderAdminStatusLabels[newValue as OrderAdminStatus]}" för ${orderText}.`;
+      case 'billingStatus':
+        return `Du är på väg att ändra faktureringsstatus till "${billingStatusLabels[newValue as BillingStatus]}" för ${orderText}.`;
       case 'deviation':
         return `Du är på väg att ${newValue ? 'markera' : 'avmarkera'} avvikelse för ${orderText}.`;
       default:

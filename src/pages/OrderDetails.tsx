@@ -38,7 +38,7 @@ import { OrderDeviations } from '@/components/OrderDeviations';
 import { useOrders } from '@/hooks/useOrders';
 import { useOrderAttachments } from '@/hooks/useOrderAttachments';
 import { useAuth } from '@/contexts/AuthContext';
-import { orderAdminStatusLabels, billingStatusLabels, stepStatusLabels, getWorkUnitDisplayName, toAdminStatus, calculateOrderBillingStatus } from '@/types/order';
+import { orderAdminStatusLabels, billingStatusLabels, stepStatusLabels, getWorkUnitDisplayName, toAdminStatus } from '@/types/order';
 import type { ProductionStatus, BillingStatus, OrderStep, OrderObject, TruckStatus, StepStatus, OrderAdminStatus, ArticleRow, Instruction } from '@/types/order';
 
 import { cn } from '@/lib/utils';
@@ -52,7 +52,7 @@ export default function OrderDetails() {
     getOrderById, 
     updateOrder, 
     updateProductionStatus, 
-    
+    updateBillingStatus,
     updateOrderStep,
     updateTruckStatus,
     updateTruckStepStatus,
@@ -106,6 +106,14 @@ export default function OrderDetails() {
       await updateProductionStatus(order.id, status as ProductionStatus);
     } catch (error) {
       console.error('Error updating production status:', error);
+    }
+  };
+
+  const handleBillingStatusChange = async (status: string) => {
+    try {
+      await updateBillingStatus(order.id, status as BillingStatus);
+    } catch (error) {
+      console.error('Error updating billing status:', error);
     }
   };
 
@@ -571,13 +579,24 @@ export default function OrderDetails() {
                   )}
                 </div>
 
-                <div className="space-y-1.5 sm:space-y-2">
-                  <Label className="text-xs sm:text-sm">Faktureringsstatus</Label>
-                  <div className="flex items-center gap-2">
-                    <BillingStatusBadge status={calculateOrderBillingStatus(order)} />
-                    <span className="text-xs text-muted-foreground">Beräknas från arbetskorten</span>
+                {isAdmin && (
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <Label className="text-xs sm:text-sm">Faktureringsstatus</Label>
+                    <Select 
+                      value={order.billingStatus} 
+                      onValueChange={handleBillingStatusChange}
+                    >
+                      <SelectTrigger className="bg-background text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover">
+                        {Object.entries(billingStatusLabels).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
+                )}
 
               </CardContent>
             </Card>
