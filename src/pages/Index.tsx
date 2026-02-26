@@ -51,7 +51,7 @@ const Index = () => {
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [pendingEditType, setPendingEditType] = useState<BulkEditType | null>(null);
-  const [pendingEditValue, setPendingEditValue] = useState<OrderAdminStatus | BillingStatus | boolean | null>(null);
+  const [pendingEditValue, setPendingEditValue] = useState<OrderAdminStatus | boolean | null>(null);
   const [invoiceExportDialogOpen, setInvoiceExportDialogOpen] = useState(false);
 
   // Get selected orders and check if they can be exported
@@ -70,12 +70,6 @@ const Index = () => {
     setConfirmDialogOpen(true);
   };
 
-  const handleBillingStatusChange = (status: BillingStatus) => {
-    setPendingEditType('billingStatus');
-    setPendingEditValue(status);
-    setConfirmDialogOpen(true);
-  };
-
   const handleDeviationChange = (hasDeviation: boolean) => {
     setPendingEditType('deviation');
     setPendingEditValue(hasDeviation);
@@ -90,8 +84,6 @@ const Index = () => {
     try {
       if (pendingEditType === 'productionStatus') {
         await bulkUpdateOrders(orderIds, { productionStatus: pendingEditValue as ProductionStatus });
-      } else if (pendingEditType === 'billingStatus') {
-        await bulkUpdateOrders(orderIds, { billingStatus: pendingEditValue as BillingStatus });
       } else if (pendingEditType === 'deviation') {
         await bulkUpdateOrders(orderIds, { hasDeviation: pendingEditValue as boolean });
       }
@@ -190,7 +182,6 @@ const Index = () => {
                 canExportInvoice={canExportSelectedOrders && isAdmin}
                 onProductionStatusChange={handleProductionStatusChange}
                 onExportInvoice={isAdmin ? handleExportInvoice : undefined}
-                onBillingStatusChange={isAdmin ? handleBillingStatusChange : undefined}
                 onDeviationChange={handleDeviationChange}
                 onClearSelection={handleClearSelection}
               />

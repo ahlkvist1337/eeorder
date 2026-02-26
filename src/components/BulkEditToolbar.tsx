@@ -7,14 +7,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { orderAdminStatusLabels, billingStatusLabels } from '@/types/order';
-import type { ProductionStatus, BillingStatus, OrderAdminStatus } from '@/types/order';
+import { orderAdminStatusLabels } from '@/types/order';
+import type { ProductionStatus, OrderAdminStatus } from '@/types/order';
 
 interface BulkEditToolbarProps {
   selectedCount: number;
   canExportInvoice: boolean;
   onProductionStatusChange: (status: ProductionStatus) => void;
-  onBillingStatusChange: (status: BillingStatus) => void;
   onDeviationChange: (hasDeviation: boolean) => void;
   onExportInvoice: () => void;
   onClearSelection: () => void;
@@ -24,7 +23,6 @@ export function BulkEditToolbar({
   selectedCount,
   canExportInvoice,
   onProductionStatusChange,
-  onBillingStatusChange,
   onDeviationChange,
   onExportInvoice,
   onClearSelection,
@@ -49,18 +47,6 @@ export function BulkEditToolbar({
           </SelectContent>
         </Select>
 
-        <Select onValueChange={(value) => onBillingStatusChange(value as BillingStatus)}>
-          <SelectTrigger className="w-full sm:w-[180px] bg-background">
-            <SelectValue placeholder="Faktureringsstatus" />
-          </SelectTrigger>
-          <SelectContent className="bg-background z-50">
-            {Object.entries(billingStatusLabels).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
 
         <div className="flex items-center gap-1 w-full sm:w-auto">
           <span className="text-sm text-muted-foreground mr-1">Avvikelse:</span>
