@@ -136,7 +136,7 @@ interface OrdersContextType {
   addOrder: (order: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'>) => Promise<Order>;
   updateOrder: (id: string, updates: Partial<Order>, previousSteps?: OrderStep[]) => Promise<void>;
   updateProductionStatus: (id: string, newStatus: ProductionStatus) => Promise<void>;
-  updateBillingStatus: (id: string, newStatus: BillingStatus) => Promise<void>;
+  
   updateOrderStep: (orderId: string, stepId: string, updates: Partial<OrderStep>) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
   getOrderByNumber: (orderNumber: string) => Order | undefined;
@@ -883,22 +883,6 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     fetchOrders(); // Background refresh (no await)
   }, [orders, fetchOrders]);
 
-  const updateBillingStatus = useCallback(async (id: string, newStatus: BillingStatus) => {
-    markLocalUpdate(); // Prevent realtime refetch for our own changes
-
-    // Optimistic update
-    setOrders(prev => prev.map(o =>
-      o.id === id ? { ...o, billingStatus: newStatus } : o
-    ));
-    
-    await supabase
-      .from('orders')
-      .update({ billing_status: newStatus })
-      .eq('id', id);
-
-    fetchOrders(); // Background refresh (no await)
-  }, [orders, fetchOrders]);
-
   const updateOrderStep = useCallback(async (orderId: string, stepId: string, updates: Partial<OrderStep>) => {
     markLocalUpdate(); // Prevent realtime refetch for our own changes
     
@@ -1337,7 +1321,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       addOrder,
       updateOrder,
       updateProductionStatus,
-      updateBillingStatus,
+      
       updateOrderStep,
       deleteOrder,
       getOrderByNumber,
