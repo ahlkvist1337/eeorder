@@ -1,32 +1,23 @@
 
-# Ta bort manuell fakturastatus på ordernivå
 
-## Sammanfattning
+# Ta bort informationstexten "Beräknas från arbetskorten"
 
-Ersätt den manuella fakturastatus-dropdownen i orderdetaljer med en **skrivskyddad beräknad badge** som räknas ut automatiskt från arbetskortens `billing_status`. Ordertabellen använder redan den beräknade versionen -- nu gör vi samma sak i orderdetaljer.
+En enkel ändring i `src/pages/OrderDetails.tsx` (rad 576-579):
 
-## Ändringar
+- Ta bort `<span>`-elementet med texten "Beräknas från arbetskorten"
+- Behåll `BillingStatusBadge` som visar den beräknade statusen
+- Ta även bort det omslutande `<div className="flex items-center gap-2">` eftersom det bara innehåller badgen efter ändringen
 
-### 1. `src/pages/OrderDetails.tsx`
-- **Ta bort** `handleBillingStatusChange`-funktionen (rad 112-118)
-- **Ta bort** importen av `updateBillingStatus` från context (rad 55)
-- **Ersätt** fakturastatus-dropdownen (rad 582-598) med en skrivskyddad `BillingStatusBadge` som visar resultatet av `calculateOrderBillingStatus(order)`
-- Lägg till en liten infotext: "Beräknas från arbetskorten"
+**Före:**
+```tsx
+<div className="flex items-center gap-2">
+  <BillingStatusBadge status={calculateOrderBillingStatus(order)} />
+  <span className="text-xs text-muted-foreground">Beräknas från arbetskorten</span>
+</div>
+```
 
-### 2. `src/contexts/OrdersContext.tsx`
-- **Ta bort** `updateBillingStatus`-funktionen (ca rad 886+)
-- **Ta bort** den från context-interfacet (rad 139) och providerns value-objekt (rad 1340)
+**Efter:**
+```tsx
+<BillingStatusBadge status={calculateOrderBillingStatus(order)} />
+```
 
-### 3. `src/pages/Index.tsx`
-- **Ta bort** `handleBillingStatusChange` (rad 73+) och relaterade pending-edit-logik
-- **Ta bort** `onBillingStatusChange`-propen från BulkEditToolbar-anropet (rad 193)
-
-### 4. `src/components/BulkEditToolbar.tsx`
-- **Ta bort** `onBillingStatusChange`-propen om den finns (bulk-ändring av fakturastatus är inte längre relevant på ordernivå)
-
-### Vad som INTE ändras
-- Databaskolumnen `orders.billing_status` behålls (undviker destruktiv migration)
-- Arbetskortens `billing_status` på `object_trucks` -- enda källan
-- `calculateOrderBillingStatus()` -- redan korrekt
-- Filtret i `OrderFilters.tsx` -- fortsätter filtrera mot beräknad status
-- Ordertabellen -- redan korrekt
