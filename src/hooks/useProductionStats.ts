@@ -18,7 +18,7 @@ interface ProductionStats {
   isLoading: boolean;
 }
 
-export function useProductionStats(orders: Order[]): ProductionStats {
+export function useProductionStats(orders: Order[], dateFilter: Date | null = null): ProductionStats {
   const [trucks, setTrucks] = useState<Array<{ id: string; status: string; object_id: string; truck_number: string | null }>>([]);
   const [lifecycleEvents, setLifecycleEvents] = useState<Array<{ 
     truck_id: string; 
@@ -33,7 +33,6 @@ export function useProductionStats(orders: Order[]): ProductionStats {
     const fetchData = async () => {
       setIsLoading(true);
       
-      // Fetch trucks and lifecycle events in parallel (orders come from context)
       const [trucksResult, eventsResult] = await Promise.all([
         supabase.from('object_trucks').select('id, status, object_id, truck_number'),
         supabase.from('truck_lifecycle_events').select('truck_id, event_type, timestamp, truck_number, order_id'),
@@ -52,24 +51,29 @@ export function useProductionStats(orders: Order[]): ProductionStats {
     const now = new Date();
     const todayStart = startOfDay(now);
 
-    // Count by status
+    // Filter lifecycle events by date if dateFilter is set
+    const filteredEvents = dateFilter
+      ? lifecycleEvents.filter(e => new Date(e.timestamp) >= dateFilter)
+      : lifecycleEvents;
+
+    // Count by status (always current state, not filtered)
     const inProgress = trucks.filter(t => t.status === 'arrived' || t.status === 'started').length;
     const waiting = trucks.filter(t => t.status === 'waiting').length;
 
-    // Completed today
-    const completedToday = lifecycleEvents.filter(e => 
+    // Completed today (or within period)
+    const completedToday = filteredEvents.filter(e => 
       e.event_type === 'completed' && 
       new Date(e.timestamp) >= todayStart
     ).length;
 
-    // Get active truck IDs (arrived or started)
+    // Get active truck IDs
     const activeTruckIds = new Set(
       trucks
         .filter(t => t.status === 'arrived' || t.status === 'started')
         .map(t => t.id)
     );
 
-    // Find oldest active truck based on arrived events
+    // Find oldest active truck
     let oldestActiveInfo: OldestActiveInfo | null = null;
     const arrivedEventsForActive = lifecycleEvents
       .filter(e => e.event_type === 'arrived' && activeTruckIds.has(e.truck_id))
@@ -78,21 +82,16 @@ export function useProductionStats(orders: Order[]): ProductionStats {
     if (arrivedEventsForActive.length > 0) {
       const oldest = arrivedEventsForActive[0];
       const days = differenceInDays(now, new Date(oldest.timestamp));
-      
-      // Hämta truck_number från object_trucks istället för events
       const truck = trucks.find(t => t.id === oldest.truck_id);
-      
       oldestActiveInfo = {
         days,
         truckNumber: truck?.truck_number || 'Okänt'
       };
     }
 
-    // Count overdue trucks (active trucks past order planned_end)
+    // Count overdue
     const orderEndDates = new Map(orders.map(o => [o.id, o.plannedEnd ?? null]));
     const truckOrderMap = new Map<string, string>();
-    
-    // Build truck -> order mapping from lifecycle events
     lifecycleEvents.forEach(e => {
       if (!truckOrderMap.has(e.truck_id)) {
         truckOrderMap.set(e.truck_id, e.order_id);
@@ -110,9 +109,9 @@ export function useProductionStats(orders: Order[]): ProductionStats {
       }
     });
 
-    // Calculate average lead time from arrived to completed events
+    // Average lead time from filtered completed events
     const completedTruckIds = new Set(
-      lifecycleEvents
+      filteredEvents
         .filter(e => e.event_type === 'completed')
         .map(e => e.truck_id)
     );
@@ -124,9 +123,7 @@ export function useProductionStats(orders: Order[]): ProductionStats {
       
       if (arrivedEvent && completedEvent) {
         const days = differenceInDays(new Date(completedEvent.timestamp), new Date(arrivedEvent.timestamp));
-        if (days >= 0) {
-          leadTimes.push(days);
-        }
+        if (days >= 0) leadTimes.push(days);
       }
     });
 
@@ -143,7 +140,7 @@ export function useProductionStats(orders: Order[]): ProductionStats {
       avgLeadTimeDays,
       isLoading
     };
-  }, [trucks, lifecycleEvents, orders, isLoading]);
+  }, [trucks, lifecycleEvents, orders, isLoading, dateFilter]);
 
   return stats;
 }
