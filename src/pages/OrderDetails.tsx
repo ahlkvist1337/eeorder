@@ -573,10 +573,7 @@ export default function OrderDetails() {
 
                 <div className="space-y-1.5 sm:space-y-2">
                   <Label className="text-xs sm:text-sm">Faktureringsstatus</Label>
-                  <div className="flex items-center gap-2">
-                    <BillingStatusBadge status={calculateOrderBillingStatus(order)} />
-                    <span className="text-xs text-muted-foreground">Beräknas från arbetskorten</span>
-                  </div>
+                  <BillingStatusBadge status={calculateOrderBillingStatus(order)} />
                 </div>
 
               </CardContent>
