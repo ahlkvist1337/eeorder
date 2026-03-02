@@ -70,7 +70,7 @@ export default function Statistics() {
   const productionStats = useProductionStats(orders, dateFilter);
 
   const stats = useMemo(() => {
-    const activeStatuses = ['created', 'planned', 'started', 'paused', 'arrived'];
+    const activeStatuses = ['created', 'started', 'paused', 'arrived'];
     const activeOrders = filteredOrders.filter(o => activeStatuses.includes(o.productionStatus));
     const completedOrders = filteredOrders.filter(o => o.productionStatus === 'completed');
     const billedOrders = filteredOrders.filter(o => {
