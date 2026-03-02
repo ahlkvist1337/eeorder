@@ -1,37 +1,15 @@
 
 
-# Kodgranskning av senaste andringar
+# Uppdatera importbeskrivning i PriceList.tsx
 
-## Resultat
+## Problem
+Texten i importdialogen (rad 567) beskriver det gamla beteendet: "hämta alla unika kombinationer... Dubbletter hoppas över." Det stämmer inte längre -- importen uppdaterar nu befintliga grundpriser om orderns pris är högre, och lägger bara till helt nya artikelnummer.
 
-Alla tre andringsomraden (URL-parametrar i Index, InstructionsEditor, Statistics + OrdersContext) ar korrekt implementerade. Koden ar ren, ingen dod kod finns. En mindre bugg hittades:
+## Fix
+Uppdatera texten på rad 567 i `src/pages/PriceList.tsx` till att korrekt beskriva beteendet:
 
-## Bugg: Ogiltig status i Statistics.tsx
+**Ny text:** "Detta importerar artikelnummer och priser från befintliga ordrar. Nya artikelnummer läggs till i prislistan. Befintliga artiklar uppdateras om orderns pris är högre än det nuvarande."
 
-**Fil:** `src/pages/Statistics.tsx`, rad 73
-
-```typescript
-const activeStatuses = ['created', 'planned', 'started', 'paused', 'arrived'];
-```
-
-`planned` ar inte en giltig `ProductionStatus`. Giltiga statusar ar: `created`, `started`, `paused`, `arrived`, `completed`, `cancelled`. Statusen `planned` matchar aldrig nagon order, sa den gor ingen skada, men den bor tas bort for att undvika forvirring.
-
-**Fix:** Ta bort `'planned'` fran arrayen:
-```typescript
-const activeStatuses = ['created', 'started', 'paused', 'arrived'];
-```
-
-## Ovriga filer -- inga problem
-
-| Fil | Status |
-|-----|--------|
-| `src/pages/Index.tsx` | OK -- URL-parametrar korrekt implementerade, inga onodiga importer eller dod kod |
-| `src/components/InstructionsEditor.tsx` | OK -- ren komponent, alla importer anvands |
-| `src/pages/CreateOrder.tsx` | OK -- `xmlArticleRows` state anvands korrekt, reset-logiken rensar alla relevanta states |
-| `src/contexts/OrdersContext.tsx` | OK -- `doneStatuses` korrekt, logiken for auto-completion ar ratt |
-| `src/pages/Statistics.tsx` | En rad att fixa (se ovan) |
-
-## Sammanfattning
-
-En enda andring behovs: ta bort den ogiltiga statusen `'planned'` fran `Statistics.tsx`.
+### Fil som ändras
+- `src/pages/PriceList.tsx` -- rad 567
 
