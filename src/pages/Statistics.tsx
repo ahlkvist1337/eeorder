@@ -73,8 +73,14 @@ export default function Statistics() {
     const activeStatuses = ['created', 'planned', 'started', 'paused', 'arrived'];
     const activeOrders = filteredOrders.filter(o => activeStatuses.includes(o.productionStatus));
     const completedOrders = filteredOrders.filter(o => o.productionStatus === 'completed');
-    const billedOrders = filteredOrders.filter(o => o.billingStatus === 'billed');
-    const readyForBilling = filteredOrders.filter(o => o.billingStatus === 'ready_for_billing');
+    const billedOrders = filteredOrders.filter(o => {
+      const allTrucks = (o.objects || []).flatMap(obj => obj.trucks || []);
+      return allTrucks.length > 0 && allTrucks.every(t => t.billingStatus === 'billed');
+    });
+    const readyForBilling = filteredOrders.filter(o => {
+      const allTrucks = (o.objects || []).flatMap(obj => obj.trucks || []);
+      return allTrucks.some(t => t.billingStatus === 'ready_for_billing');
+    });
     const deviationOrders = filteredOrders.filter(o => o.hasDeviation);
 
     const billedValue = billedOrders.reduce((sum, o) => sum + o.totalPrice, 0);
