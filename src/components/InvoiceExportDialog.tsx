@@ -23,22 +23,29 @@ interface InvoiceExportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   orders: Order[];
+  trucksByOrderOverride?: Record<string, ObjectTruck[]>;
+  previouslyBilledOverride?: Record<string, PreviouslyBilledItem[]>;
+  quantityOverrides?: Record<string, number>; // articleRowId -> quantity
 }
 
-export function InvoiceExportDialog({ open, onOpenChange, orders }: InvoiceExportDialogProps) {
+export function InvoiceExportDialog({ open, onOpenChange, orders, trucksByOrderOverride, previouslyBilledOverride, quantityOverrides }: InvoiceExportDialogProps) {
   const [exportPdf, setExportPdf] = useState(true);
   const [exportExcel, setExportExcel] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
 
-  // Get ready trucks grouped by order
-  const readyTrucks = getReadyTrucks(orders);
-  const trucksByOrder: Record<string, ObjectTruck[]> = {};
-  for (const order of orders) {
-    const orderTrucks = (order.objects || []).flatMap(obj =>
-      (obj.trucks || []).filter(t => t.billingStatus === 'ready_for_billing')
-    );
-    if (orderTrucks.length > 0) {
-      trucksByOrder[order.id] = orderTrucks;
+  // Get ready trucks grouped by order (use override if provided)
+  const readyTrucks = trucksByOrderOverride 
+    ? Object.values(trucksByOrderOverride).flat()
+    : getReadyTrucks(orders);
+  const trucksByOrder: Record<string, ObjectTruck[]> = trucksByOrderOverride || {};
+  if (!trucksByOrderOverride) {
+    for (const order of orders) {
+      const orderTrucks = (order.objects || []).flatMap(obj =>
+        (obj.trucks || []).filter(t => t.billingStatus === 'ready_for_billing')
+      );
+      if (orderTrucks.length > 0) {
+        trucksByOrder[order.id] = orderTrucks;
+      }
     }
   }
 
@@ -65,36 +72,40 @@ export function InvoiceExportDialog({ open, onOpenChange, orders }: InvoiceExpor
     setIsExporting(true);
     
     try {
-      // Fetch previously billed items for all orders
-      const orderIds = orders.map(o => o.id);
-      const { data: billedItems } = await supabase
-        .from('invoice_export_items')
-        .select('order_id, article_row_id, billed_quantity, billed_amount')
-        .in('order_id', orderIds);
+      // Use override if provided, otherwise fetch from DB
+      let previouslyBilledByOrder: Record<string, PreviouslyBilledItem[]> = {};
+      if (previouslyBilledOverride) {
+        previouslyBilledByOrder = previouslyBilledOverride;
+      } else {
+        // Fetch previously billed items for all orders
+        const orderIds = orders.map(o => o.id);
+        const { data: billedItems } = await supabase
+          .from('invoice_export_items')
+          .select('order_id, article_row_id, billed_quantity, billed_amount')
+          .in('order_id', orderIds);
 
-      // Group by order and aggregate by article_row_id
-      const previouslyBilledByOrder: Record<string, PreviouslyBilledItem[]> = {};
-      for (const item of billedItems || []) {
-        if (!item.article_row_id) continue;
-        if (!previouslyBilledByOrder[item.order_id]) {
-          previouslyBilledByOrder[item.order_id] = [];
-        }
-        const existing = previouslyBilledByOrder[item.order_id].find(
-          p => p.article_row_id === item.article_row_id
-        );
-        if (existing) {
-          existing.total_billed_quantity += Number(item.billed_quantity);
-          existing.total_billed_amount += Number(item.billed_amount);
-        } else {
-          previouslyBilledByOrder[item.order_id].push({
-            article_row_id: item.article_row_id,
-            total_billed_quantity: Number(item.billed_quantity),
-            total_billed_amount: Number(item.billed_amount),
-          });
+        for (const item of billedItems || []) {
+          if (!item.article_row_id) continue;
+          if (!previouslyBilledByOrder[item.order_id]) {
+            previouslyBilledByOrder[item.order_id] = [];
+          }
+          const existing = previouslyBilledByOrder[item.order_id].find(
+            p => p.article_row_id === item.article_row_id
+          );
+          if (existing) {
+            existing.total_billed_quantity += Number(item.billed_quantity);
+            existing.total_billed_amount += Number(item.billed_amount);
+          } else {
+            previouslyBilledByOrder[item.order_id].push({
+              article_row_id: item.article_row_id,
+              total_billed_quantity: Number(item.billed_quantity),
+              total_billed_amount: Number(item.billed_amount),
+            });
+          }
         }
       }
 
-      const exportData = prepareInvoiceExportData(orders, trucksByOrder, previouslyBilledByOrder);
+      const exportData = prepareInvoiceExportData(orders, trucksByOrder, previouslyBilledByOrder, quantityOverrides);
       
       if (exportPdf) {
         exportInvoiceToPdf(exportData);

@@ -340,25 +340,16 @@ export function ObjectTrucksEditor({
                     </Button>
                   )}
                   
-                  {/* Billing status dropdown - show when delivered */}
-                  {truck.status === 'delivered' && onTruckBillingStatusChange && (
-                    <Select
-                      value={truck.billingStatus}
-                      onValueChange={(value: TruckBillingStatus) => {
-                        onTruckBillingStatusChange(truck.id, value);
-                      }}
-                    >
-                      <SelectTrigger className="h-9 w-40 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(Object.keys(truckBillingStatusLabels) as TruckBillingStatus[]).map(s => (
-                          <SelectItem key={s} value={s} className="text-xs">
-                            {truckBillingStatusLabels[s]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  {/* Billing status badge - show when delivered (auto-set, no manual dropdown) */}
+                  {truck.status === 'delivered' && (
+                    <span className={cn(
+                      'text-xs px-2 py-1 rounded-md font-medium',
+                      truck.billingStatus === 'billed' ? 'bg-emerald-100 text-emerald-700' :
+                      truck.billingStatus === 'ready_for_billing' ? 'bg-blue-100 text-blue-700' :
+                      'bg-muted text-muted-foreground'
+                    )}>
+                      {truckBillingStatusLabels[truck.billingStatus]}
+                    </span>
                   )}
                 </div>
 

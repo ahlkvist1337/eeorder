@@ -1130,7 +1130,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
             ? Math.max(0, obj.completedQuantity + completedDelta) 
             : obj.completedQuantity,
           trucks: obj.trucks?.map(t =>
-            t.id === truckId ? { ...t, status: newStatus } : t
+            t.id === truckId ? { ...t, status: newStatus, ...(newStatus === 'delivered' ? { billingStatus: 'ready_for_billing' as TruckBillingStatus } : {}) } : t
           ),
         })),
         truckLifecycleEvents: [
@@ -1140,8 +1140,12 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       };
     }));
 
-    // Update truck status in DB
-    await supabase.from('object_trucks').update({ status: newStatus }).eq('id', truckId);
+    // Update truck status in DB (auto-set billing_status when delivered)
+    const truckDbUpdate: Record<string, unknown> = { status: newStatus };
+    if (newStatus === 'delivered') {
+      truckDbUpdate.billing_status = 'ready_for_billing';
+    }
+    await supabase.from('object_trucks').update(truckDbUpdate).eq('id', truckId);
     
     // Update object quantities in DB
     if (objectId && (receivedDelta !== 0 || completedDelta !== 0)) {
