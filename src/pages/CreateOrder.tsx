@@ -13,6 +13,7 @@ import { useOrders } from '@/hooks/useOrders';
 import { parseMonitorXML } from '@/lib/xmlParser';
 import { Upload, FileText, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
 import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
+import { InstructionsEditor } from '@/components/InstructionsEditor';
 import { OrderObjectsEditor } from '@/components/OrderObjectsEditor';
 import type { Order, OrderStep, ParsedXMLOrder, ArticleRow, OrderObject, Instruction } from '@/types/order';
 
@@ -43,6 +44,7 @@ export default function CreateOrder() {
   const [xmlSteps, setXmlSteps] = useState<OrderStep[]>([]);
   const [xmlComment, setXmlComment] = useState('');
   const [xmlInstructions, setXmlInstructions] = useState<Instruction[]>([]);
+  const [xmlArticleRows, setXmlArticleRows] = useState<ArticleRow[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
   const handleManualSubmit = async (e: React.FormEvent) => {
@@ -108,6 +110,7 @@ export default function CreateOrder() {
         }
 
         setParsedXml(parsed);
+        setXmlArticleRows(parsed.rows || []);
         setXmlInstructions(parsed.instructions || []);
       } catch (err) {
         setXmlError(err instanceof Error ? err.message : 'Kunde inte läsa XML-filen.');
@@ -185,13 +188,13 @@ export default function CreateOrder() {
       objects: xmlObjects.length > 0 ? xmlObjects : undefined,
       steps: xmlSteps,
       hasDeviation: false,
-      totalPrice: parsedXml.rows.reduce((sum, row) => sum + row.price * row.quantity, 0),
+      totalPrice: xmlArticleRows.reduce((sum, row) => sum + row.price * row.quantity, 0),
       xmlData: {
         supplier: parsedXml.supplier,
         orderDate: parsedXml.orderDate,
         deliveryDate: parsedXml.deliveryDate,
       },
-      articleRows: parsedXml.rows,
+      articleRows: xmlArticleRows,
       instructions: xmlInstructions.length > 0 ? xmlInstructions : undefined,
       stepStatusHistory: [],
     };
@@ -416,41 +419,22 @@ export default function CreateOrder() {
                         </div>
                       </div>
 
-                      {parsedXml.rows.length > 0 && (
-                        <div className="pt-2 border-t">
-                          <p className="text-sm font-medium mb-2">Artikelrader ({parsedXml.rows.length} st):</p>
-                          <ul className="text-sm space-y-1">
-                            {parsedXml.rows.map((row, i) => (
-                              <li key={i} className="text-muted-foreground">
-                                {row.text || row.partNumber || `Rad ${row.rowNumber}`}
-                                {row.quantity > 0 && ` (${row.quantity} ${row.unit})`}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+                      <div className="pt-2 border-t">
+                        <p className="text-sm font-medium mb-2">Artikelrader ({xmlArticleRows.length} st)</p>
+                        <ArticleRowsEditor
+                          rows={xmlArticleRows}
+                          onRowsChange={setXmlArticleRows}
+                          showTotal={true}
+                        />
+                      </div>
 
-                      {xmlInstructions.length > 0 && (
-                        <div className="pt-2 border-t">
-                          <p className="text-sm font-medium mb-2">Instruktioner ({xmlInstructions.length} st):</p>
-                          <ul className="text-sm space-y-1">
-                            {xmlInstructions.map((inst) => (
-                              <li key={inst.id} className="flex items-center gap-2 text-muted-foreground">
-                                <FileText className="h-3 w-3 shrink-0" />
-                                <span className="flex-1">{inst.text}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setXmlInstructions(prev => prev.filter(i => i.id !== inst.id))}
-                                  className="p-1 hover:text-destructive transition-colors"
-                                  title="Ta bort instruktion"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+                      <div className="pt-2 border-t">
+                        <p className="text-sm font-medium mb-2">Instruktioner ({xmlInstructions.length} st)</p>
+                        <InstructionsEditor
+                          instructions={xmlInstructions}
+                          onInstructionsChange={setXmlInstructions}
+                        />
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -485,6 +469,7 @@ export default function CreateOrder() {
                           setXmlSteps([]);
                           setXmlComment('');
                           setXmlInstructions([]);
+                          setXmlArticleRows([]);
                         }}
                       >
                         Välj annan fil
