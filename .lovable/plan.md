@@ -1,55 +1,27 @@
 
 
-# Lagg till instruktioner + redigera artikelrader vid XML-import
+# Fix: Statistik visar 0 kr redo for fakturering + orderstatus andras inte till Avslutad
 
-## Vad som andras
+## Problem 1: "Klar for fakturering" visar alltid 0 kr
 
-### 1. InstructionsEditor -- lagg till "Lagg till instruktion"-knapp
+Statistiksidan filtrerar pa `order.billingStatus === 'ready_for_billing'`, men orderns `billing_status` i databasen uppdateras aldrig -- bara enskilda arbetskorts `billing_status` satts till `ready_for_billing` nar de levereras. Ordernivan forblir `not_ready`.
 
-Komponenten saknar idag mojlighet att lagga till nya instruktioner. Lagga till:
-- En "Lagg till"-knapp langst ner (som i ArticleRowsEditor)
-- Ett inline-formuler med ett textfalt och spara/avbryt-knappar
-- Nya instruktioner far ett genererat UUID och radnummer
+**Losning**: Andra berakningen i `Statistics.tsx` sa att den harledar faktureringsstatusen fran arbetskorten istallet for orderns `billingStatus`-falt. En order raknas som "klar for fakturering" om minst ett arbetskort har `billingStatus === 'ready_for_billing'` och inget ar `not_billable` (eller enklare: minst ett ar `ready_for_billing`).
 
-### 2. CreateOrder.tsx -- ersatt statisk artikelradslista med ArticleRowsEditor
+Alternativt (och battre): berakna "klar for fakturering"-vardet genom att summera `totalPrice` for ordrar som har minst en truck med `billingStatus === 'ready_for_billing'` och ingen truck med `billingStatus === 'billed'` pa alla.
 
-Idag visas XML-importerade artikelrader som en enkel `<ul>`-lista (rad 419-431) utan mojlighet att redigera. Andra till:
-- Lagra artikelraderna i ett eget state (`xmlArticleRows`) som initieras fran `parsedXml.rows`
-- Visa `<ArticleRowsEditor>` istallet for den statiska listan
-- Visa `<InstructionsEditor>` (med den nya lagg-till-funktionen) istallet for den enkla instruktionslistan
-- Anvand `xmlArticleRows` vid submit istallet for `parsedXml.rows`
+## Problem 2: Orderstatus andras inte till "Avslutad"
 
-### Filer som andras
+I `updateTruckStatus` (rad 1225-1226) raknas bara truckar med exakt `status === 'completed'`. Om nagra truckar redan har status `packed` eller `delivered` rakas de inte som "klara", sa villkoret `completedCount === allTrucks.length` uppfylls aldrig.
 
-1. **`src/components/InstructionsEditor.tsx`** -- Lagg till "Lagg till instruktion"-funktionalitet med inline-formuler
-2. **`src/pages/CreateOrder.tsx`** -- Ersatt statiska listor med redigerbara komponenter for bade artikelrader och instruktioner i XML-floden
+**Losning**: Andra filtret sa att truckar med status `completed`, `packed` eller `delivered` alla raknas som "klara" vid kontrollen.
 
-### Teknisk detalj
+## Andringar
 
-**InstructionsEditor.tsx:**
-```typescript
-// Nytt state for att lagga till
-const [isAdding, setIsAdding] = useState(false);
-const [newText, setNewText] = useState('');
+### `src/pages/Statistics.tsx`
+- Andra `readyForBilling`-berakningen fran `o.billingStatus === 'ready_for_billing'` till att undersoka varje orders arbetskort: `o.objects?.some(obj => obj.trucks?.some(t => t.billingStatus === 'ready_for_billing'))`
+- Samma for `billedOrders`: kontrollera om alla truckar ar `billed`
 
-const handleAdd = () => {
-  if (!newText.trim()) return;
-  onInstructionsChange([...instructions, {
-    id: crypto.randomUUID(),
-    text: newText.trim(),
-    rowNumber: String(instructions.length + 1),
-  }]);
-  setNewText('');
-  setIsAdding(false);
-};
-```
-
-Ta aven bort den tidiga returen for tom lista sa att "Lagg till"-knappen alltid syns.
-
-**CreateOrder.tsx:**
-- Nytt state: `const [xmlArticleRows, setXmlArticleRows] = useState<ArticleRow[]>([]);`
-- Initieras i `handleFileUpload`: `setXmlArticleRows(parsed.rows);`
-- Ersatt `<ul>` med `<ArticleRowsEditor rows={xmlArticleRows} onRowsChange={setXmlArticleRows} />`
-- Ersatt inline instruktionslistan med `<InstructionsEditor instructions={xmlInstructions} onInstructionsChange={setXmlInstructions} />`
-- I `handleXmlSubmit`: anvand `xmlArticleRows` istallet for `parsedXml.rows`
+### `src/contexts/OrdersContext.tsx`
+- Rad 1225-1226: Andra `t.status === 'completed'` till `['completed', 'packed', 'delivered'].includes(t.status)` sa att truckar som redan passerat "Klar" ocksa raknas
 
