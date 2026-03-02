@@ -1,74 +1,92 @@
 
-# Effektivare faktureringsflode
+
+# Forbattra prisimport fran ordrar (upsert istallet for insert-only)
 
 ## Problem idag
-1. **Manuellt steg**: Back-office maste ga in i varje order och manuellt saetta arbetskort till "Klar for fakturering" -- for manga klick
-2. **Proportionell berakning ar vilseledande**: Belopp beraknas fran antal arbetskort, men det ar artikelraderna som har de faktiska beloppen
 
-## Losning: Tva andringar
+1. **0-kr priser uppdateras aldrig**: Om en prisrad redan finns med pris 0 kr (grundpris) och du andrar priset i en order, hoppar importen over raden eftersom artikelnumret redan finns i prislistan.
+2. **Dubbletter vid namnbyte**: Om du andrar step_name fran null (grundpris) till t.ex. "Malning", ser importen att `part_number|` (med tomt steg) inte langre finns och skapar en ny rad med grundpris -- nu finns samma artikelnummer tva ganger.
 
-### 1. Auto-status: Levererat = Klar for fakturering
+## Losning
 
-Nar ett arbetskort markeras som "Levererat" satts `billingStatus` automatiskt till `ready_for_billing`. Det manuella steget forsvinner helt.
+Andra `importFromOrders` i `src/hooks/usePriceList.ts` fran **enbart insert** till **upsert-logik**:
 
-**Andring i:**
-- `ObjectTrucksEditor.tsx` -- nar "Leverera"-knappen klickas, satt aven billingStatus
-- `OrdersContext.tsx` -- i `updateTruckStatus`, nar status blir `delivered`, satt aven billing_status till `ready_for_billing` i samma databasanrop
+### Ny logik
 
-Ta bort billing-status-dropdownen fran arbetskorts-raden (den som visas nar status ar "delivered") -- den behovs inte langre.
+1. Hamta alla artikelrader fran ordrar (som idag), sorterade med senaste order forst
+2. Hamta alla befintliga prisrader inklusive `id` och `price`
+3. For varje unikt artikelnummer fran ordrarna:
+   - **Finns INTE i prislistan** -> INSERT (som idag)
+   - **Finns i prislistan med step_name = null OCH orderns pris ar hogre** -> UPDATE priset till det nya vardet
+   - **Finns i prislistan med step_name = null OCH orderns pris ar lagre/lika** -> Skippa (behall befintligt pris)
+   - **Finns i prislistan men BARA med step_name (ej null)** -> INSERT en ny grundpris-rad (step_name = null)
 
-### 2. Faktureringsvy med artikelrader
+4. Returnera tydlig sammanfattning: `X nya, Y uppdaterade av Z totalt`
 
-Lagg till en tredje flik **"Fakturering"** i orderlistan (bredvid "Aktuella ordrar" och "Orderhistorik"). Denna vy visar:
+### Andring i en fil
 
-```text
-+--------------------------------------------------+
-| Fakturering (3 ordrar redo)                       |
-+--------------------------------------------------+
-| [Markera alla] [Exportera faktura]                |
-+--------------------------------------------------+
-| Order ON-2024-001 | Kund AB                       |
-|   Art.nr  | Beskrivning      | Antal | Pris  | Att fakturera |
-|   12345   | Behandling X     |    10 |  500  |     5 (50%)   |
-|   67890   | Transport        |     1 | 2000  |     1 (100%)  |
-|   Levererade kort: #135, #136 (2 av 4)           |
-|   Delsumma: 4 500 kr                              |
-|   [ ] Markera for fakturering                     |
-+--------------------------------------------------+
-| Order ON-2024-002 | Kund CD                       |
-|   ...                                             |
-+--------------------------------------------------+
+**`src/hooks/usePriceList.ts`** -- `importFromOrders`-funktionen:
+
+```typescript
+const importFromOrders = async (): Promise<{ total: number; imported: number; updated: number }> => {
+  // Hamta artikelrader + orderns created_at
+  const { data: articleRows, error: fetchError } = await supabase
+    .from('article_rows')
+    .select('part_number, text, price, orders(created_at)');
+
+  // ... felhantering som idag ...
+
+  // Hamta befintliga prisrader MED id och price
+  const { data: existingPrices } = await supabase
+    .from('price_list')
+    .select('id, part_number, step_name, price');
+
+  // Bygg map: part_number -> grundpris-rad (step_name = null)
+  const existingBasePrice = new Map();
+  for (const p of existingPrices || []) {
+    if (!p.step_name) {
+      existingBasePrice.set(p.part_number, { id: p.id, price: p.price });
+    }
+  }
+
+  // Deduplicera ordrar -- senaste forst (som idag)
+  // ...
+
+  const toInsert = [];
+  const toUpdate = [];
+
+  for (const [pn, row] of latestPerPartNumber) {
+    const existing = existingBasePrice.get(pn);
+    if (!existing) {
+      // Ny rad -- insert
+      toInsert.push(row);
+    } else if (row.price > existing.price) {
+      // Befintlig rad med lagre pris -- uppdatera
+      toUpdate.push({ id: existing.id, price: row.price, description: row.description });
+    }
+    // Annars: befintligt pris ar hogre/lika -- skippa
+  }
+
+  // INSERT nya rader
+  if (toInsert.length > 0) {
+    await supabase.from('price_list').insert(
+      toInsert.map(r => ({ part_number: r.part_number, description: r.description, price: r.price, step_name: null }))
+    );
+  }
+
+  // UPDATE befintliga rader med hogre pris
+  for (const upd of toUpdate) {
+    await supabase.from('price_list').update({ price: upd.price, description: upd.description }).eq('id', upd.id);
+  }
+
+  toast({ title: `${toInsert.length} nya, ${toUpdate.length} uppdaterade prisrader` });
+  return { total, imported: toInsert.length, updated: toUpdate.length };
+};
 ```
 
-**Vad vyn visar per order:**
-- Ordernummer, kund, referens
-- Artikelrader med beraknad kvantitet att fakturera (baserat pa andel levererade arbetskort)
-- **Redigerbara belopp**: back-office kan justera "Att fakturera"-kvantiteten per artikelrad innan export
-- Vilka arbetskort som ar levererade
-- Tidigare fakturerat belopp (avraknat automatiskt)
+### Sammanfattning
+- En fil andras: `src/hooks/usePriceList.ts`
+- Returtypen utvidgas med `updated: number`
+- Anropande komponenter (PriceList.tsx) uppdateras for att visa det nya meddelandet
+- Inga databasandringar -- anvander befintliga tabeller
 
-**Villkor for att synas:** Minst ett arbetskort med `billingStatus = 'ready_for_billing'`
-
-**Export-flode:**
-1. Markera ordrar att fakturera (eller "Markera alla")
-2. Justera kvantiteter vid behov
-3. Klicka "Exportera" -- oppnar befintlig InvoiceExportDialog men med de justerade beloppen
-4. Vid export markeras berorda arbetskort som `billed`
-
-### Filer som andras
-
-1. **`src/contexts/OrdersContext.tsx`** -- I `updateTruckStatus`: nar status = `delivered`, satt aven `billing_status = 'ready_for_billing'`
-2. **`src/components/ObjectTrucksEditor.tsx`** -- Ta bort billing-status-dropdownen (visas ej langre nar delivered)
-3. **`src/pages/Index.tsx`** -- Lagg till en tredje flik "Fakturering"
-4. **`src/components/InvoicingTab.tsx`** (ny fil) -- Faktureringsvy-komponent med:
-   - Lista ordrar med `ready_for_billing`-arbetskort
-   - Visa artikelrader per order med beraknad och redigerbar kvantitet
-   - Markering och export
-5. **`src/components/InvoiceExportDialog.tsx`** -- Acceptera valfria overridna kvantiteter fran faktureringsvy
-6. **`src/lib/invoiceExport.ts`** -- Stod for manuellt justerade kvantiteter (override av proportionell berakning)
-
-### Vad som INTE andras
-- Databasschema -- inga nya tabeller behovs
-- Befintlig faktura-export-logik (PDF/Excel) -- fungerar som forut
-- `invoice_exports` och `invoice_export_items` -- sparar fortfarande historik
-- Arbetskortets produktionsflode (steg, status, packa)
