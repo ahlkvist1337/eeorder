@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useMemo, useCallback } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Upload, Search, X } from 'lucide-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Layout } from '@/components/Layout';
@@ -23,17 +23,36 @@ const Index = () => {
   useDocumentTitle('Ordrar');
   const { orders, isLoading, bulkUpdateOrders } = useOrders();
   const { isProduction, isAdmin } = useAuth();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [archiveSearchQuery, setArchiveSearchQuery] = useState('');
-  const [filters, setFilters] = useState<{
-    productionStatus: OrderAdminStatus | 'all';
-    billingStatus: BillingStatus | 'all';
-    hasDeviation: boolean | null;
-  }>({
-    productionStatus: 'created',
-    billingStatus: 'all',
-    hasDeviation: null,
-  });
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const activeTab = searchParams.get('tab') || 'active';
+  const searchQuery = searchParams.get('q') || '';
+  const archiveSearchQuery = searchParams.get('aq') || '';
+
+  const filters = useMemo(() => ({
+    productionStatus: (searchParams.get('status') || 'created') as OrderAdminStatus | 'all',
+    billingStatus: (searchParams.get('billing') || 'all') as BillingStatus | 'all',
+    hasDeviation: searchParams.get('deviation') === null ? null : searchParams.get('deviation') === 'yes',
+  }), [searchParams]);
+
+  const updateParam = useCallback((key: string, value: string | null) => {
+    setSearchParams(prev => {
+      if (value === null || value === '') prev.delete(key);
+      else prev.set(key, value);
+      return prev;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const setSearchQuery = useCallback((q: string) => updateParam('q', q), [updateParam]);
+  const setArchiveSearchQuery = useCallback((q: string) => updateParam('aq', q), [updateParam]);
+  const setFilters = useCallback((f: typeof filters) => {
+    setSearchParams(prev => {
+      if (f.productionStatus === 'created') prev.delete('status'); else prev.set('status', f.productionStatus);
+      if (f.billingStatus === 'all') prev.delete('billing'); else prev.set('billing', f.billingStatus);
+      if (f.hasDeviation === null) prev.delete('deviation'); else prev.set('deviation', f.hasDeviation ? 'yes' : 'no');
+      return prev;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   // Separate orders into active and archived
   const activeOrders = useMemo(() => 
@@ -156,7 +175,7 @@ const Index = () => {
         </div>
 
         {/* Tabs for active/archived orders */}
-        <Tabs defaultValue="active" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(v) => updateParam('tab', v === 'active' ? null : v)} className="space-y-4">
           <TabsList>
             <TabsTrigger value="active">
               Aktuella ordrar ({activeOrders.length})
