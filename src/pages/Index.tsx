@@ -8,6 +8,7 @@ import { OrderFilters } from '@/components/OrderFilters';
 import { BulkEditToolbar } from '@/components/BulkEditToolbar';
 import { BulkEditConfirmDialog, type BulkEditType } from '@/components/BulkEditConfirmDialog';
 import { InvoiceExportDialog } from '@/components/InvoiceExportDialog';
+import { InvoicingTab } from '@/components/InvoicingTab';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -160,6 +161,9 @@ const Index = () => {
             <TabsTrigger value="active">
               Aktuella ordrar ({activeOrders.length})
             </TabsTrigger>
+            <TabsTrigger value="invoicing">
+              Fakturering
+            </TabsTrigger>
             <TabsTrigger value="archive">
               Orderhistorik ({archivedOrders.length})
             </TabsTrigger>
@@ -195,6 +199,11 @@ const Index = () => {
               selectedOrderIds={isProduction ? selectedOrderIds : new Set()}
               onSelectionChange={isProduction ? setSelectedOrderIds : () => {}}
             />
+          </TabsContent>
+
+          {/* Invoicing tab */}
+          <TabsContent value="invoicing" className="space-y-4">
+            <InvoicingTab />
           </TabsContent>
 
           {/* Archived orders tab */}

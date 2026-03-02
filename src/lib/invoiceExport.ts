@@ -67,7 +67,8 @@ function getCompletedDate(order: Order): string | undefined {
 export function calculateProportionalBilling(
   order: Order,
   trucksToInvoice: ObjectTruck[],
-  previouslyBilled: PreviouslyBilledItem[]
+  previouslyBilled: PreviouslyBilledItem[],
+  quantityOverrides?: Record<string, number>
 ): InvoiceExportArticleRow[] {
   const articleRows = order.articleRows || [];
   const results: InvoiceExportArticleRow[] = [];
@@ -77,20 +78,21 @@ export function calculateProportionalBilling(
     const object = order.objects?.find(o => o.id === row.objectId);
     
     if (!object || !object.trucks || object.trucks.length === 0) {
-      // No object linkage - include full amount if not previously billed
+      // No object linkage - use override or full remaining amount
       const prev = previouslyBilled.find(p => p.article_row_id === row.id);
       const prevQty = prev?.total_billed_quantity || 0;
-      const remaining = row.quantity - prevQty;
+      const override = quantityOverrides?.[row.id];
+      const qty = override !== undefined ? override : (row.quantity - prevQty);
       
-      if (remaining > 0) {
+      if (qty > 0) {
         results.push({
           partNumber: row.partNumber,
           text: row.text,
-          quantity: remaining,
+          quantity: qty,
           totalQuantity: row.quantity,
           previouslyBilled: prevQty,
           price: row.price,
-          total: remaining * row.price,
+          total: qty * row.price,
           articleRowId: row.id,
         });
       }
@@ -108,15 +110,20 @@ export function calculateProportionalBilling(
     const prevQty = prev?.total_billed_quantity || 0;
     const remainingQty = row.quantity - prevQty;
 
-    // Proportional: (trucks invoiced / total trucks) * total quantity
-    const proportionalQty = Math.min(
-      (trucksBeingInvoiced.length / totalTrucks) * row.quantity,
-      remainingQty
-    );
+    // Use override if provided, otherwise calculate proportionally
+    const override = quantityOverrides?.[row.id];
+    let finalQty: number;
+    if (override !== undefined) {
+      finalQty = Math.min(override, remainingQty);
+    } else {
+      finalQty = Math.min(
+        (trucksBeingInvoiced.length / totalTrucks) * row.quantity,
+        remainingQty
+      );
+    }
 
-    if (proportionalQty > 0) {
-      // Round to 2 decimals for clean numbers
-      const roundedQty = Math.round(proportionalQty * 100) / 100;
+    if (finalQty > 0) {
+      const roundedQty = Math.round(finalQty * 100) / 100;
       results.push({
         partNumber: row.partNumber,
         text: row.text,
@@ -137,7 +144,8 @@ export function calculateProportionalBilling(
 export function prepareInvoiceExportData(
   orders: Order[],
   trucksByOrder: Record<string, ObjectTruck[]>,
-  previouslyBilledByOrder: Record<string, PreviouslyBilledItem[]>
+  previouslyBilledByOrder: Record<string, PreviouslyBilledItem[]>,
+  quantityOverrides?: Record<string, number>
 ): InvoiceExportData {
   const exportId = generateExportId();
   const now = new Date();
@@ -160,7 +168,7 @@ export function prepareInvoiceExportData(
       isPartial = true;
     }
 
-    const articleRows = calculateProportionalBilling(order, trucksToInvoice, previouslyBilled);
+    const articleRows = calculateProportionalBilling(order, trucksToInvoice, previouslyBilled, quantityOverrides);
     const orderTotal = articleRows.reduce((sum, r) => sum + r.total, 0);
 
     return {
