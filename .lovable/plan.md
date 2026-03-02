@@ -1,91 +1,74 @@
 
-# Forbattrad statistik med tidsfilter och prisuppfoljning
+# Effektivare faktureringsflode
 
-## Sammanfattning
+## Problem idag
+1. **Manuellt steg**: Back-office maste ga in i varje order och manuellt saetta arbetskort till "Klar for fakturering" -- for manga klick
+2. **Proportionell berakning ar vilseledande**: Belopp beraknas fran antal arbetskort, men det ar artikelraderna som har de faktiska beloppen
 
-Gor om statistiksidan med:
-1. **Tidsfilter** -- valj tidsperiod (28 dagar, 3 manader, 6 manader, sedan start)
-2. **Ordrar med 0-prisartiklar** -- lista over ordrar som har artikelrader med pris 0, med direktlankar
+## Losning: Tva andringar
 
-## Andringar
+### 1. Auto-status: Levererat = Klar for fakturering
 
-### 1. `src/pages/Statistics.tsx` -- Huvudandring
+Nar ett arbetskort markeras som "Levererat" satts `billingStatus` automatiskt till `ready_for_billing`. Det manuella steget forsvinner helt.
 
-**Tidsfilter (ny state + UI):**
-- Lagg till en `Select`-komponent langst upp med alternativ: "Senaste 28 dagarna", "Senaste 3 manaderna", "Senaste 6 manaderna", "Sedan start"
-- Filtrera `orders` baserat pa `createdAt` innan alla berakningar
-- Alla existerande statistikkort uppdateras automatiskt baserat pa filtrerade ordrar
+**Andring i:**
+- `ObjectTrucksEditor.tsx` -- nar "Leverera"-knappen klickas, satt aven billingStatus
+- `OrdersContext.tsx` -- i `updateTruckStatus`, nar status blir `delivered`, satt aven billing_status till `ready_for_billing` i samma databasanrop
 
-**Nytt avsnitt: "Ordrar med 0-pris artiklar":**
-- Nytt block under "Affar & uppfoljning"
-- Kort som visar antal ordrar med minst en artikelrad dar `price === 0`
-- Under kortet: en klickbar lista/tabell med ordernummer, kund och antal 0-prisrader
-- Varje rad ar en `Link` till `/order/:id` sa man snabbt kan navigera dit
+Ta bort billing-status-dropdownen fran arbetskorts-raden (den som visas nar status ar "delivered") -- den behovs inte langre.
 
-### 2. `src/hooks/useProductionStats.ts` -- Stod for tidsfilter
+### 2. Faktureringsvy med artikelrader
 
-- Lagg till en valfri `dateFilter: Date | null` parameter
-- Filtrera lifecycle events baserat pa datumet for att berakningarna (klara idag, ledtid etc.) stammer med vald period
-
-### Detaljerat flode
+Lagg till en tredje flik **"Fakturering"** i orderlistan (bredvid "Aktuella ordrar" och "Orderhistorik"). Denna vy visar:
 
 ```text
-+----------------------------------+
-|  Statistik                       |
-|  [Senaste 28 dagarna v]          |
-+----------------------------------+
-|  Produktion & flode              |
-|  [Pagaende] [Vantande] [Klara]   |
-|  [Forsenade]                     |
-|  [Aldsta pagaende] [Ledtid snitt]|
-+----------------------------------+
-|  Affar & uppfoljning             |
-|  [Aktiva] [Avslutade] [Faktur.]  |
-|  [Avvikelser]                    |
-|  [Fakturerat varde] [Klar f.fakt]|
-|  [Planerad ledtid]               |
-+----------------------------------+
-|  Prisuppfoljning                 |
-|  [X ordrar med 0-pris artiklar]  |
-|  +------------------------------+|
-|  | Ordernr | Kund | 0-pris rader||
-|  | ON-123  | ABC  | 3 st    [->]||
-|  | ON-456  | DEF  | 1 st    [->]||
-|  +------------------------------+|
-+----------------------------------+
++--------------------------------------------------+
+| Fakturering (3 ordrar redo)                       |
++--------------------------------------------------+
+| [Markera alla] [Exportera faktura]                |
++--------------------------------------------------+
+| Order ON-2024-001 | Kund AB                       |
+|   Art.nr  | Beskrivning      | Antal | Pris  | Att fakturera |
+|   12345   | Behandling X     |    10 |  500  |     5 (50%)   |
+|   67890   | Transport        |     1 | 2000  |     1 (100%)  |
+|   Levererade kort: #135, #136 (2 av 4)           |
+|   Delsumma: 4 500 kr                              |
+|   [ ] Markera for fakturering                     |
++--------------------------------------------------+
+| Order ON-2024-002 | Kund CD                       |
+|   ...                                             |
++--------------------------------------------------+
 ```
 
-### Teknisk implementation
+**Vad vyn visar per order:**
+- Ordernummer, kund, referens
+- Artikelrader med beraknad kvantitet att fakturera (baserat pa andel levererade arbetskort)
+- **Redigerbara belopp**: back-office kan justera "Att fakturera"-kvantiteten per artikelrad innan export
+- Vilka arbetskort som ar levererade
+- Tidigare fakturerat belopp (avraknat automatiskt)
 
-**Statistics.tsx:**
-```typescript
-const [timePeriod, setTimePeriod] = useState<string>('28d');
+**Villkor for att synas:** Minst ett arbetskort med `billingStatus = 'ready_for_billing'`
 
-const filteredOrders = useMemo(() => {
-  if (timePeriod === 'all') return orders;
-  const now = new Date();
-  const cutoff = {
-    '28d': subDays(now, 28),
-    '3m': subMonths(now, 3),
-    '6m': subMonths(now, 6),
-  }[timePeriod];
-  return orders.filter(o => new Date(o.createdAt) >= cutoff!);
-}, [orders, timePeriod]);
-
-// 0-pris ordrar
-const zeroPriceOrders = useMemo(() => {
-  return filteredOrders
-    .map(o => ({
-      ...o,
-      zeroPriceCount: (o.articleRows || []).filter(r => r.price === 0).length,
-    }))
-    .filter(o => o.zeroPriceCount > 0);
-}, [filteredOrders]);
-```
-
-**useProductionStats.ts:**
-- Lagg till `dateFilter` parameter for att filtrera lifecycle events och trucks baserat pa vald period
+**Export-flode:**
+1. Markera ordrar att fakturera (eller "Markera alla")
+2. Justera kvantiteter vid behov
+3. Klicka "Exportera" -- oppnar befintlig InvoiceExportDialog men med de justerade beloppen
+4. Vid export markeras berorda arbetskort som `billed`
 
 ### Filer som andras
-1. `src/pages/Statistics.tsx` -- tidsfilter, filtrering, 0-pris-sektion
-2. `src/hooks/useProductionStats.ts` -- stod for datumfiltrering
+
+1. **`src/contexts/OrdersContext.tsx`** -- I `updateTruckStatus`: nar status = `delivered`, satt aven `billing_status = 'ready_for_billing'`
+2. **`src/components/ObjectTrucksEditor.tsx`** -- Ta bort billing-status-dropdownen (visas ej langre nar delivered)
+3. **`src/pages/Index.tsx`** -- Lagg till en tredje flik "Fakturering"
+4. **`src/components/InvoicingTab.tsx`** (ny fil) -- Faktureringsvy-komponent med:
+   - Lista ordrar med `ready_for_billing`-arbetskort
+   - Visa artikelrader per order med beraknad och redigerbar kvantitet
+   - Markering och export
+5. **`src/components/InvoiceExportDialog.tsx`** -- Acceptera valfria overridna kvantiteter fran faktureringsvy
+6. **`src/lib/invoiceExport.ts`** -- Stod for manuellt justerade kvantiteter (override av proportionell berakning)
+
+### Vad som INTE andras
+- Databasschema -- inga nya tabeller behovs
+- Befintlig faktura-export-logik (PDF/Excel) -- fungerar som forut
+- `invoice_exports` och `invoice_export_items` -- sparar fortfarande historik
+- Arbetskortets produktionsflode (steg, status, packa)
