@@ -1222,8 +1222,9 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       const allTrucks = order.objects?.flatMap(obj => obj.trucks || []) || [];
       
       // Count completed trucks (including this one that we just updated)
+      const doneStatuses = ['completed', 'packed', 'delivered'];
       const completedCount = allTrucks.filter(t => 
-        t.id === truckId ? true : t.status === 'completed'
+        t.id === truckId ? true : doneStatuses.includes(t.status)
       ).length;
       
       // If all trucks are now completed, set order to completed
