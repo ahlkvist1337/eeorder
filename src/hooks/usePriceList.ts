@@ -84,7 +84,7 @@ export function usePriceList() {
     return true;
   };
 
-  const importFromOrders = async (): Promise<{ total: number; imported: number }> => {
+  const importFromOrders = async (): Promise<{ total: number; imported: number; updated: number }> => {
     // Hämta artikelrader + orderns created_at så vi kan ta "senaste" pris per artikelnummer
     const { data: articleRows, error: fetchError } = await supabase
       .from('article_rows')
@@ -96,20 +96,23 @@ export function usePriceList() {
         description: fetchError.message,
         variant: 'destructive',
       });
-      return { total: 0, imported: 0 };
+      return { total: 0, imported: 0, updated: 0 };
     }
 
-    // Hämta befintliga prisrader för att undvika dubbletter
+    // Hämta befintliga prisrader MED id och price
     const { data: existingPrices } = await supabase
       .from('price_list')
-      .select('part_number, step_name');
+      .select('id, part_number, step_name, price');
 
-    const existingKeys = new Set(
-      (existingPrices || []).map(p => `${p.part_number}|${p.step_name || ''}`)
-    );
+    // Bygg map: part_number -> grundpris-rad (step_name = null)
+    const existingBasePrice = new Map<string, { id: string; price: number }>();
+    for (const p of existingPrices || []) {
+      if (!p.step_name) {
+        existingBasePrice.set(p.part_number, { id: p.id, price: p.price });
+      }
+    }
 
-    // OBS: eftersom vi importerar med step_name = null så tillåter unika indexet bara
-    // EN rad per part_number (för "tomt steg"). Därför deduplicerar vi per part_number.
+    // Sortera senaste order först
     const sorted = [...(articleRows || [])].sort((a: any, b: any) => {
       const aT = a?.orders?.created_at ? new Date(a.orders.created_at).getTime() : 0;
       const bT = b?.orders?.created_at ? new Date(b.orders.created_at).getTime() : 0;
@@ -131,39 +134,57 @@ export function usePriceList() {
 
     const total = latestPerPartNumber.size;
 
-    // Filtrera bort de som redan finns (med tomt steg)
-    const rowsToInsert = Array.from(latestPerPartNumber.values()).filter((r) => !existingKeys.has(`${r.part_number}|`));
-    const toInsertCount = rowsToInsert.length;
+    const toInsert: { part_number: string; description: string; price: number }[] = [];
+    const toUpdate: { id: string; price: number; description: string }[] = [];
 
-    if (toInsertCount === 0) {
+    for (const [pn, row] of latestPerPartNumber) {
+      const existing = existingBasePrice.get(pn);
+      if (!existing) {
+        toInsert.push(row);
+      } else if (row.price > existing.price) {
+        toUpdate.push({ id: existing.id, price: row.price, description: row.description });
+      }
+    }
+
+    // INSERT nya rader
+    if (toInsert.length > 0) {
+      const { error: insertError } = await supabase
+        .from('price_list')
+        .insert(
+          toInsert.map(r => ({
+            part_number: r.part_number,
+            description: r.description,
+            price: r.price,
+            step_name: null,
+          }))
+        );
+
+      if (insertError) {
+        toast({
+          title: 'Fel vid import',
+          description: insertError.message,
+          variant: 'destructive',
+        });
+        return { total, imported: 0, updated: 0 };
+      }
+    }
+
+    // UPDATE befintliga rader med högre pris
+    for (const upd of toUpdate) {
+      await supabase.from('price_list').update({ price: upd.price, description: upd.description }).eq('id', upd.id);
+    }
+
+    const parts = [];
+    if (toInsert.length > 0) parts.push(`${toInsert.length} nya`);
+    if (toUpdate.length > 0) parts.push(`${toUpdate.length} uppdaterade`);
+    if (parts.length === 0) {
       toast({ title: `Alla ${total} rader finns redan i prislistan` });
-      return { total, imported: 0 };
+    } else {
+      toast({ title: `${parts.join(', ')} prisrader (av ${total} totalt)` });
     }
 
-    // Infoga nya rader
-    const { error: insertError } = await supabase
-      .from('price_list')
-      .insert(
-        rowsToInsert.map(r => ({
-          part_number: r.part_number,
-          description: r.description,
-          price: r.price,
-          step_name: null,
-        }))
-      );
-
-    if (insertError) {
-      toast({
-        title: 'Fel vid import',
-        description: insertError.message,
-        variant: 'destructive',
-      });
-      return { total, imported: 0 };
-    }
-
-    toast({ title: `${toInsertCount} nya prisrader importerade` });
     await fetchPrices();
-    return { total, imported: toInsertCount };
+    return { total, imported: toInsert.length, updated: toUpdate.length };
   };
 
   const deletePrice = async (id: string) => {
