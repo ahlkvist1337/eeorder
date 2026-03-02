@@ -734,10 +734,19 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Delete existing steps and insert new ones
-      await supabase.from('order_steps').delete().eq('order_id', id);
+      // Selective delete + upsert to preserve truck_step_status (ON DELETE CASCADE)
+      const oldStepIds = new Set((previousSteps || currentOrder?.steps || []).map(s => s.id));
+      const newStepIds = new Set(updates.steps.map(s => s.id));
+      const removedStepIds = [...oldStepIds].filter(sid => !newStepIds.has(sid));
+
+      // Delete ONLY removed steps (cascade correctly removes their truck_step_status)
+      if (removedStepIds.length > 0) {
+        await supabase.from('order_steps').delete().in('id', removedStepIds);
+      }
+
+      // Upsert remaining + new steps (preserves existing truck_step_status)
       if (updates.steps.length > 0) {
-        const { error } = await supabase.from('order_steps').insert(
+        const { error } = await supabase.from('order_steps').upsert(
           updates.steps.map(step => ({
             id: step.id,
             order_id: id,
@@ -750,7 +759,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
             actual_start: step.actualStart || null,
             actual_end: step.actualEnd || null,
             price: step.price ?? null,
-          }))
+          })),
+          { onConflict: 'id' }
         );
         if (error) throw error;
       }
