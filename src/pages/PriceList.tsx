@@ -564,7 +564,7 @@ export default function PriceList() {
             <AlertDialogHeader>
               <AlertDialogTitle>Importera från ordrar</AlertDialogTitle>
               <AlertDialogDescription>
-                Detta kommer att hämta alla unika kombinationer av artikelnummer, benämning och pris från befintliga ordrar och lägga till dem i prislistan. Dubbletter hoppas över.
+                Detta importerar artikelnummer och priser från befintliga ordrar. Nya artikelnummer läggs till i prislistan. Befintliga artiklar uppdateras om orderns pris är högre än det nuvarande.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
