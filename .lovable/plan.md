@@ -1,27 +1,37 @@
 
 
-# Fix: Statistik visar 0 kr redo for fakturering + orderstatus andras inte till Avslutad
+# Kodgranskning av senaste andringar
 
-## Problem 1: "Klar for fakturering" visar alltid 0 kr
+## Resultat
 
-Statistiksidan filtrerar pa `order.billingStatus === 'ready_for_billing'`, men orderns `billing_status` i databasen uppdateras aldrig -- bara enskilda arbetskorts `billing_status` satts till `ready_for_billing` nar de levereras. Ordernivan forblir `not_ready`.
+Alla tre andringsomraden (URL-parametrar i Index, InstructionsEditor, Statistics + OrdersContext) ar korrekt implementerade. Koden ar ren, ingen dod kod finns. En mindre bugg hittades:
 
-**Losning**: Andra berakningen i `Statistics.tsx` sa att den harledar faktureringsstatusen fran arbetskorten istallet for orderns `billingStatus`-falt. En order raknas som "klar for fakturering" om minst ett arbetskort har `billingStatus === 'ready_for_billing'` och inget ar `not_billable` (eller enklare: minst ett ar `ready_for_billing`).
+## Bugg: Ogiltig status i Statistics.tsx
 
-Alternativt (och battre): berakna "klar for fakturering"-vardet genom att summera `totalPrice` for ordrar som har minst en truck med `billingStatus === 'ready_for_billing'` och ingen truck med `billingStatus === 'billed'` pa alla.
+**Fil:** `src/pages/Statistics.tsx`, rad 73
 
-## Problem 2: Orderstatus andras inte till "Avslutad"
+```typescript
+const activeStatuses = ['created', 'planned', 'started', 'paused', 'arrived'];
+```
 
-I `updateTruckStatus` (rad 1225-1226) raknas bara truckar med exakt `status === 'completed'`. Om nagra truckar redan har status `packed` eller `delivered` rakas de inte som "klara", sa villkoret `completedCount === allTrucks.length` uppfylls aldrig.
+`planned` ar inte en giltig `ProductionStatus`. Giltiga statusar ar: `created`, `started`, `paused`, `arrived`, `completed`, `cancelled`. Statusen `planned` matchar aldrig nagon order, sa den gor ingen skada, men den bor tas bort for att undvika forvirring.
 
-**Losning**: Andra filtret sa att truckar med status `completed`, `packed` eller `delivered` alla raknas som "klara" vid kontrollen.
+**Fix:** Ta bort `'planned'` fran arrayen:
+```typescript
+const activeStatuses = ['created', 'started', 'paused', 'arrived'];
+```
 
-## Andringar
+## Ovriga filer -- inga problem
 
-### `src/pages/Statistics.tsx`
-- Andra `readyForBilling`-berakningen fran `o.billingStatus === 'ready_for_billing'` till att undersoka varje orders arbetskort: `o.objects?.some(obj => obj.trucks?.some(t => t.billingStatus === 'ready_for_billing'))`
-- Samma for `billedOrders`: kontrollera om alla truckar ar `billed`
+| Fil | Status |
+|-----|--------|
+| `src/pages/Index.tsx` | OK -- URL-parametrar korrekt implementerade, inga onodiga importer eller dod kod |
+| `src/components/InstructionsEditor.tsx` | OK -- ren komponent, alla importer anvands |
+| `src/pages/CreateOrder.tsx` | OK -- `xmlArticleRows` state anvands korrekt, reset-logiken rensar alla relevanta states |
+| `src/contexts/OrdersContext.tsx` | OK -- `doneStatuses` korrekt, logiken for auto-completion ar ratt |
+| `src/pages/Statistics.tsx` | En rad att fixa (se ovan) |
 
-### `src/contexts/OrdersContext.tsx`
-- Rad 1225-1226: Andra `t.status === 'completed'` till `['completed', 'packed', 'delivered'].includes(t.status)` sa att truckar som redan passerat "Klar" ocksa raknas
+## Sammanfattning
+
+En enda andring behovs: ta bort den ogiltiga statusen `'planned'` fran `Statistics.tsx`.
 
