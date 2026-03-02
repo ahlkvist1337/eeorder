@@ -1,92 +1,75 @@
 
-# Fix: Objektsteg-redigering forstor arbetskortsstatus
 
-## Rotorsak
+# Bevara flik- och filterval vid navigering
 
-Alla tre problem har samma grundorsak: nar steg andras (omordning, borttagning, tillagg) kor `updateOrder` en **delete-all + re-insert** strategi for `order_steps`:
-
-```
-DELETE FROM order_steps WHERE order_id = ?
-INSERT INTO order_steps (...) VALUES (...)
-```
-
-Problemet: `truck_step_status` har en **ON DELETE CASCADE** FK till `order_steps.step_id`. Sa nar alla steg raderas (aven tillfalligt) forsvinner ALLA arbetskortens stegstatusar. Nar stegen aterinfogas saknar arbetskorten sina statusar -- alla blir "pending" igen.
-
-**Konsekvenser:**
-1. **Steg-omordning**: Stegen sparas men alla arbetskortstatusar nollstalls
-2. **Borttagning av steg**: Samma problem -- alla statusar forsvinner, inte bara for det borttagna steget
-3. **Krav pa siduppdatering**: Den optimistiska uppdateringen i UI:t reflekterar inte forlusten av truck_step_status, sa anvandarens lokala state visar gammal data tills sidan laddas om
-4. **Felmeddelande vid borttagning**: Troligen en timing-relaterad FK-constraint error under delete+reinsert
+## Problem
+Alla filterval, aktiv flik och soktext lagras i komponentens lokala `useState`. Nar du navigerar till en order och sedan tillbaka monteras `Index`-komponenten om fran scratch -- allt nollstalls till standardvarden (flik "active", status "created", etc.).
 
 ## Losning
+Spara flik och filter i URL:ens query-parametrar (`useSearchParams` fran react-router-dom). Da bevaras de nar du navigerar tillbaka med webbläsarens bakåtknapp eller via länk.
 
-Andra `updateOrder` i `OrdersContext.tsx` fran delete-all+reinsert till en **upsert-strategi** for steg (precis som redan anvands for objekt):
+### Vad som sparas i URL:en
+- `tab` -- aktiv flik (active / invoicing / archive)
+- `status` -- produktionsstatusfilter
+- `billing` -- faktureringsfilter
+- `deviation` -- avvikelsefilter
+- `q` -- soktext (aktuella ordrar)
+- `aq` -- soktext (arkiv)
 
-### Andring i `src/contexts/OrdersContext.tsx`
+Exempel-URL: `/?tab=archive&q=ABC123`
 
-Ersatt steg-hanteringen (rad ~737-756) med:
+### Andring i en fil
 
-1. **Identifiera borttagna steg**: Jamfor gamla step-IDs med nya step-IDs
-2. **Radera enbart borttagna steg**: `DELETE FROM order_steps WHERE id IN (borttagna_ids)` -- detta cascade-raderar BARA de truck_step_status-rader som tillhor det borttagna steget (korrekt beteende)
-3. **Upsert ovriga steg**: `UPSERT` for alla kvarvarande/nya steg -- bevarar befintliga rader och lagger till nya
+**`src/pages/Index.tsx`**:
+
+1. Ersatt `useState` for `searchQuery`, `archiveSearchQuery`, `filters` och tab-valet med `useSearchParams`
+2. Skriv hjalpfunktioner som laser/skriver query-params
+3. Tabs-komponenten anvander `value` + `onValueChange` istallet for `defaultValue`
+4. Nar en anvandare klickar pa en order (Link till `/order/:id`) bevaras query-params automatiskt i webblasarhistoriken -- nar anvandaren trycker "tillbaka" atergar de till samma URL med samma filter
+
+### Exempel pa hur det fungerar
 
 ```text
-Fore (farlig):
-  DELETE alla steg -> CASCADE raderar ALLA truck_step_status
-  INSERT steg tillbaka -> truck_step_status ar borta
+1. Anvandaren valjer fliken "Orderhistorik" och soker pa "ABC"
+   -> URL andras till /?tab=archive&aq=ABC
 
-Efter (saker):
-  Berakna borttagna = gamla IDs - nya IDs
-  DELETE enbart borttagna -> CASCADE raderar BARA ratt truck_step_status
-  UPSERT kvarvarande + nya -> Befintliga truck_step_status bevaras
+2. Anvandaren klickar pa en order
+   -> Navigerar till /order/123
+
+3. Anvandaren trycker "tillbaka" i webblasaren
+   -> Atergar till /?tab=archive&aq=ABC
+   -> Fliken "Orderhistorik" visas med sokningen "ABC" kvar
 ```
 
-4. **Rensa orphaned truck_step_status**: Nar ett steg tas bort, radera aven eventuella truck_step_status-rader som refererar till det borttagna steg-IDt (hanteras automatiskt av CASCADE)
-5. **Bevara ordning**: Stegen bevaras i den ordning de skickas fran UI:t. Eftersom DB:n inte har en sort_order-kolumn for steg, och den nuvarande koden redan hanterar ordningen genom array-positionen i JavaScript, racker det att upserten bevarar ordningen konsekvent.
-
-### Detaljerad kodskelett
+### Teknisk detalj
 
 ```typescript
-if (updates.steps !== undefined) {
-  const currentOrder = orders.find(o => o.id === id);
-  const oldSteps = previousSteps || currentOrder?.steps || [];
-  const oldStepIds = new Set(oldSteps.map(s => s.id));
-  const newStepIds = new Set(updates.steps.map(s => s.id));
-  
-  // Hitta borttagna steg
-  const removedStepIds = [...oldStepIds].filter(sid => !newStepIds.has(sid));
-  
-  // Radera BARA borttagna steg (cascade tar hand om truck_step_status)
-  if (removedStepIds.length > 0) {
-    await supabase.from('order_steps').delete().in('id', removedStepIds);
-  }
-  
-  // Upsert alla kvarvarande + nya steg
-  if (updates.steps.length > 0) {
-    await supabase.from('order_steps').upsert(
-      updates.steps.map(step => ({
-        id: step.id,
-        order_id: id,
-        template_id: step.templateId,
-        name: step.name,
-        status: step.status,
-        object_id: step.objectId || null,
-        // ... ovriga falt
-      })),
-      { onConflict: 'id' }
-    );
-  }
-  
-  // Status-historik och auto-status logik (behalles som idag)
-}
+// Ersatt useState med useSearchParams
+const [searchParams, setSearchParams] = useSearchParams();
+
+const activeTab = searchParams.get('tab') || 'active';
+const searchQuery = searchParams.get('q') || '';
+const archiveSearchQuery = searchParams.get('aq') || '';
+
+const filters = {
+  productionStatus: (searchParams.get('status') || 'created') as OrderAdminStatus | 'all',
+  billingStatus: (searchParams.get('billing') || 'all') as BillingStatus | 'all',
+  hasDeviation: searchParams.get('deviation') === null ? null : searchParams.get('deviation') === 'yes',
+};
+
+// Uppdatera params utan att ersatta alla -- bevarar ovriga params
+const updateParam = (key: string, value: string | null) => {
+  setSearchParams(prev => {
+    if (value === null || value === '') prev.delete(key);
+    else prev.set(key, value);
+    return prev;
+  }, { replace: true });
+};
 ```
 
-### Filer som andras
-
-1. **`src/contexts/OrdersContext.tsx`** -- Ersatt delete-all+reinsert med selektiv delete + upsert for steg (rad ~737-756)
-
 ### Vad som INTE andras
-- Objekthanteringen (anvander redan upsert -- korrekt)
-- Truck-hanteringen (anvander redan upsert -- korrekt)
-- Optimistiska uppdateringar (fungerar redan for steg-andringar)
-- Databasschemat (inga nya kolumner eller tabeller)
+- OrderFilters-komponenten (tar emot samma props som idag)
+- OrdersTable (oforandrad)
+- Databaslogik eller API-anrop
+- Realtidsuppdateringar
+
