@@ -17,7 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { ProductionStatusBadge, BillingStatusBadge } from '@/components/StatusBadge';
 import type { Order, ProductionStatus, BillingStatus, TruckStatus, OrderAdminStatus } from '@/types/order';
-import { truckStatusLabels, toAdminStatus, getDeliverySummary, calculateOrderBillingStatus } from '@/types/order';
+import { truckStatusLabels, toAdminStatus, getDeliverySummary, calculateOrderBillingStatus, getOrderBillingLabel } from '@/types/order';
 
 interface OrdersTableProps {
   orders: Order[];
@@ -364,7 +364,7 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
                   <TableCell>
                     {(() => {
                       const computedBilling = calculateOrderBillingStatus(order);
-                      return <BillingStatusBadge status={computedBilling} />;
+                      return <BillingStatusBadge status={computedBilling} label={getOrderBillingLabel(order)} />;
                     })()}
                   </TableCell>
                   <TableCell>
@@ -422,7 +422,7 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
                   </span>
                 )}
                 <span className="text-muted-foreground/50">•</span>
-                <BillingStatusBadge status={calculateOrderBillingStatus(order)} />
+                <BillingStatusBadge status={calculateOrderBillingStatus(order)} label={getOrderBillingLabel(order)} />
               </div>
               
               {order.comment && (
