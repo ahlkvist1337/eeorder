@@ -1,38 +1,25 @@
 
 
-# Fix: Import skapar dubbletter av (grundpris) när stegnamn ändrats
+# Fix: Faktureringsstatus visar fel värde
 
 ## Problem
-Importlogiken kollar bara om det finns en rad med `step_name = null` för ett artikelnummer. Om du har ändrat stegnamnet från null till t.ex. "Blästring" hittar importen ingen grundpris-rad och skapar en ny med `step_name: null` -- en dubblett.
+Faktureringsstatus visas på tre ställen men bara ett av dem använder den beräknade statusen (baserad på arbetskortsdata). De andra två visar det lagrade databasvärdet som kan vara inaktuellt.
 
-## Lösning
-Ändra kontrollen så den kollar om **någon** rad alls finns för artikelnumret (oavsett `step_name`), inte bara rader med `step_name = null`. En ny grundpris-rad skapas bara om artikelnumret inte finns överhuvudtaget i prislistan. Prisjämförelse görs mot den befintliga raden med lägst pris.
+| Plats | Fil | Rad | Nuvarande | Korrekt |
+|-------|-----|-----|-----------|---------|
+| Orderdetalj — header-badge | `OrderDetails.tsx` | 208 | `order.billingStatus` | `calculateOrderBillingStatus(order)` |
+| Ordertabell — mobilvy | `OrdersTable.tsx` | 425 | `order.billingStatus` | `calculateOrderBillingStatus(order)` |
+| Ordertabell — desktopvy | `OrdersTable.tsx` | 366 | `calculateOrderBillingStatus(order)` | ✅ Redan korrekt |
 
-## Ändring
+Dessutom använder filtreringen (rad 73) och sorteringen (rad 117-118) i OrdersTable det lagrade värdet, vilket gör att filter/sortering inte matchar den visade badgen. Dessa bör också använda den beräknade statusen.
 
-### `src/hooks/usePriceList.ts`
-- Rad 107-113: Byt `existingBasePrice`-mappen från att bara samla `step_name = null`-rader till att samla **alla** rader per `part_number`
-- Vid jämförelsen (rad 140-146): Kolla om part_number finns oavsett step_name. Om den finns och importpriset är högre, uppdatera den befintliga raden (med lägst pris). Om den inte finns alls, skapa ny grundpris-rad.
+## Ändringar
 
-```typescript
-// Bygg map: part_number -> alla befintliga rader
-const existingByPartNumber = new Map<string, { id: string; price: number }[]>();
-for (const p of existingPrices || []) {
-  const list = existingByPartNumber.get(p.part_number) || [];
-  list.push({ id: p.id, price: p.price });
-  existingByPartNumber.set(p.part_number, list);
-}
+### 1. `src/pages/OrderDetails.tsx` (rad 208)
+Byt `order.billingStatus` till `calculateOrderBillingStatus(order)` i header-badgen.
 
-// Vid kontroll:
-const existingList = existingByPartNumber.get(pn);
-if (!existingList || existingList.length === 0) {
-  toInsert.push(row); // Helt nytt artikelnummer
-} else {
-  // Hitta raden med lägst pris och uppdatera om orderpriset är högre
-  const lowest = existingList.reduce((a, b) => a.price < b.price ? a : b);
-  if (row.price > lowest.price) {
-    toUpdate.push({ id: lowest.id, price: row.price, description: row.description });
-  }
-}
-```
+### 2. `src/components/OrdersTable.tsx` (rad 73, 117-118, 425)
+- **Rad 73** (filter): Byt `order.billingStatus` till `calculateOrderBillingStatus(order)`
+- **Rad 117-118** (sortering): Byt `a.billingStatus`/`b.billingStatus` till beräknade värden
+- **Rad 425** (mobilvy): Byt `order.billingStatus` till `calculateOrderBillingStatus(order)`
 
