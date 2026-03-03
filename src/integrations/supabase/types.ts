@@ -709,13 +709,6 @@ export type Database = {
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "truck_lifecycle_events_truck_id_fkey"
-            columns: ["truck_id"]
-            isOneToOne: false
-            referencedRelation: "object_trucks"
-            referencedColumns: ["id"]
-          },
         ]
       }
       truck_status_history: {
@@ -758,20 +751,6 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "truck_status_history_step_id_fkey"
-            columns: ["step_id"]
-            isOneToOne: false
-            referencedRelation: "order_steps"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "truck_status_history_truck_id_fkey"
-            columns: ["truck_id"]
-            isOneToOne: false
-            referencedRelation: "object_trucks"
             referencedColumns: ["id"]
           },
         ]
