@@ -128,7 +128,7 @@ export function InvoicingTab() {
       const readyCount = readyTrucks.length;
       const totalCount = allTrucks.length;
       const proportional = (readyCount / totalCount) * row.quantity;
-      return Math.max(0, Math.min(Math.round(proportional * 100) / 100, remaining));
+      return Math.max(0, Math.min(Math.round(proportional), remaining));
     }
 
     // V1: existing logic
@@ -332,7 +332,7 @@ export function InvoicingTab() {
                             type="number"
                             min={0}
                             max={row.quantity - prevQty}
-                            step="0.01"
+                            step="1"
                             value={quantityOverrides[getOverrideKey(order.id, row.id)] ?? qty}
                             onChange={e => handleQuantityChange(order.id, row.id, e.target.value)}
                             className="h-8 w-24 text-right text-sm ml-auto"
