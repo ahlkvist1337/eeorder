@@ -1,48 +1,47 @@
 
 
-# Plan: Fix V2 automatisk status- och faktureringshantering
+# Plan: Fix V2 fakturering, steg-input och status-återställning
 
-## Problem
+## Problem 1: Fakturering visar fel antal
+Faktureringfliken beräknar proportionellt baserat på enheter (`readyCount / totalCount * quantity`). Om 1 av 2 enheter har `billing_status = ready_for_billing` visas halva mängden. Problemet kan ligga i att billing-aggregeringen från objekt till enhet inte triggas korrekt i alla flöden (t.ex. vid leverans via `updateUnitObjectStatus` — aggregeringen sker bara om `newStatus === 'delivered'`, men om billing ändras separat kanske enheten inte uppdateras).
 
-Tre buggar gör att V2-ordrar inte hanteras korrekt:
+Dessutom har input-fältet `step="0.01"` vilket gör att pilarna ändrar med decimaler istället för heltal.
 
-1. **Order blir aldrig "Avslutad"**: `updateUnitObjectStatus` uppdaterar enhetens aggregerade status men triggar aldrig auto-complete på **ordernivå** (production_status → 'completed').
-2. **Enhetens billing_status uppdateras aldrig**: `updateUnitObjectBillingStatus` skriver till `unit_objects` men aggregerar aldrig till `order_units.billing_status`.
-3. **`calculateOrderBillingStatus` och `getOrderBillingLabel`** tittar på `unit.billingStatus` (som aldrig uppdateras) istället för att aggregera från `unit.objects[].billingStatus`.
+## Problem 2: Statusar återställs inte automatiskt
+`updateUnitStepStatus` saknar all automation som V1 har:
+- **Auto-start**: När ett steg sätts till `in_progress` → objektet bör bli `started`
+- **Auto-revert**: När alla steg återgår till `pending` → objektet bör bli `arrived`  
+- **Auto-complete**: När alla steg blir `completed` → objektet bör bli `completed`
 
-## Lösning
+`updateUnitObjectStatus` saknar omvänd logik:
+- Om ett objekt går tillbaka från `completed`/`packed`/`delivered` → kontrollera om ordern ska återgå till `created` (Aktiv)
+- Billing bör återställas om objektet inte längre är levererat
 
-### 1. Auto-complete order i `updateUnitObjectStatus` (OrdersContext.tsx)
+## Åtgärder
 
-Efter att enhetens status aggregerats — kontrollera om **alla enheter** i ordern nu har status `completed`/`packed`/`delivered`. Om ja → sätt `orders.production_status = 'completed'` (samma logik som V1).
+### 1. InvoicingTab.tsx
+- Ändra `step="0.01"` till `step="1"` på input-fältet (rad 335)
+- Avrunda proportionell beräkning till heltal: `Math.round(proportional)` istället för `Math.round(proportional * 100) / 100` (rad 131)
 
-### 2. Aggregera billing i `updateUnitObjectBillingStatus` (OrdersContext.tsx)
+### 2. OrdersContext.tsx — `updateUnitStepStatus`
+Lägg till samma automation som V1 efter steg-uppdatering:
+- Hitta objektet som steget tillhör
+- Om `newStatus === 'in_progress'` och objektets status är `waiting`/`arrived` → sätt objektstatus till `started`
+- Om `newStatus === 'pending'` och ALLA steg i objektet nu är `pending` → sätt objektstatus till `arrived` (om det var `started`/`paused`)
+- Om `newStatus === 'completed'` och ALLA steg i objektet nu är `completed` → sätt objektstatus till `completed`
+- Varje objektstatusändring triggar befintlig aggregering uppåt (enhet → order)
 
-Efter att objektets billing_status uppdaterats:
-- Beräkna enhetens billing_status från alla dess objekt (alla billed → billed, någon ready → ready, annars not_billable)
-- Uppdatera `order_units.billing_status` i DB och optimistiskt i state
+### 3. OrdersContext.tsx — `updateUnitObjectStatus` (revert-logik)
+Lägg till omvänd logik:
+- Om ett objekt går **tillbaka** från `completed`/`packed`/`delivered` till `started`/`arrived`/`waiting`:
+  - Kontrollera om ordern var `completed` → återställ till `created` (Aktiv)
+  - Återställ objektets `billing_status` till `not_billable` om det inte längre är levererat
+  - Aggregera enhetens billing nedåt
 
-### 3. Fixa beräkningsfunktionerna i `order.ts`
-
-Ändra `calculateOrderBillingStatus` och `getOrderBillingLabel` att för V2 titta på **objektens** billingStatus istället för enheternas:
-
-```typescript
-// V2: aggregate from unit objects, not unit level
-const allObjects = order.units.flatMap(u => u.objects);
-if (allObjects.length === 0) return order.billingStatus;
-const allBilled = allObjects.every(o => o.billingStatus === 'billed');
-if (allBilled) return 'billed';
-const someReady = allObjects.some(o => o.billingStatus === 'ready_for_billing' || o.billingStatus === 'billed');
-if (someReady) return 'ready_for_billing';
-return 'not_ready';
-```
-
-Samma princip för `getOrderBillingLabel` — kolla om alla objekt (inte enheter) har ready/billed för att visa "Delvis klar" vs "Klar".
-
-## Påverkade filer
+### Påverkade filer
 
 | Fil | Ändring |
 |-----|---------|
-| `src/contexts/OrdersContext.tsx` | Auto-complete order vid objektstatus, aggregera billing vid objektbilling |
-| `src/types/order.ts` | `calculateOrderBillingStatus` och `getOrderBillingLabel` baseras på objekt |
+| `src/components/InvoicingTab.tsx` | `step="1"`, heltal i proportionell beräkning |
+| `src/contexts/OrdersContext.tsx` | Steg-automation i `updateUnitStepStatus`, revert-logik i `updateUnitObjectStatus` |
 
