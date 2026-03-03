@@ -292,8 +292,8 @@ export async function printWorkCardV2Object(data: WorkCardV2ObjectPrintData): Pr
   doc.text(`Order: ${data.order.orderNumber}`, 20, infoY);
   doc.text(`Kund: ${data.order.customer}`, 20, infoY + 8);
   
-  // QR code
-  const orderUrl = `${data.baseUrl}/order/${data.order.id}`;
+  // QR code — links directly to the object
+  const orderUrl = `${data.baseUrl}/order/${data.order.id}?object=${data.unitObject.id}`;
   const qrDataUrl = await QRCode.toDataURL(orderUrl, {
     width: 200, margin: 1, errorCorrectionLevel: 'M',
   });
