@@ -10,24 +10,60 @@ import { sv } from 'date-fns/locale';
 import { Pause, Package, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import eeLogo from '@/assets/ee_logga.png';
-import type { Order, OrderObject, OrderStep, ObjectTruck, TruckStatus } from '@/types/order';
+import type { Order, OrderObject, OrderStep, ObjectTruck, OrderUnit } from '@/types/order';
 import { getWorkUnitDisplayName } from '@/types/order';
 import { supabase } from '@/integrations/supabase/client';
 
-// Flat truck structure for display
+// Flat truck structure for display (supports both v1 trucks and v2 units)
 interface FlatTruck {
   truck: ObjectTruck;
   object: OrderObject;
   order: Order;
   objectSteps: OrderStep[];
+  // V2 support
+  unit?: OrderUnit;
+  isV2?: boolean;
 }
 
-// Extract all active trucks (arrived or started) from orders
+// Extract all active trucks/units (arrived or started) from orders
 function getActiveTrucks(orders: Order[]): FlatTruck[] {
   const trucks: FlatTruck[] = [];
   
   for (const order of orders) {
     if (order.productionStatus === 'cancelled') continue;
+
+    // V2: units as production entities
+    if (order.dataModelVersion === 2 && order.units) {
+      for (const unit of order.units) {
+        if (unit.status === 'arrived' || unit.status === 'started') {
+          trucks.push({
+            truck: {
+              id: unit.id,
+              objectId: '',
+              truckNumber: unit.unitNumber,
+              status: unit.status,
+              billingStatus: unit.billingStatus,
+              stepStatuses: [],
+              sortOrder: unit.sortOrder,
+            },
+            object: {
+              id: unit.id,
+              name: unit.unitNumber || 'Enhet',
+              plannedQuantity: 1,
+              receivedQuantity: 0,
+              completedQuantity: 0,
+            },
+            order,
+            objectSteps: [],
+            unit,
+            isV2: true,
+          });
+        }
+      }
+      continue;
+    }
+
+    // V1: existing logic
     const stepsWithObject = order.steps.filter(s => s.objectId);
     const stepsByObject = new Map<string, OrderStep[]>();
     stepsWithObject.forEach(step => {
@@ -50,12 +86,45 @@ function getActiveTrucks(orders: Order[]): FlatTruck[] {
   return trucks;
 }
 
-// Get all paused trucks
+// Get all paused trucks/units
 function getPausedTrucks(orders: Order[]): FlatTruck[] {
   const trucks: FlatTruck[] = [];
   
   for (const order of orders) {
     if (order.productionStatus === 'cancelled') continue;
+
+    // V2: units
+    if (order.dataModelVersion === 2 && order.units) {
+      for (const unit of order.units) {
+        if (unit.status === 'paused') {
+          trucks.push({
+            truck: {
+              id: unit.id,
+              objectId: '',
+              truckNumber: unit.unitNumber,
+              status: unit.status,
+              billingStatus: unit.billingStatus,
+              stepStatuses: [],
+              sortOrder: unit.sortOrder,
+            },
+            object: {
+              id: unit.id,
+              name: unit.unitNumber || 'Enhet',
+              plannedQuantity: 1,
+              receivedQuantity: 0,
+              completedQuantity: 0,
+            },
+            order,
+            objectSteps: [],
+            unit,
+            isV2: true,
+          });
+        }
+      }
+      continue;
+    }
+
+    // V1
     const stepsWithObject = order.steps.filter(s => s.objectId);
     const stepsByObject = new Map<string, OrderStep[]>();
     stepsWithObject.forEach(step => {
@@ -81,7 +150,6 @@ function getPausedTrucks(orders: Order[]): FlatTruck[] {
 // Sort trucks: manual order first, then by planned end date
 function sortTrucks(trucks: FlatTruck[]): FlatTruck[] {
   return [...trucks].sort((a, b) => {
-    // Manual sort order takes priority
     const aSort = a.truck.sortOrder;
     const bSort = b.truck.sortOrder;
     
@@ -91,7 +159,6 @@ function sortTrucks(trucks: FlatTruck[]): FlatTruck[] {
     if (aSort !== undefined && aSort !== null) return -1;
     if (bSort !== undefined && bSort !== null) return 1;
     
-    // Fallback: planned end date
     const aDate = a.order.plannedEnd || '9999-12-31';
     const bDate = b.order.plannedEnd || '9999-12-31';
     return aDate.localeCompare(bDate);
@@ -105,84 +172,71 @@ export default function ProductionScreen() {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [localTruckOrder, setLocalTruckOrder] = useState<string[]>([]);
 
-  // Get active and paused trucks
   const activeTrucks = useMemo(() => sortTrucks(getActiveTrucks(orders)), [orders]);
   const pausedTrucks = useMemo(() => getPausedTrucks(orders), [orders]);
 
-  // Sync local order with server order when trucks change
+  // Track which IDs are v2 units for correct table updates
+  const v2UnitIds = useMemo(() => new Set(
+    [...activeTrucks, ...pausedTrucks].filter(t => t.isV2).map(t => t.truck.id)
+  ), [activeTrucks, pausedTrucks]);
+
   useEffect(() => {
     const ids = activeTrucks.map(t => t.truck.id);
     setLocalTruckOrder(ids);
   }, [activeTrucks]);
 
-  // DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
+      activationConstraint: { distance: 8 },
     })
   );
 
-  // Handle drag end - only for production/admin
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     if (!isProduction) return;
     
     const { active, over } = event;
-    
     if (!over || active.id === over.id) return;
     
     const oldIndex = localTruckOrder.indexOf(active.id as string);
     const newIndex = localTruckOrder.indexOf(over.id as string);
-    
     if (oldIndex === -1 || newIndex === -1) return;
     
-    // Update local state immediately for smooth UX
     const newOrder = arrayMove(localTruckOrder, oldIndex, newIndex);
     setLocalTruckOrder(newOrder);
     
-    // Save new sort orders to database
-    const updates = newOrder.map((truckId, index) => ({
-      id: truckId,
-      sort_order: index,
-    }));
+    const updates = newOrder.map((id, index) => ({ id, sort_order: index }));
     
-    // Update each truck's sort_order
     for (const update of updates) {
+      const table = v2UnitIds.has(update.id) ? 'order_units' : 'object_trucks';
       await supabase
-        .from('object_trucks')
+        .from(table)
         .update({ sort_order: update.sort_order })
         .eq('id', update.id);
     }
-  }, [localTruckOrder, isProduction]);
+  }, [localTruckOrder, isProduction, v2UnitIds]);
 
-  // Reset manual sorting - only for production/admin
   const handleResetSorting = useCallback(async () => {
     if (!isProduction) return;
     
-    // Clear all sort_order values for active trucks
     for (const flatTruck of activeTrucks) {
+      const table = flatTruck.isV2 ? 'order_units' : 'object_trucks';
       await supabase
-        .from('object_trucks')
+        .from(table)
         .update({ sort_order: null })
         .eq('id', flatTruck.truck.id);
     }
     
-    // Refresh to get new order
     await refreshOrders();
   }, [activeTrucks, refreshOrders, isProduction]);
 
-  // Update lastUpdated timestamp when orders change via realtime
   useEffect(() => {
     if (!isLoading) {
       setLastUpdated(new Date());
     }
   }, [orders, isLoading]);
 
-  // Check if any truck has manual sort order
   const hasManualSorting = activeTrucks.some(t => t.truck.sortOrder !== undefined && t.truck.sortOrder !== null);
 
-  // Sort trucks for display based on local order
   const sortedActiveTrucks = useMemo(() => {
     if (localTruckOrder.length === 0) return activeTrucks;
     
@@ -191,16 +245,11 @@ export default function ProductionScreen() {
     
     for (const id of localTruckOrder) {
       const truck = truckMap.get(id);
-      if (truck) {
-        sorted.push(truck);
-      }
+      if (truck) sorted.push(truck);
     }
     
-    // Add any trucks not in the order (new ones)
     for (const t of activeTrucks) {
-      if (!localTruckOrder.includes(t.truck.id)) {
-        sorted.push(t);
-      }
+      if (!localTruckOrder.includes(t.truck.id)) sorted.push(t);
     }
     
     return sorted;
@@ -208,9 +257,7 @@ export default function ProductionScreen() {
 
   return (
     <div className="min-h-screen bg-background p-4 lg:p-8">
-      {/* Header - compact on mobile */}
       <header className="flex flex-col gap-3 mb-4 lg:mb-6">
-        {/* Row 1: Logo + Title + Time */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 lg:gap-4">
             <img src={eeLogo} alt="EE Logo" className="h-10 lg:h-16 w-auto" />
@@ -225,7 +272,6 @@ export default function ProductionScreen() {
           </div>
         </div>
         
-        {/* Row 2: Status legend - hidden on mobile */}
         <div className="hidden lg:flex flex-wrap items-center gap-4 text-sm">
           <span className="text-muted-foreground">Status:</span>
           <span className="inline-block px-2 py-0.5 rounded-sm bg-[hsl(var(--status-arrived))] text-white text-xs font-medium">
@@ -253,7 +299,6 @@ export default function ProductionScreen() {
         </div>
       </header>
 
-      {/* Paused work cards section */}
       {pausedTrucks.length > 0 && (
         <section className="mb-6">
           <h2 className="text-lg font-semibold text-muted-foreground mb-3 flex items-center gap-2">
@@ -275,7 +320,6 @@ export default function ProductionScreen() {
         </section>
       )}
 
-      {/* Active work cards grid */}
       {isLoading && sortedActiveTrucks.length === 0 ? (
         <div className="flex items-center justify-center h-64">
           <p className="text-2xl text-muted-foreground">Laddar...</p>
@@ -303,7 +347,7 @@ export default function ProductionScreen() {
             strategy={rectSortingStrategy}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-              {sortedActiveTrucks.map(({ truck, object, order, objectSteps }) => (
+              {sortedActiveTrucks.map(({ truck, object, order, objectSteps, unit, isV2 }) => (
                 <SortableProductionTruckCard
                   key={truck.id}
                   id={truck.id}
@@ -311,6 +355,8 @@ export default function ProductionScreen() {
                   object={object}
                   order={order}
                   objectSteps={objectSteps}
+                  unit={unit}
+                  isV2={isV2}
                 />
               ))}
             </div>

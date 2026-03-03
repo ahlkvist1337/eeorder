@@ -196,7 +196,8 @@ export interface ArticleRow {
   unit: string;
   price: number;
   stepId?: string; // Optional link to treatment step
-  objectId?: string; // Link to OrderObject for auto work card generation
+  objectId?: string; // Link to OrderObject for auto work card generation (V1)
+  unitId?: string; // Link to OrderUnit (V2)
 }
 
 export interface Instruction {
@@ -346,6 +347,17 @@ export function calculateObjectQuantities(trucks: ObjectTruck[] | undefined): {
 
 // Calculate computed billing status for an order based on its trucks
 export function calculateOrderBillingStatus(order: Order): BillingStatus {
+  // V2: use units
+  if (order.dataModelVersion === 2 && order.units) {
+    if (order.units.length === 0) return order.billingStatus;
+    const allBilled = order.units.every(u => u.billingStatus === 'billed');
+    if (allBilled) return 'billed';
+    const someBilledOrReady = order.units.some(u => u.billingStatus === 'billed' || u.billingStatus === 'ready_for_billing');
+    if (someBilledOrReady) return 'ready_for_billing';
+    return 'not_ready';
+  }
+
+  // V1: use trucks
   const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
   if (allTrucks.length === 0) return order.billingStatus;
   
@@ -360,6 +372,15 @@ export function calculateOrderBillingStatus(order: Order): BillingStatus {
 
 // Get delivery summary for an order
 export function getDeliverySummary(order: Order): { delivered: number; total: number } {
+  // V2: use units
+  if (order.dataModelVersion === 2 && order.units) {
+    return {
+      delivered: order.units.filter(u => u.status === 'delivered').length,
+      total: order.units.length,
+    };
+  }
+
+  // V1: use trucks
   const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
   return {
     delivered: allTrucks.filter(t => t.status === 'delivered').length,
