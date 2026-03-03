@@ -672,6 +672,7 @@ export type Database = {
       }
       truck_lifecycle_events: {
         Row: {
+          changed_by_name: string | null
           event_type: string
           id: string
           note: string | null
@@ -682,6 +683,7 @@ export type Database = {
           truck_number: string | null
         }
         Insert: {
+          changed_by_name?: string | null
           event_type: string
           id?: string
           note?: string | null
@@ -692,6 +694,7 @@ export type Database = {
           truck_number?: string | null
         }
         Update: {
+          changed_by_name?: string | null
           event_type?: string
           id?: string
           note?: string | null
@@ -713,6 +716,7 @@ export type Database = {
       }
       truck_status_history: {
         Row: {
+          changed_by_name: string | null
           from_status: Database["public"]["Enums"]["step_status"]
           id: string
           order_id: string
@@ -724,6 +728,7 @@ export type Database = {
           truck_number: string
         }
         Insert: {
+          changed_by_name?: string | null
           from_status: Database["public"]["Enums"]["step_status"]
           id?: string
           order_id: string
@@ -735,6 +740,7 @@ export type Database = {
           truck_number: string
         }
         Update: {
+          changed_by_name?: string | null
           from_status?: Database["public"]["Enums"]["step_status"]
           id?: string
           order_id?: string
