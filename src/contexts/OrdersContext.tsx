@@ -1837,6 +1837,41 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         };
       }));
     }
+
+    // Auto-complete order: if ALL units now have completed/packed/delivered status
+    const finishedStatuses: TruckStatus[] = ['completed', 'packed', 'delivered'];
+    const updatedUnits = order.units?.map(u => {
+      if (u.id === unitId) {
+        const updatedObjects = u.objects.map(ob => ob.id === objectId ? { ...ob, status: newStatus } : ob);
+        return { ...u, status: computeAggregateStatus(updatedObjects.map(ob => ob.status)), objects: updatedObjects };
+      }
+      return u;
+    }) || [];
+    const allUnitsFinished = updatedUnits.length > 0 && updatedUnits.every(u => finishedStatuses.includes(u.status));
+    if (allUnitsFinished && order.productionStatus !== 'completed') {
+      await supabase.from('orders').update({ production_status: 'completed' }).eq('id', orderId);
+      await supabase.from('status_history').insert({
+        order_id: orderId,
+        from_status: order.productionStatus,
+        to_status: 'completed',
+      });
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, productionStatus: 'completed' as ProductionStatus } : o));
+    }
+
+    // Also aggregate billing_status for the unit when object is delivered (auto ready_for_billing)
+    if (newStatus === 'delivered') {
+      const updatedObjsForBilling = unit.objects.map(ob => ob.id === objectId ? { ...ob, billingStatus: 'ready_for_billing' as TruckBillingStatus } : ob);
+      const allBilled = updatedObjsForBilling.every(ob => ob.billingStatus === 'billed');
+      const someReady = updatedObjsForBilling.some(ob => ob.billingStatus === 'ready_for_billing' || ob.billingStatus === 'billed');
+      const unitBilling: TruckBillingStatus = allBilled ? 'billed' : someReady ? 'ready_for_billing' : 'not_billable';
+      if (unitBilling !== unit.billingStatus) {
+        await supabase.from('order_units').update({ billing_status: unitBilling }).eq('id', unitId);
+        setOrders(prev => prev.map(o => {
+          if (o.id !== orderId) return o;
+          return { ...o, units: o.units?.map(u => u.id === unitId ? { ...u, billingStatus: unitBilling } : u) };
+        }));
+      }
+    }
   }, [orders, markLocalUpdate]);
 
   // V2: Update unit object billing status
@@ -1869,6 +1904,23 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     await supabase.from('unit_objects')
       .update({ billing_status: newStatus })
       .eq('id', objectId);
+
+    // Aggregate billing to parent unit
+    const order = orders.find(o => o.id === orderId);
+    const unit = order?.units?.find(u => u.id === unitId);
+    if (unit) {
+      const updatedObjs = unit.objects.map(ob => ob.id === objectId ? { ...ob, billingStatus: newStatus } : ob);
+      const allBilled = updatedObjs.every(ob => ob.billingStatus === 'billed');
+      const someReady = updatedObjs.some(ob => ob.billingStatus === 'ready_for_billing' || ob.billingStatus === 'billed');
+      const unitBilling: TruckBillingStatus = allBilled ? 'billed' : someReady ? 'ready_for_billing' : 'not_billable';
+      if (unitBilling !== unit.billingStatus) {
+        await supabase.from('order_units').update({ billing_status: unitBilling }).eq('id', unitId);
+        setOrders(prev => prev.map(o => {
+          if (o.id !== orderId) return o;
+          return { ...o, units: o.units?.map(u => u.id === unitId ? { ...u, billingStatus: unitBilling } : u) };
+        }));
+      }
+    }
   }, [orders, markLocalUpdate]);
 
   return (
