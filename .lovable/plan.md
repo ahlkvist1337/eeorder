@@ -1,82 +1,60 @@
 
 
-# Plan: V2 UnitsEditor med full statushantering (som V1)
+# Plan: Steg-badges till objekthuvudet, stoppa omladdning, QR per objekt
 
-## Sammanfattning
+## Tre problem
 
-Ombyggnad av `UnitsEditor` så att den fungerar exakt som V1:s `ObjectTrucksEditor` — med klickbara stegstatusar, automatiska statusövergångar, namnbyte, duplicering och utskrift av arbetskort.
+1. **Steg-badges sitter i enhetshuvudet** — ska vara i objekthuvudet så varje objekt har sina egna klickbara statusar
+2. **Sidan laddar om vid varje strukturell ändring** — `updateUnits()` gör delete-and-recreate + `fetchOrders()` → allt expanderat nollställs
+3. **QR-kod pekar på hela ordern** — ska kunna peka direkt på ett specifikt objekt
 
-## Vad som ändras
+## Lösning
 
-### 1. Nya context-funktioner i `OrdersContext.tsx`
+### 1. Flytta steg-badges från enhetshuvud till objekthuvud
 
-Tre nya funktioner som gör individuella uppdateringar (inte delete-and-recreate):
+**UnitsEditor.tsx**: Ta bort steg-badge-blocket (rad 348-377) ur enhetens header. Istället renderas objekten **alltid synliga** (utan att behöva expandera enheten) med sina steg-badges direkt i objektraden:
 
-- **`updateUnitStatus(orderId, unitId, newStatus)`** — Uppdaterar `order_units.status`. Optimistisk uppdatering. Auto-sätter `billing_status = 'ready_for_billing'` vid leverans. Auto-slutför ordern om alla enheter är klara/packade/levererade.
-- **`updateUnitStepStatus(orderId, unitId, stepId, newStatus, stepName)`** — Uppdaterar `unit_object_steps.status`. Optimistisk uppdatering.
-- **`updateUnitBillingStatus(orderId, unitId, newStatus)`** — Uppdaterar `order_units.billing_status`. Optimistisk uppdatering.
-
-Dessa speglar exakt v1-funktionerna `updateTruckStatus`, `updateTruckStepStatus`, `updateTruckBillingStatus`.
-
-### 2. Ombyggd `UnitsEditor.tsx`
-
-Ny layout per enhet som liknar `ObjectTrucksEditor`:
-
-**Per enhet (en rad):**
-- Enhetsnamn (klickbar för inline-redigering med penna-ikon)
-- Status-dropdown (Väntande → Ankommen → Startad → ... → Levererad)
-- Klickbara steg-badges per objekt (pending ○ → in_progress ● → completed ✓), grupperade per objektnamn
-- Pack/Leverera-knappar (visas vid rätt status)
-- Faktureringsbadge (visas vid levererad)
-- Skriv ut-knapp, duplicera-knapp, ta bort-knapp
-
-**Auto-statuslogik (exakt som v1):**
-- Steg klickas till `in_progress` → enhet sätts till `started` (om `waiting`/`arrived`/`paused`)
-- Alla steg `completed` → enhet sätts till `completed`
-- Alla steg tillbaka till `pending` → enhet sätts till `arrived` (om `started`/`paused`)
-
-**Nya props:**
-```typescript
-interface UnitsEditorProps {
-  units: OrderUnit[];
-  onUnitsChange: (units: OrderUnit[]) => void;
-  onUnitStatusChange?: (unitId: string, status: TruckStatus) => void;
-  onUnitStepStatusChange?: (unitId: string, stepId: string, status: StepStatus) => void;
-  onUnitBillingStatusChange?: (unitId: string, status: TruckBillingStatus) => void;
-  orderInfo?: { id: string; orderNumber: string; customer: string; };
-}
+```
+#ABC123  [Väntande v]  ✏️ 📋 🗑
+  Motorlåda    [Maskering ○] [Målning ●]  🖨
+  Stomme       [Blästring ✓] [Lackering ○]  🖨
 ```
 
-**Duplicera enhet:** Kopierar alla objekt och steg till ny enhet med tomt enhetsnummer. Nya UUID:er genereras.
+Expand-knappen styr bara redigering av objekt/steg-struktur (lägga till/ta bort), inte visning av steg-badges.
 
-### 3. Arbetskort-utskrift (`workCardPrint.ts`)
+På mobil blir det en naturlig vertikal lista — varje objekt tar en rad med sina steg-badges som redan har 44px klickyta.
 
-Ny funktion `printWorkCardV2` som tar en `OrderUnit` och genererar PDF med:
-- Enhetsnummer som stor rubrik
-- Alla objekt listade med sina steg
-- QR-kod till ordern
-- Artikelrader kopplade till enheten (via `unit_id`)
+### 2. Stoppa omladdning — optimistisk uppdatering i `updateUnits`
 
-### 4. Integration i `OrderDetails.tsx`
+**OrdersContext.tsx** rad 1475-1530: 
+- Lägg till optimistisk lokal uppdatering (`setOrders(...)`) **före** DB-anropen
+- **Ta bort** `await fetchOrders()` på rad 1529
+- Behåll `markLocalUpdate()` så realtime-debounce ignorerar ekon
 
-Koppla nya callbacks från context till `UnitsEditor`:
-```typescript
-<UnitsEditor
-  units={order.units || []}
-  onUnitsChange={...}
-  onUnitStatusChange={(unitId, status) => updateUnitStatus(order.id, unitId, status)}
-  onUnitStepStatusChange={(unitId, stepId, status) => updateUnitStepStatus(order.id, unitId, stepId, status, ...)}
-  onUnitBillingStatusChange={(unitId, status) => updateUnitBillingStatus(order.id, unitId, status)}
-  orderInfo={{ id: order.id, orderNumber: order.orderNumber, customer: order.customer }}
-/>
-```
+Resultat: expanderat state bevaras, ingen flimmer.
+
+### 3. QR-kod direkt till objekt
+
+Lägg till en URL-parameter `/order/:id?object=:objectId`. 
+
+**workCardPrint.ts** (`printWorkCardV2Object`): Ändra QR-URL:en från `/order/${orderId}` till `/order/${orderId}?object=${objectId}`.
+
+**OrderDetails.tsx**: Läs `searchParams.get('object')` vid mount. Om satt, auto-expandera rätt enhet och scrolla till objektet (via `ref` + `scrollIntoView`). Eventuellt highlighta objektet kort.
+
+### Tips på mobil-UX
+
+Eftersom objekten visas direkt utan expand, blir mobilvyn enkel:
+- Enhetshuvud = kompakt rad med namn + status-dropdown
+- Under den: varje objekt med steg-badges (klickbara, 44px) + utskriftsknapp
+- Expand-knappen bara för att redigera struktur (lägga till/ta bort steg/objekt)
+- QR-koden på arbetskortet tar verkstadspersonalen direkt till rätt objekt i appen
 
 ## Påverkade filer
 
 | Fil | Ändring |
 |-----|---------|
-| `src/contexts/OrdersContext.tsx` | 3 nya funktioner + context type |
-| `src/components/UnitsEditor.tsx` | Total ombyggnad med statushantering |
-| `src/pages/OrderDetails.tsx` | Koppla nya callbacks |
-| `src/lib/workCardPrint.ts` | Ny `printWorkCardV2` |
+| `src/components/UnitsEditor.tsx` | Flytta steg-badges till objektrad, visa objekt utan expand |
+| `src/contexts/OrdersContext.tsx` | Optimistisk uppdatering i `updateUnits`, ta bort `fetchOrders()` |
+| `src/lib/workCardPrint.ts` | QR-URL med `?object=objectId` |
+| `src/pages/OrderDetails.tsx` | Läs `?object=` param, auto-scrolla till objekt |
 
