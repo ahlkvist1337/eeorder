@@ -172,16 +172,12 @@ export default function ProductionScreen() {
     await refreshOrders();
   }, [activeTrucks, refreshOrders, isProduction]);
 
-  // Auto-refresh every 30 seconds
+  // Update lastUpdated timestamp when orders change via realtime
   useEffect(() => {
-    const refresh = async () => {
-      await refreshOrders();
+    if (!isLoading) {
       setLastUpdated(new Date());
-    };
-
-    const interval = setInterval(refresh, 30000);
-    return () => clearInterval(interval);
-  }, [refreshOrders]);
+    }
+  }, [orders, isLoading]);
 
   // Check if any truck has manual sort order
   const hasManualSorting = activeTrucks.some(t => t.truck.sortOrder !== undefined && t.truck.sortOrder !== null);

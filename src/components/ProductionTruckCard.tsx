@@ -1,6 +1,6 @@
-import { format } from 'date-fns';
+import { format, differenceInCalendarDays } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { CalendarClock, Box, Pause, GripVertical } from 'lucide-react';
+import { CalendarClock, Box, Pause, GripVertical, AlertTriangle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -78,10 +78,28 @@ export function ProductionTruckCard({
   const colors = truckStatusColors[truck.status];
   const { step: currentStep, status: currentStepStatus } = getCurrentStep(truck, objectSteps);
 
+  // Deadline calculation
+  const now = new Date();
+  const plannedEnd = order.plannedEnd ? new Date(order.plannedEnd) : null;
+  const daysUntilDeadline = plannedEnd ? differenceInCalendarDays(plannedEnd, now) : null;
+  const isOverdue = daysUntilDeadline !== null && daysUntilDeadline < 0;
+  const isUrgent = daysUntilDeadline !== null && !isOverdue && daysUntilDeadline <= 2;
+
+  const getDeadlineLabel = () => {
+    if (daysUntilDeadline === null) return null;
+    if (daysUntilDeadline < -1) return `${Math.abs(daysUntilDeadline)} dagar försenad`;
+    if (daysUntilDeadline === -1) return '1 dag försenad';
+    if (daysUntilDeadline === 0) return 'Idag';
+    if (daysUntilDeadline === 1) return 'Imorgon';
+    return `${daysUntilDeadline} dagar kvar`;
+  };
+
   return (
     <Card className={cn(
       'flex flex-col h-full transition-all border-2',
       colors.border,
+      isOverdue && 'ring-2 ring-destructive',
+      isUrgent && 'ring-2 ring-amber-500',
       isDragging && 'opacity-50 shadow-lg scale-[1.02]'
     )}>
       <CardContent className="p-4 flex flex-col h-full">
@@ -172,9 +190,18 @@ export function ProductionTruckCard({
             <span className="truncate">{order.customer}</span>
           </div>
           {order.plannedEnd && (
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <CalendarClock className="h-3.5 w-3.5" />
-              <span>Klart: {format(new Date(order.plannedEnd), 'd MMM', { locale: sv })}</span>
+            <div className={cn(
+              'flex items-center gap-1.5 text-sm',
+              isOverdue ? 'text-destructive font-medium' : isUrgent ? 'text-amber-600 font-medium' : 'text-muted-foreground'
+            )}>
+              {isOverdue ? (
+                <AlertTriangle className="h-3.5 w-3.5" />
+              ) : isUrgent ? (
+                <AlertTriangle className="h-3.5 w-3.5" />
+              ) : (
+                <CalendarClock className="h-3.5 w-3.5" />
+              )}
+              <span>{getDeadlineLabel()}</span>
             </div>
           )}
         </div>
