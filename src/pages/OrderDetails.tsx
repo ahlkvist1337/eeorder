@@ -32,6 +32,7 @@ import {
 import { ProductionStatusBadge, BillingStatusBadge } from '@/components/StatusBadge';
 import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
 import { OrderObjectsEditor } from '@/components/OrderObjectsEditor';
+import { UnitsEditor } from '@/components/UnitsEditor';
 import { OrderAttachments } from '@/components/OrderAttachments';
 import { InstructionsEditor } from '@/components/InstructionsEditor';
 import { OrderDeviations } from '@/components/OrderDeviations';
@@ -39,7 +40,7 @@ import { useOrders } from '@/hooks/useOrders';
 import { useOrderAttachments } from '@/hooks/useOrderAttachments';
 import { useAuth } from '@/contexts/AuthContext';
 import { orderAdminStatusLabels, billingStatusLabels, stepStatusLabels, getWorkUnitDisplayName, toAdminStatus, calculateOrderBillingStatus } from '@/types/order';
-import type { ProductionStatus, BillingStatus, OrderStep, OrderObject, TruckStatus, StepStatus, OrderAdminStatus, ArticleRow, Instruction } from '@/types/order';
+import type { ProductionStatus, BillingStatus, OrderStep, OrderObject, TruckStatus, StepStatus, OrderAdminStatus, ArticleRow, Instruction, OrderUnit } from '@/types/order';
 
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -57,6 +58,7 @@ export default function OrderDetails() {
     updateTruckStatus,
     updateTruckStepStatus,
     updateTruckBillingStatus,
+    updateUnits,
     deleteOrder,
     isLoading 
   } = useOrders();
@@ -208,15 +210,26 @@ export default function OrderDetails() {
             <BillingStatusBadge status={calculateOrderBillingStatus(order)} />
           </div>
           
-          {/* Work card summary */}
-          {(() => {
+          {/* Work card / unit summary */}
+          {order.dataModelVersion === 2 ? (() => {
+            const allUnits = order.units || [];
+            if (allUnits.length === 0) return null;
+            const total = allUnits.length;
+            const completed = allUnits.filter(u => u.status === 'completed' || u.status === 'packed' || u.status === 'delivered').length;
+            return (
+              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Enheter:</span>
+                <span>{total} totalt</span>
+                <span>•</span>
+                <span>{completed} klara</span>
+              </div>
+            );
+          })() : (() => {
             const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
             if (allTrucks.length === 0) return null;
-            
             const planned = allTrucks.length;
             const arrived = allTrucks.filter(t => t.status === 'arrived' || t.status === 'started' || t.status === 'paused' || t.status === 'completed').length;
             const completed = allTrucks.filter(t => t.status === 'completed').length;
-            
             return (
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <span className="font-medium text-foreground">Arbetskort:</span>
@@ -403,30 +416,44 @@ export default function OrderDetails() {
               </CardContent>
             </Card>
 
-            {/* Objects and Treatment steps */}
+            {/* Objects and Treatment steps / Units */}
             <Card>
               <CardHeader className="pb-3 sm:pb-6">
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                   <Wrench className="h-4 w-4 sm:h-5 sm:w-5" />
-                  Objekt & Behandlingssteg
+                  {order.dataModelVersion === 2 ? 'Enheter & Behandlingssteg' : 'Objekt & Behandlingssteg'}
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 sm:pt-0">
-                <OrderObjectsEditor
-                  objects={order.objects || []}
-                  steps={order.steps}
-                  articleRows={order.articleRows}
-                  onObjectsChange={(newObjects) => handleObjectsAndStepsChange(newObjects, order.steps)}
-                  onStepsChange={(newSteps) => handleObjectsAndStepsChange(order.objects || [], newSteps)}
-                   onTruckStatusChange={handleTruckStatusChange}
-                   onTruckStepStatusChange={handleTruckStepStatusChange}
-                   onTruckBillingStatusChange={handleTruckBillingStatusChange}
-                  orderInfo={{
-                    id: order.id,
-                    orderNumber: order.orderNumber,
-                    customer: order.customer,
-                  }}
-                />
+                {order.dataModelVersion === 2 ? (
+                  <UnitsEditor
+                    units={order.units || []}
+                    onUnitsChange={async (newUnits) => {
+                      try {
+                        await updateUnits(order.id, newUnits);
+                      } catch (error) {
+                        console.error('Error updating units:', error);
+                        toast.error('Kunde inte spara ändringarna. Försök igen.');
+                      }
+                    }}
+                  />
+                ) : (
+                  <OrderObjectsEditor
+                    objects={order.objects || []}
+                    steps={order.steps}
+                    articleRows={order.articleRows}
+                    onObjectsChange={(newObjects) => handleObjectsAndStepsChange(newObjects, order.steps)}
+                    onStepsChange={(newSteps) => handleObjectsAndStepsChange(order.objects || [], newSteps)}
+                    onTruckStatusChange={handleTruckStatusChange}
+                    onTruckStepStatusChange={handleTruckStepStatusChange}
+                    onTruckBillingStatusChange={handleTruckBillingStatusChange}
+                    orderInfo={{
+                      id: order.id,
+                      orderNumber: order.orderNumber,
+                      customer: order.customer,
+                    }}
+                  />
+                )}
               </CardContent>
             </Card>
 
