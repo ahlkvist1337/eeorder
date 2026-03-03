@@ -70,7 +70,7 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
       if (filters.productionStatus !== 'all' && toAdminStatus(order.productionStatus) !== filters.productionStatus) {
         return false;
       }
-      if (filters.billingStatus !== 'all' && order.billingStatus !== filters.billingStatus) {
+      if (filters.billingStatus !== 'all' && calculateOrderBillingStatus(order) !== filters.billingStatus) {
         return false;
       }
       if (filters.hasDeviation !== null && order.hasDeviation !== filters.hasDeviation) {
@@ -114,8 +114,8 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
           bValue = b.plannedEnd || '';
           break;
         case 'billingStatus':
-          aValue = a.billingStatus;
-          bValue = b.billingStatus;
+          aValue = calculateOrderBillingStatus(a);
+          bValue = calculateOrderBillingStatus(b);
           break;
       }
 
@@ -422,7 +422,7 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
                   </span>
                 )}
                 <span className="text-muted-foreground/50">•</span>
-                <BillingStatusBadge status={order.billingStatus} />
+                <BillingStatusBadge status={calculateOrderBillingStatus(order)} />
               </div>
               
               {order.comment && (
