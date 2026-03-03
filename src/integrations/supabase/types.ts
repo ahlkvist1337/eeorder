@@ -26,6 +26,7 @@ export type Database = {
           step_id: string | null
           text: string
           unit: string
+          unit_id: string | null
         }
         Insert: {
           id?: string
@@ -38,6 +39,7 @@ export type Database = {
           step_id?: string | null
           text: string
           unit?: string
+          unit_id?: string | null
         }
         Update: {
           id?: string
@@ -50,6 +52,7 @@ export type Database = {
           step_id?: string | null
           text?: string
           unit?: string
+          unit_id?: string | null
         }
         Relationships: [
           {
@@ -64,6 +67,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_rows_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "order_units"
             referencedColumns: ["id"]
           },
         ]
@@ -411,6 +421,44 @@ export type Database = {
           },
         ]
       }
+      order_units: {
+        Row: {
+          billing_status: Database["public"]["Enums"]["truck_billing_status"]
+          created_at: string
+          id: string
+          order_id: string
+          sort_order: number | null
+          status: Database["public"]["Enums"]["truck_status"]
+          unit_number: string | null
+        }
+        Insert: {
+          billing_status?: Database["public"]["Enums"]["truck_billing_status"]
+          created_at?: string
+          id?: string
+          order_id: string
+          sort_order?: number | null
+          status?: Database["public"]["Enums"]["truck_status"]
+          unit_number?: string | null
+        }
+        Update: {
+          billing_status?: Database["public"]["Enums"]["truck_billing_status"]
+          created_at?: string
+          id?: string
+          order_id?: string
+          sort_order?: number | null
+          status?: Database["public"]["Enums"]["truck_status"]
+          unit_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_units_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           actual_end: string | null
@@ -420,6 +468,7 @@ export type Database = {
           created_at: string
           customer: string
           customer_reference: string | null
+          data_model_version: number
           delivery_address: string | null
           deviation_comment: string | null
           has_deviation: boolean
@@ -441,6 +490,7 @@ export type Database = {
           created_at?: string
           customer: string
           customer_reference?: string | null
+          data_model_version?: number
           delivery_address?: string | null
           deviation_comment?: string | null
           has_deviation?: boolean
@@ -462,6 +512,7 @@ export type Database = {
           created_at?: string
           customer?: string
           customer_reference?: string | null
+          data_model_version?: number
           delivery_address?: string | null
           deviation_comment?: string | null
           has_deviation?: boolean
@@ -763,6 +814,73 @@ export type Database = {
             columns: ["truck_id"]
             isOneToOne: false
             referencedRelation: "object_trucks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      unit_object_steps: {
+        Row: {
+          id: string
+          name: string
+          sort_order: number
+          status: Database["public"]["Enums"]["step_status"]
+          template_id: string
+          unit_object_id: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          sort_order?: number
+          status?: Database["public"]["Enums"]["step_status"]
+          template_id: string
+          unit_object_id: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          sort_order?: number
+          status?: Database["public"]["Enums"]["step_status"]
+          template_id?: string
+          unit_object_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unit_object_steps_unit_object_id_fkey"
+            columns: ["unit_object_id"]
+            isOneToOne: false
+            referencedRelation: "unit_objects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      unit_objects: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          unit_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          unit_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unit_objects_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "order_units"
             referencedColumns: ["id"]
           },
         ]

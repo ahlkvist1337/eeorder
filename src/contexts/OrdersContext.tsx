@@ -164,6 +164,7 @@ function mapDbOrderToOrder(
   lifecycleEvents: DbTruckLifecycleEvent[]
 ): Order {
   return {
+    dataModelVersion: (dbOrder as any).data_model_version ?? 1,
     id: dbOrder.id,
     orderNumber: dbOrder.order_number,
     customer: dbOrder.customer,
