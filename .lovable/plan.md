@@ -1,33 +1,50 @@
 
 
-# Plan: Lägg till steg direkt från objektraden
+# Plan: Historik med vem som gjorde ändringen
 
 ## Problem
 
-"Lägg till steg"-kontrollen sitter gömd bakom expand-knappen (chevron `>`). Det är inte uppenbart att man måste klicka dit.
+Historiken loggar steg-ändringar och enhetshändelser men sparar inte **vem** som gjorde ändringen. Det behövs initialer (t.ex. "JD") för varje händelse.
 
 ## Lösning
 
-Lägg till en `+`-knapp på varje objektrad (bredvid print-knappen) som togglar en inline "välj steg + lägg till"-rad direkt under objektet. Samma sak med delete-knapp per objekt. Expand-sektionen (chevron) behövs då bara för att lägga till nya **objekt**.
+### 1. Lägg till `changed_by`-kolumn i historiktabellerna
 
-### Ändring i `UnitsEditor.tsx`
+Databasmigration som lägger till `changed_by_name text` i:
+- `truck_status_history` — steg-statusändringar
+- `truck_lifecycle_events` — enhetshändelser (ankomst, start, klar, packat, etc.)
 
-**Objektraden (rad 432-475)** utökas med:
-- En `+`-knapp och `🗑`-knapp per objekt (bredvid `🖨`)
-- Ny state `addingStepForObject` som spårar vilka objekt som visar "lägg till steg"-raden
-- När `+` klickas visas en rad under objektet med step-template-dropdown + "Lägg till"-knapp
+Använder `text` med initialer/namn, inte FK till `auth.users`, för att undvika RLS-komplikationer och göra det enkelt att visa.
 
-Layout:
+### 2. Skicka med initialer vid loggning
+
+**`OrdersContext.tsx`**: I `updateUnitStepStatus` och `updateUnitStatus` — hämta `profile.full_name` från `useAuth()` och extrahera initialer (t.ex. "Johan Doe" → "JD"). Skicka med som `changed_by_name` vid insert.
+
+Initials-funktion:
 ```
-📦 Motorlåda  [Maskering ○] [Målning ●]    ➕ 🖨 🗑
-  └ [Välj steg... v] [+ Steg]     ← visas när ➕ klickas
+"Johan Doe" → "JD"
+"Anna" → "AN"
+null → "?"
 ```
 
-Expand-sektionen (rad 479-536) förenklas till att bara visa "Lägg till objekt"-kontrollerna.
+### 3. Visa initialer i historik-tidslinjen
 
-### Påverkade filer
+**`OrderDetails.tsx`**: Läs `changed_by_name` från historikdata och visa bredvid tidsstämpeln:
+
+```
+● 3 mar 12:03  Blästring: Klar  JD
+```
+
+### 4. Inkludera `changed_by_name` i fetch
+
+**`OrdersContext.tsx`**: Uppdatera fetch-queries för `truck_status_history` och `truck_lifecycle_events` att inkludera det nya fältet, och mappa det till TypeScript-typerna.
+
+## Påverkade filer
 
 | Fil | Ändring |
 |-----|---------|
-| `src/components/UnitsEditor.tsx` | `+`/`🗑` på objektraden, inline steg-addering |
+| Migration SQL | `ALTER TABLE` — lägg till `changed_by_name text` |
+| `src/contexts/OrdersContext.tsx` | Skicka initialer vid insert, fetcha fältet |
+| `src/pages/OrderDetails.tsx` | Visa initialer i historik |
+| `src/types/order.ts` | Lägg till `changedByName?` i historik-interfaces |
 
