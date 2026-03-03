@@ -261,9 +261,12 @@ export function getOrderBillingLabel(order: Order): string {
   if (computed === 'billed') return billingStatusLabels.billed;
 
   // ready_for_billing — check if ALL or only SOME are ready/billed
-  if (order.dataModelVersion === 2 && order.units && order.units.length > 1) {
-    const allReady = order.units.every(u => u.billingStatus === 'ready_for_billing' || u.billingStatus === 'billed');
-    if (!allReady) return 'Delvis klar för fakturering';
+  if (order.dataModelVersion === 2 && order.units) {
+    const allObjects = order.units.flatMap(u => u.objects);
+    if (allObjects.length > 1) {
+      const allReady = allObjects.every(o => o.billingStatus === 'ready_for_billing' || o.billingStatus === 'billed');
+      if (!allReady) return 'Delvis klar för fakturering';
+    }
   } else if (order.dataModelVersion !== 2) {
     const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
     if (allTrucks.length > 1) {
@@ -373,13 +376,14 @@ export function calculateObjectQuantities(trucks: ObjectTruck[] | undefined): {
 
 // Calculate computed billing status for an order based on its trucks
 export function calculateOrderBillingStatus(order: Order): BillingStatus {
-  // V2: use units
+  // V2: aggregate from unit objects, not unit level
   if (order.dataModelVersion === 2 && order.units) {
-    if (order.units.length === 0) return order.billingStatus;
-    const allBilled = order.units.every(u => u.billingStatus === 'billed');
+    const allObjects = order.units.flatMap(u => u.objects);
+    if (allObjects.length === 0) return order.billingStatus;
+    const allBilled = allObjects.every(o => o.billingStatus === 'billed');
     if (allBilled) return 'billed';
-    const someBilledOrReady = order.units.some(u => u.billingStatus === 'billed' || u.billingStatus === 'ready_for_billing');
-    if (someBilledOrReady) return 'ready_for_billing';
+    const someReady = allObjects.some(o => o.billingStatus === 'ready_for_billing' || o.billingStatus === 'billed');
+    if (someReady) return 'ready_for_billing';
     return 'not_ready';
   }
 
