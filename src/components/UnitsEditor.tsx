@@ -23,6 +23,8 @@ interface UnitsEditorProps {
   onUnitStatusChange?: (unitId: string, status: TruckStatus) => void;
   onUnitStepStatusChange?: (unitId: string, stepId: string, status: StepStatus) => void;
   onUnitBillingStatusChange?: (unitId: string, status: TruckBillingStatus) => void;
+  onUnitObjectStatusChange?: (unitId: string, objectId: string, status: TruckStatus) => void;
+  onUnitObjectBillingStatusChange?: (unitId: string, objectId: string, status: TruckBillingStatus) => void;
   orderInfo?: { id: string; orderNumber: string; customer: string };
   articleRows?: ArticleRow[];
 }
@@ -43,7 +45,7 @@ const truckStatusColors: Record<TruckStatus, string> = {
   delivered: 'text-emerald-600',
 };
 
-export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitStepStatusChange, onUnitBillingStatusChange, orderInfo, articleRows }: UnitsEditorProps) {
+export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitStepStatusChange, onUnitBillingStatusChange, onUnitObjectStatusChange, onUnitObjectBillingStatusChange, orderInfo, articleRows }: UnitsEditorProps) {
   const { steps: treatmentTemplates } = useTreatmentSteps();
   const { templates: objectTemplates } = useObjectTemplates();
   const { isProduction } = useAuth();
@@ -98,6 +100,8 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
           unitId: '', 
           name: obj.name,
           description: obj.description,
+          status: 'waiting' as TruckStatus,
+          billingStatus: 'not_billable' as TruckBillingStatus,
           steps: obj.steps.map(s => ({
             id: crypto.randomUUID(),
             unitObjectId: newObjId,
@@ -133,69 +137,71 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
   };
 
   // --- Step status click (auto-status logic like V1) ---
-  const handleStepStatusClick = (unitId: string, stepId: string, currentStatus: StepStatus) => {
+  const handleStepStatusClick = (unitId: string, objectId: string, stepId: string, currentStatus: StepStatus) => {
     const nextStatus: StepStatus =
       currentStatus === 'pending' ? 'in_progress' :
       currentStatus === 'in_progress' ? 'completed' : 'pending';
 
     const unit = units.find(u => u.id === unitId);
     if (!unit) return;
+    const obj = unit.objects.find(o => o.id === objectId);
+    if (!obj) return;
 
     if (onUnitStepStatusChange) {
       onUnitStepStatusChange(unitId, stepId, nextStatus);
 
-      // Auto-status: step → in_progress → unit starts
+      // Auto-status: step → in_progress → object starts
       if (nextStatus === 'in_progress') {
-        if (unit.status === 'waiting' || unit.status === 'arrived' || unit.status === 'paused') {
-          onUnitStatusChange?.(unitId, 'started');
+        if (obj.status === 'waiting' || obj.status === 'arrived' || obj.status === 'paused') {
+          onUnitObjectStatusChange?.(unitId, objectId, 'started');
         }
       }
 
-      // Auto-status: all steps completed → unit completed
+      // Auto-status: all steps in this object completed → object completed
       if (nextStatus === 'completed') {
-        const allSteps = unit.objects.flatMap(o => o.steps);
-        const allCompleted = allSteps.every(s =>
+        const allCompleted = obj.steps.every(s =>
           s.id === stepId ? true : s.status === 'completed'
         );
-        if (allCompleted && unit.status !== 'completed') {
-          onUnitStatusChange?.(unitId, 'completed');
+        if (allCompleted && obj.status !== 'completed') {
+          onUnitObjectStatusChange?.(unitId, objectId, 'completed');
         }
       }
 
-      // Auto-status: all steps back to pending → unit back to arrived
+      // Auto-status: all steps back to pending → object back to arrived
       if (nextStatus === 'pending') {
-        const allSteps = unit.objects.flatMap(o => o.steps);
-        const allPending = allSteps.every(s =>
+        const allPending = obj.steps.every(s =>
           s.id === stepId ? true : s.status === 'pending'
         );
-        if (allPending && (unit.status === 'started' || unit.status === 'paused')) {
-          onUnitStatusChange?.(unitId, 'arrived');
+        if (allPending && (obj.status === 'started' || obj.status === 'paused')) {
+          onUnitObjectStatusChange?.(unitId, objectId, 'arrived');
         }
       }
     } else {
       // Fallback: local-only update (for create mode)
       onUnitsChange(units.map(u => {
         if (u.id !== unitId) return u;
-        const updated = {
+        return {
           ...u,
-          objects: u.objects.map(obj => ({
-            ...obj,
-            steps: obj.steps.map(s =>
-              s.id === stepId ? { ...s, status: nextStatus } : s
-            ),
-          })),
+          objects: u.objects.map(o => {
+            if (o.id !== objectId) return o;
+            const updated = {
+              ...o,
+              steps: o.steps.map(s =>
+                s.id === stepId ? { ...s, status: nextStatus } : s
+              ),
+            };
+            if (nextStatus === 'in_progress' && (updated.status === 'waiting' || updated.status === 'arrived' || updated.status === 'paused')) {
+              updated.status = 'started';
+            }
+            if (nextStatus === 'completed' && updated.steps.every(s => s.status === 'completed')) {
+              updated.status = 'completed';
+            }
+            if (nextStatus === 'pending' && updated.steps.every(s => s.status === 'pending') && (updated.status === 'started' || updated.status === 'paused')) {
+              updated.status = 'arrived';
+            }
+            return updated;
+          }),
         };
-        if (nextStatus === 'in_progress' && (updated.status === 'waiting' || updated.status === 'arrived' || updated.status === 'paused')) {
-          updated.status = 'started';
-        }
-        const allSteps = updated.objects.flatMap(o => o.steps);
-        if (nextStatus === 'completed' && allSteps.every(s => s.status === 'completed')) {
-          updated.status = 'completed';
-        }
-        if (nextStatus === 'pending' && allSteps.every(s => s.status === 'pending') && (updated.status === 'started' || updated.status === 'paused')) {
-          updated.status = 'arrived';
-        }
-        return updated;
       }));
     }
   };
@@ -217,6 +223,8 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
       id: crypto.randomUUID(),
       unitId,
       name,
+      status: 'waiting',
+      billingStatus: 'not_billable',
       steps: [],
     };
 
@@ -315,74 +323,30 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                 </div>
               ) : (
                 <>
-                  {/* Unit name + status */}
+                  {/* Unit name + aggregate status */}
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <span className="font-mono font-bold text-sm min-w-[60px]">
                       {getUnitDisplayName(unit, unitIndex)}
                     </span>
                     
-                    <Select
-                      value={unit.status}
-                      onValueChange={(value: TruckStatus) => {
-                        if (onUnitStatusChange) {
-                          onUnitStatusChange(unit.id, value);
-                        } else {
-                          onUnitsChange(units.map(u =>
-                            u.id === unit.id ? { ...u, status: value } : u
-                          ));
-                        }
-                      }}
-                    >
-                      <SelectTrigger className={cn('h-9 w-28 text-sm', truckStatusColors[unit.status])}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(Object.keys(truckStatusLabels) as TruckStatus[]).map(s => (
-                          <SelectItem key={s} value={s} className={cn('text-sm py-2', truckStatusColors[s])}>
-                            {truckStatusLabels[s]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {/* Aggregate status summary */}
+                    {unit.objects.length > 0 && (() => {
+                      const total = unit.objects.length;
+                      const delivered = unit.objects.filter(o => o.status === 'delivered').length;
+                      const packed = unit.objects.filter(o => o.status === 'packed' || o.status === 'delivered').length;
+                      const completed = unit.objects.filter(o => o.status === 'completed' || o.status === 'packed' || o.status === 'delivered').length;
+                      return (
+                        <span className="text-xs text-muted-foreground">
+                          {delivered === total ? 'Allt levererat' :
+                           packed === total ? 'Allt packat' :
+                           completed === total ? 'Allt klart' :
+                           `${completed}/${total} klara`}
+                        </span>
+                      );
+                    })()}
                   </div>
 
-                  {/* Pack/Deliver buttons + Billing status */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {unit.status === 'completed' && onUnitStatusChange && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 bg-amber-500/10 border-amber-500 text-amber-700 hover:bg-amber-500/20"
-                        onClick={() => onUnitStatusChange(unit.id, 'packed')}
-                      >
-                        <Package className="h-4 w-4 mr-1" />
-                        Packa
-                      </Button>
-                    )}
-                    
-                    {unit.status === 'packed' && onUnitStatusChange && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 bg-emerald-600/10 border-emerald-600 text-emerald-700 hover:bg-emerald-600/20"
-                        onClick={() => onUnitStatusChange(unit.id, 'delivered')}
-                      >
-                        <TruckIcon className="h-4 w-4 mr-1" />
-                        Leverera
-                      </Button>
-                    )}
-                    
-                    {unit.status === 'delivered' && (
-                      <span className={cn(
-                        'text-xs px-2 py-1 rounded-md font-medium',
-                        unit.billingStatus === 'billed' ? 'bg-emerald-100 text-emerald-700' :
-                        unit.billingStatus === 'ready_for_billing' ? 'bg-blue-100 text-blue-700' :
-                        'bg-muted text-muted-foreground'
-                      )}>
-                        {truckBillingStatusLabels[unit.billingStatus]}
-                      </span>
-                    )}
-                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0" />
 
                   {/* Action buttons */}
                   <div className="flex items-center gap-1 flex-shrink-0">
@@ -435,66 +399,137 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                     <div className="flex items-center gap-2 flex-wrap">
                       <Box className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <span className="text-sm font-medium">{obj.name}</span>
-                      {obj.steps.map(step => {
-                        const colors = stepStatusColors[step.status];
-                        return (
-                          <button
-                            key={step.id}
-                            onClick={() => handleStepStatusClick(unit.id, step.id, step.status)}
-                            className={cn(
-                              'px-2 py-1 sm:px-2 sm:py-0.5 rounded-md text-xs font-medium transition-colors hover:opacity-80 min-h-[44px] sm:min-h-0 whitespace-nowrap',
-                              colors.bg,
-                              colors.text
-                            )}
-                            title={`${obj.name} → ${step.name}: Klicka för att ändra status`}
-                          >
-                            {step.name} {colors.label}
-                          </button>
-                        );
-                      })}
-                      <div className="ml-auto flex items-center gap-0.5 shrink-0">
-                        {isProduction && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 sm:h-6 sm:w-6"
-                            onClick={() => setAddingStepForObject(prev => prev === obj.id ? null : obj.id)}
-                            title="Lägg till steg"
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                        {orderInfo && obj.steps.length > 0 && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 sm:h-6 sm:w-6"
-                            onClick={async () => {
-                              await printWorkCardV2Object({
-                                unitObject: obj,
-                                unitNumber: unit.unitNumber,
-                                articleRows: articleRows?.filter(r => r.unitId === unit.id),
-                                order: orderInfo,
-                                baseUrl: window.location.origin,
-                              });
-                            }}
-                            title="Skriv ut arbetskort"
-                          >
-                            <Printer className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                        {isProduction && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 sm:h-6 sm:w-6 text-destructive hover:text-destructive"
-                            onClick={() => handleRemoveObject(unit.id, obj.id)}
-                            title="Ta bort objekt"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
+                      
+                      {/* Object status dropdown */}
+                      <Select
+                        value={obj.status}
+                        onValueChange={(value: TruckStatus) => {
+                          if (onUnitObjectStatusChange) {
+                            onUnitObjectStatusChange(unit.id, obj.id, value);
+                          } else {
+                            onUnitsChange(units.map(u =>
+                              u.id === unit.id ? { ...u, objects: u.objects.map(o => o.id === obj.id ? { ...o, status: value } : o) } : u
+                            ));
+                          }
+                        }}
+                      >
+                        <SelectTrigger className={cn('h-7 w-24 text-xs', truckStatusColors[obj.status])}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(Object.keys(truckStatusLabels) as TruckStatus[]).map(s => (
+                            <SelectItem key={s} value={s} className={cn('text-xs py-1.5', truckStatusColors[s])}>
+                              {truckStatusLabels[s]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      {/* Pack button */}
+                      {obj.status === 'completed' && onUnitObjectStatusChange && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs bg-amber-500/10 border-amber-500 text-amber-700 hover:bg-amber-500/20"
+                          onClick={() => onUnitObjectStatusChange(unit.id, obj.id, 'packed')}
+                        >
+                          <Package className="h-3 w-3 mr-1" />
+                          Packa
+                        </Button>
+                      )}
+                      
+                      {/* Deliver button */}
+                      {obj.status === 'packed' && onUnitObjectStatusChange && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs bg-emerald-600/10 border-emerald-600 text-emerald-700 hover:bg-emerald-600/20"
+                          onClick={() => onUnitObjectStatusChange(unit.id, obj.id, 'delivered')}
+                        >
+                          <TruckIcon className="h-3 w-3 mr-1" />
+                          Leverera
+                        </Button>
+                      )}
+
+                      {/* Billing badge */}
+                      {obj.status === 'delivered' && (
+                        <span className={cn(
+                          'text-xs px-1.5 py-0.5 rounded-md font-medium',
+                          obj.billingStatus === 'billed' ? 'bg-[hsl(var(--billing-billed)/0.15)] text-[hsl(var(--billing-billed))]' :
+                          obj.billingStatus === 'ready_for_billing' ? 'bg-[hsl(var(--billing-ready)/0.15)] text-[hsl(var(--billing-ready))]' :
+                          'bg-muted text-muted-foreground'
+                        )}>
+                          {truckBillingStatusLabels[obj.billingStatus]}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Step badges row */}
+                    {obj.steps.length > 0 && (
+                      <div className="flex items-center gap-1.5 ml-5 mt-1 flex-wrap">
+                        {obj.steps.map(step => {
+                          const colors = stepStatusColors[step.status];
+                          return (
+                            <button
+                              key={step.id}
+                              onClick={() => handleStepStatusClick(unit.id, obj.id, step.id, step.status)}
+                              className={cn(
+                                'px-2 py-1 sm:px-2 sm:py-0.5 rounded-md text-xs font-medium transition-colors hover:opacity-80 min-h-[44px] sm:min-h-0 whitespace-nowrap',
+                                colors.bg,
+                                colors.text
+                              )}
+                              title={`${obj.name} → ${step.name}: Klicka för att ändra status`}
+                            >
+                              {step.name} {colors.label}
+                            </button>
+                          );
+                        })}
                       </div>
+                    )}
+
+                    {/* Action buttons for object */}
+                    <div className="flex items-center gap-0.5 ml-5 mt-1">
+                      {isProduction && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 sm:h-6 sm:w-6"
+                          onClick={() => setAddingStepForObject(prev => prev === obj.id ? null : obj.id)}
+                          title="Lägg till steg"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {orderInfo && obj.steps.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 sm:h-6 sm:w-6"
+                          onClick={async () => {
+                            await printWorkCardV2Object({
+                              unitObject: obj,
+                              unitNumber: unit.unitNumber,
+                              articleRows: articleRows?.filter(r => r.unitId === unit.id),
+                              order: orderInfo,
+                              baseUrl: window.location.origin,
+                            });
+                          }}
+                          title="Skriv ut arbetskort"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {isProduction && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 sm:h-6 sm:w-6 text-destructive hover:text-destructive"
+                          onClick={() => handleRemoveObject(unit.id, obj.id)}
+                          title="Ta bort objekt"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                     {/* Inline step-adder */}
                     {addingStepForObject === obj.id && isProduction && (
