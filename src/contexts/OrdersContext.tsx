@@ -154,6 +154,8 @@ interface OrdersContextType {
   updateUnitStatus: (orderId: string, unitId: string, newStatus: TruckStatus) => Promise<void>;
   updateUnitStepStatus: (orderId: string, unitId: string, stepId: string, newStatus: StepStatus, stepName: string) => Promise<void>;
   updateUnitBillingStatus: (orderId: string, unitId: string, newStatus: TruckBillingStatus) => Promise<void>;
+  updateUnitObjectStatus: (orderId: string, unitId: string, objectId: string, newStatus: TruckStatus) => Promise<void>;
+  updateUnitObjectBillingStatus: (orderId: string, unitId: string, objectId: string, newStatus: TruckBillingStatus) => Promise<void>;
 }
 
 const OrdersContext = createContext<OrdersContextType | null>(null);
@@ -289,6 +291,17 @@ function mapDbOrderToOrder(
 }
 
 // Helper to extract initials from full name
+// Helper to compute aggregate status from a list of object statuses
+function computeAggregateStatus(statuses: TruckStatus[]): TruckStatus {
+  if (statuses.length === 0) return 'waiting';
+  if (statuses.every(s => s === 'delivered')) return 'delivered';
+  if (statuses.every(s => s === 'packed' || s === 'delivered')) return 'packed';
+  if (statuses.every(s => s === 'completed' || s === 'packed' || s === 'delivered')) return 'completed';
+  if (statuses.some(s => s === 'started' || s === 'completed' || s === 'packed' || s === 'delivered')) return 'started';
+  if (statuses.some(s => s === 'arrived')) return 'arrived';
+  return 'waiting';
+}
+
 function getInitials(fullName: string | null | undefined): string {
   if (!fullName || !fullName.trim()) return '?';
   const parts = fullName.trim().split(/\s+/);
@@ -406,6 +419,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
               unitId: uo.unit_id,
               name: uo.name,
               description: uo.description || undefined,
+              status: uo.status || 'waiting',
+              billingStatus: uo.billing_status || 'not_billable',
               createdAt: uo.created_at,
               steps: unitObjectStepsData
                 .filter((s: any) => s.unit_object_id === uo.id)
@@ -1519,6 +1534,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           unit_id: u.id,
           name: o.name,
           description: o.description || null,
+          status: o.status || 'waiting',
+          billing_status: o.billingStatus || 'not_billable',
         }))
       );
       if (allObjects.length > 0) {
@@ -1653,12 +1670,14 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     const unit = order.units?.find(u => u.id === unitId);
     if (!unit) return;
 
-    // Find current status
+    // Find current status and object name
     let currentStatus: StepStatus = 'pending';
+    let objectName = '';
     for (const obj of unit.objects) {
       const step = obj.steps.find(s => s.id === stepId);
       if (step) {
         currentStatus = step.status;
+        objectName = obj.name;
         break;
       }
     }
@@ -1690,13 +1709,14 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       .update({ status: newStatus })
       .eq('id', stepId);
 
-    // Log step change to truck_status_history (reuse same table as V1)
+    // Log step change with object name prefix: "Objektnamn: Stegnamn"
+    const logStepName = objectName ? `${objectName}: ${stepName}` : stepName;
     await supabase.from('truck_status_history').insert({
       order_id: orderId,
       truck_id: unitId,
       truck_number: unit.unitNumber || '',
       step_id: stepId,
-      step_name: stepName,
+      step_name: logStepName,
       from_status: currentStatus,
       to_status: newStatus,
       changed_by_name: getInitials(profile?.full_name),
@@ -1728,6 +1748,127 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       .eq('id', unitId);
   }, [orders, markLocalUpdate]);
 
+  // V2: Update unit object status
+  const updateUnitObjectStatus = useCallback(async (
+    orderId: string,
+    unitId: string,
+    objectId: string,
+    newStatus: TruckStatus
+  ) => {
+    markLocalUpdate();
+    
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    const unit = order.units?.find(u => u.id === unitId);
+    if (!unit) return;
+    const obj = unit.objects.find(o => o.id === objectId);
+    if (!obj) return;
+    
+    const currentStatus = obj.status;
+    if (currentStatus === newStatus) return;
+
+    // Create lifecycle event
+    const newLifecycleEvent: TruckLifecycleEvent = {
+      id: crypto.randomUUID(),
+      orderId,
+      truckId: unitId,
+      truckNumber: unit.unitNumber || '',
+      eventType: newStatus as TruckLifecycleEventType,
+      stepName: obj.name, // Store object name in step_name for context
+      timestamp: new Date().toISOString(),
+      changedByName: getInitials(profile?.full_name),
+    };
+
+    // Optimistic update
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      return {
+        ...o,
+        units: o.units?.map(u => {
+          if (u.id !== unitId) return u;
+          return {
+            ...u,
+            objects: u.objects.map(ob =>
+              ob.id === objectId ? { 
+                ...ob, 
+                status: newStatus,
+                ...(newStatus === 'delivered' ? { billingStatus: 'ready_for_billing' as TruckBillingStatus } : {}),
+              } : ob
+            ),
+          };
+        }),
+        truckLifecycleEvents: [
+          ...(o.truckLifecycleEvents || []),
+          newLifecycleEvent,
+        ],
+      };
+    }));
+
+    // Update in DB
+    const dbUpdate: Record<string, unknown> = { status: newStatus };
+    if (newStatus === 'delivered') {
+      dbUpdate.billing_status = 'ready_for_billing';
+    }
+    await supabase.from('unit_objects').update(dbUpdate).eq('id', objectId);
+
+    // Log lifecycle event
+    await supabase.from('truck_lifecycle_events').insert({
+      id: newLifecycleEvent.id,
+      order_id: orderId,
+      truck_id: unitId,
+      truck_number: unit.unitNumber || null,
+      event_type: newStatus,
+      step_name: obj.name,
+      changed_by_name: getInitials(profile?.full_name),
+    });
+
+    // Also update parent unit status aggregated from objects
+    const allObjects = unit.objects.map(ob => ob.id === objectId ? { ...ob, status: newStatus } : ob);
+    const computedUnitStatus = computeAggregateStatus(allObjects.map(ob => ob.status));
+    if (computedUnitStatus !== unit.status) {
+      await supabase.from('order_units').update({ status: computedUnitStatus }).eq('id', unitId);
+      setOrders(prev => prev.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          units: o.units?.map(u => u.id === unitId ? { ...u, status: computedUnitStatus } : u),
+        };
+      }));
+    }
+  }, [orders, markLocalUpdate]);
+
+  // V2: Update unit object billing status
+  const updateUnitObjectBillingStatus = useCallback(async (
+    orderId: string,
+    unitId: string,
+    objectId: string,
+    newStatus: TruckBillingStatus
+  ) => {
+    markLocalUpdate();
+    
+    // Optimistic update
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      return {
+        ...o,
+        units: o.units?.map(u => {
+          if (u.id !== unitId) return u;
+          return {
+            ...u,
+            objects: u.objects.map(ob =>
+              ob.id === objectId ? { ...ob, billingStatus: newStatus } : ob
+            ),
+          };
+        }),
+      };
+    }));
+
+    // Update in DB
+    await supabase.from('unit_objects')
+      .update({ billing_status: newStatus })
+      .eq('id', objectId);
+  }, [orders, markLocalUpdate]);
+
   return (
     <OrdersContext.Provider value={{
       orders,
@@ -1750,6 +1891,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       updateUnitStatus,
       updateUnitStepStatus,
       updateUnitBillingStatus,
+      updateUnitObjectStatus,
+      updateUnitObjectBillingStatus,
     }}>
       {children}
     </OrdersContext.Provider>

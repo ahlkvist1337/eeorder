@@ -130,6 +130,8 @@ export interface UnitObject {
   unitId: string;
   name: string;
   description?: string;
+  status: TruckStatus;
+  billingStatus: TruckBillingStatus;
   steps: UnitObjectStep[];
   createdAt?: string;
 }

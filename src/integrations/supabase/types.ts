@@ -840,24 +840,30 @@ export type Database = {
       }
       unit_objects: {
         Row: {
+          billing_status: Database["public"]["Enums"]["truck_billing_status"]
           created_at: string
           description: string | null
           id: string
           name: string
+          status: Database["public"]["Enums"]["truck_status"]
           unit_id: string
         }
         Insert: {
+          billing_status?: Database["public"]["Enums"]["truck_billing_status"]
           created_at?: string
           description?: string | null
           id?: string
           name: string
+          status?: Database["public"]["Enums"]["truck_status"]
           unit_id: string
         }
         Update: {
+          billing_status?: Database["public"]["Enums"]["truck_billing_status"]
           created_at?: string
           description?: string | null
           id?: string
           name?: string
+          status?: Database["public"]["Enums"]["truck_status"]
           unit_id?: string
         }
         Relationships: [

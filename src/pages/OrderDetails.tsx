@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { ArrowLeft, AlertTriangle, Clock, Package, Wrench, Save, CalendarIcon, FileText } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Clock, Package, Wrench, Save, CalendarIcon, FileText, Box } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -63,6 +63,8 @@ export default function OrderDetails() {
     updateUnitStatus,
     updateUnitStepStatus,
     updateUnitBillingStatus,
+    updateUnitObjectStatus,
+    updateUnitObjectBillingStatus,
     deleteOrder,
     isLoading 
   } = useOrders();
@@ -467,6 +469,8 @@ export default function OrderDetails() {
                       updateUnitStepStatus(order.id, unitId, stepId, status, stepName);
                     }}
                     onUnitBillingStatusChange={(unitId, status) => updateUnitBillingStatus(order.id, unitId, status)}
+                    onUnitObjectStatusChange={(unitId, objectId, status) => updateUnitObjectStatus(order.id, unitId, objectId, status)}
+                    onUnitObjectBillingStatusChange={(unitId, objectId, status) => updateUnitObjectBillingStatus(order.id, unitId, objectId, status)}
                     orderInfo={{
                       id: order.id,
                       orderNumber: order.orderNumber,
@@ -531,70 +535,148 @@ export default function OrderDetails() {
                       {allUnits.map((unit, idx) => {
                         const unitName = unit.unitNumber ? `#${unit.unitNumber}` : `Enhet ${idx + 1}`;
                         
-                        // Step events from truck_status_history (reused for V2)
-                        const stepEvents = (order.truckStatusHistory || [])
-                          .filter(h => h.truckId === unit.id)
-                          .map(h => ({
-                            id: `step-${h.id}`,
-                            timestamp: h.timestamp,
-                            label: h.toStatus === 'in_progress'
-                              ? `${h.stepName}: Pågående`
-                              : h.toStatus === 'completed'
-                                ? `${h.stepName}: Klar`
-                                : h.stepName,
-                            changedBy: h.changedByName,
-                          }));
-                        
-                        // Lifecycle events
-                        const lifecycleEvents = (order.truckLifecycleEvents || [])
-                          .filter(e => e.truckId === unit.id && e.eventType !== 'step_started' && e.eventType !== 'step_completed')
-                          .map(e => ({
-                            id: `lifecycle-${e.id}`,
-                            timestamp: e.timestamp,
-                            label: e.eventType === 'arrived' ? 'Enhet ankommen'
-                              : e.eventType === 'started' ? 'Arbete påbörjat'
-                              : e.eventType === 'paused' ? 'Pausat'
-                              : e.eventType === 'completed' ? 'Enhet klar'
-                              : e.eventType === 'packed' ? 'Packat'
-                              : e.eventType === 'delivered' ? 'Levererat'
-                              : e.eventType,
-                            changedBy: e.changedByName,
-                          }));
-                        
-                        const allEvents = [...stepEvents, ...lifecycleEvents].sort((a, b) =>
-                          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-                        );
-                        
                         return (
                           <div key={unit.id} className="border-b pb-4 last:border-0 last:pb-0">
                             <div className="flex items-center gap-2 mb-3">
                               <span className="text-lg font-bold font-mono">{unitName}</span>
-                              {unit.objects.length > 0 && (
-                                <span className="text-sm text-muted-foreground">
-                                  • {unit.objects.map(o => o.name).join(', ')}
-                                </span>
-                              )}
                             </div>
-                            {allEvents.length === 0 ? (
-                              <p className="text-sm text-muted-foreground">Ingen historik ännu</p>
-                            ) : (
-                              <div className="relative pl-4 border-l-2 border-muted space-y-2">
-                                {allEvents.map(event => (
-                                  <div key={event.id} className="relative">
-                                    <div className="absolute -left-[9px] top-1.5 w-2 h-2 rounded-full bg-primary" />
-                                    <div className="flex items-center gap-2 text-sm">
-                                      <span className="text-muted-foreground min-w-[80px]">
-                                        {format(new Date(event.timestamp), 'd MMM HH:mm', { locale: sv })}
-                                      </span>
-                                      <span className="flex-1">{event.label}</span>
-                                      {event.changedBy && (
-                                        <span className="text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{event.changedBy}</span>
-                                      )}
-                                    </div>
+                            
+                            {/* Group events by object */}
+                            {unit.objects.map(obj => {
+                              // Step events for this object (step_name starts with "ObjectName: ")
+                              const stepEvents = (order.truckStatusHistory || [])
+                                .filter(h => h.truckId === unit.id && h.stepName.startsWith(`${obj.name}: `))
+                                .map(h => ({
+                                  id: `step-${h.id}`,
+                                  timestamp: h.timestamp,
+                                  label: h.toStatus === 'in_progress'
+                                    ? `${h.stepName.replace(`${obj.name}: `, '')}: Pågående`
+                                    : h.toStatus === 'completed'
+                                      ? `${h.stepName.replace(`${obj.name}: `, '')}: Klar`
+                                      : h.stepName.replace(`${obj.name}: `, ''),
+                                  changedBy: h.changedByName,
+                                }));
+
+                              // Also include step events without object prefix (legacy)
+                              const legacyStepEvents = (order.truckStatusHistory || [])
+                                .filter(h => h.truckId === unit.id && !h.stepName.includes(': '))
+                                .map(h => ({
+                                  id: `step-${h.id}`,
+                                  timestamp: h.timestamp,
+                                  label: h.toStatus === 'in_progress'
+                                    ? `${h.stepName}: Pågående`
+                                    : h.toStatus === 'completed'
+                                      ? `${h.stepName}: Klar`
+                                      : h.stepName,
+                                  changedBy: h.changedByName,
+                                }));
+                              
+                              // Lifecycle events for this object (step_name = object name)
+                              const lifecycleEvents = (order.truckLifecycleEvents || [])
+                                .filter(e => e.truckId === unit.id && e.stepName === obj.name 
+                                  && e.eventType !== 'step_started' && e.eventType !== 'step_completed')
+                                .map(e => ({
+                                  id: `lifecycle-${e.id}`,
+                                  timestamp: e.timestamp,
+                                  label: e.eventType === 'arrived' ? 'Ankommen'
+                                    : e.eventType === 'started' ? 'Arbete påbörjat'
+                                    : e.eventType === 'paused' ? 'Pausat'
+                                    : e.eventType === 'completed' ? 'Klar'
+                                    : e.eventType === 'packed' ? 'Packat'
+                                    : e.eventType === 'delivered' ? 'Levererat'
+                                    : e.eventType,
+                                  changedBy: e.changedByName,
+                                }));
+                              
+                              const allObjEvents = [...stepEvents, ...lifecycleEvents].sort((a, b) =>
+                                new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                              );
+                              
+                              return (
+                                <div key={obj.id} className="mb-3 last:mb-0">
+                                  <div className="flex items-center gap-2 mb-2 ml-2">
+                                    <Box className="h-3.5 w-3.5 text-muted-foreground" />
+                                    <span className="text-sm font-semibold">{obj.name}</span>
                                   </div>
-                                ))}
-                              </div>
-                            )}
+                                  {allObjEvents.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground ml-6">Ingen historik ännu</p>
+                                  ) : (
+                                    <div className="relative pl-6 ml-2 border-l-2 border-muted space-y-2">
+                                      {allObjEvents.map(event => (
+                                        <div key={event.id} className="relative">
+                                          <div className="absolute -left-[9px] top-1.5 w-2 h-2 rounded-full bg-primary" />
+                                          <div className="flex items-center gap-2 text-sm">
+                                            <span className="text-muted-foreground min-w-[80px]">
+                                              {format(new Date(event.timestamp), 'd MMM HH:mm', { locale: sv })}
+                                            </span>
+                                            <span className="flex-1">{event.label}</span>
+                                            {event.changedBy && (
+                                              <span className="text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{event.changedBy}</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {/* Unit-level lifecycle events (without object context - legacy) */}
+                            {(() => {
+                              const unitLevelEvents = (order.truckLifecycleEvents || [])
+                                .filter(e => e.truckId === unit.id && !e.stepName
+                                  && e.eventType !== 'step_started' && e.eventType !== 'step_completed')
+                                .map(e => ({
+                                  id: `lifecycle-${e.id}`,
+                                  timestamp: e.timestamp,
+                                  label: e.eventType === 'arrived' ? 'Enhet ankommen'
+                                    : e.eventType === 'started' ? 'Arbete påbörjat'
+                                    : e.eventType === 'paused' ? 'Pausat'
+                                    : e.eventType === 'completed' ? 'Enhet klar'
+                                    : e.eventType === 'packed' ? 'Packat'
+                                    : e.eventType === 'delivered' ? 'Levererat'
+                                    : e.eventType,
+                                  changedBy: e.changedByName,
+                                }));
+
+                              // Legacy step events (no object prefix)
+                              const legacySteps = (order.truckStatusHistory || [])
+                                .filter(h => h.truckId === unit.id && !h.stepName.includes(': '))
+                                .map(h => ({
+                                  id: `step-${h.id}`,
+                                  timestamp: h.timestamp,
+                                  label: h.toStatus === 'in_progress'
+                                    ? `${h.stepName}: Pågående`
+                                    : h.toStatus === 'completed'
+                                      ? `${h.stepName}: Klar`
+                                      : h.stepName,
+                                  changedBy: h.changedByName,
+                                }));
+
+                              const allLegacy = [...unitLevelEvents, ...legacySteps].sort((a, b) =>
+                                new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                              );
+                              if (allLegacy.length === 0) return null;
+                              return (
+                                <div className="relative pl-4 border-l-2 border-muted space-y-2 mt-2">
+                                  {allLegacy.map(event => (
+                                    <div key={event.id} className="relative">
+                                      <div className="absolute -left-[9px] top-1.5 w-2 h-2 rounded-full bg-primary" />
+                                      <div className="flex items-center gap-2 text-sm">
+                                        <span className="text-muted-foreground min-w-[80px]">
+                                          {format(new Date(event.timestamp), 'd MMM HH:mm', { locale: sv })}
+                                        </span>
+                                        <span className="flex-1">{event.label}</span>
+                                        {event.changedBy && (
+                                          <span className="text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{event.changedBy}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}
