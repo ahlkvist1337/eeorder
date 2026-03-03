@@ -272,25 +272,22 @@ export async function printWorkCardV2Object(data: WorkCardV2ObjectPrintData): Pr
   doc.setTextColor(100);
   doc.text('ARBETSKORT', pageWidth / 2, 25, { align: 'center' });
   
-  // Object name — BIG
+  // Unit number — BIG
   doc.setFontSize(36);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0);
-  doc.text(objectName.toUpperCase(), 20, 50);
+  doc.text(unitLabel || 'Enhet', 20, 50);
   
-  // Unit label
-  if (unitLabel) {
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Enhet: ${unitLabel}`, 20, 65);
-  }
+  // Object name — smaller underneath
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'normal');
+  doc.text(objectName.toUpperCase(), 20, 65);
   
   // Order and customer
-  const infoY = unitLabel ? 78 : 68;
   doc.setFontSize(12);
   doc.setTextColor(60);
-  doc.text(`Order: ${data.order.orderNumber}`, 20, infoY);
-  doc.text(`Kund: ${data.order.customer}`, 20, infoY + 8);
+  doc.text(`Order: ${data.order.orderNumber}`, 20, 80);
+  doc.text(`Kund: ${data.order.customer}`, 20, 88);
   
   // QR code — links directly to the object
   const orderUrl = `${data.baseUrl}/order/${data.order.id}?object=${data.unitObject.id}`;
@@ -304,7 +301,7 @@ export async function printWorkCardV2Object(data: WorkCardV2ObjectPrintData): Pr
   doc.text('i systemet', pageWidth - 45, 90, { align: 'center' });
   
   // Separator
-  const sepY = infoY + 20;
+  const sepY = 100;
   doc.setDrawColor(200);
   doc.setLineWidth(0.5);
   doc.line(20, sepY, pageWidth - 20, sepY);
