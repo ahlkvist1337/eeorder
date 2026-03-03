@@ -147,6 +147,7 @@ interface OrdersContextType {
   updateTruckStatus: (orderId: string, truckId: string, newStatus: TruckStatus) => Promise<void>;
   updateTruckBillingStatus: (orderId: string, truckId: string, newStatus: TruckBillingStatus) => Promise<void>;
   bulkUpdateOrders: (orderIds: string[], updates: BulkOrderUpdates) => Promise<void>;
+  updateUnits: (orderId: string, units: OrderUnit[]) => Promise<void>;
 }
 
 const OrdersContext = createContext<OrdersContextType | null>(null);
@@ -1465,6 +1466,64 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     await fetchOrders();
   }, [orders, fetchOrders]);
 
+  // V2: Update units for an order (delete-and-recreate strategy)
+  const updateUnits = useCallback(async (orderId: string, units: OrderUnit[]) => {
+    markLocalUpdate();
+    
+    // Delete existing units (CASCADE deletes unit_objects and unit_object_steps)
+    const { error: deleteError } = await supabase.from('order_units').delete().eq('order_id', orderId);
+    if (deleteError) throw deleteError;
+
+    if (units.length > 0) {
+      // Insert units
+      const { error: unitsError } = await supabase.from('order_units').insert(
+        units.map((u, idx) => ({
+          id: u.id,
+          order_id: orderId,
+          unit_number: u.unitNumber || null,
+          status: u.status || 'waiting',
+          billing_status: u.billingStatus || 'not_billable',
+          sort_order: idx,
+        }))
+      );
+      if (unitsError) throw unitsError;
+
+      // Insert unit_objects
+      const allObjects = units.flatMap(u =>
+        u.objects.map(o => ({
+          id: o.id,
+          unit_id: u.id,
+          name: o.name,
+          description: o.description || null,
+        }))
+      );
+      if (allObjects.length > 0) {
+        const { error: objError } = await supabase.from('unit_objects').insert(allObjects);
+        if (objError) throw objError;
+      }
+
+      // Insert unit_object_steps
+      const allSteps = units.flatMap(u =>
+        u.objects.flatMap(o =>
+          o.steps.map((s, idx) => ({
+            id: s.id,
+            unit_object_id: o.id,
+            template_id: s.templateId,
+            name: s.name,
+            sort_order: idx,
+            status: s.status || 'pending',
+          }))
+        )
+      );
+      if (allSteps.length > 0) {
+        const { error: stepsError } = await supabase.from('unit_object_steps').insert(allSteps);
+        if (stepsError) throw stepsError;
+      }
+    }
+
+    await fetchOrders();
+  }, [fetchOrders, markLocalUpdate]);
+
   return (
     <OrdersContext.Provider value={{
       orders,
@@ -1483,6 +1542,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       updateTruckStatus,
       updateTruckBillingStatus,
       bulkUpdateOrders,
+      updateUnits,
     }}>
       {children}
     </OrdersContext.Provider>
