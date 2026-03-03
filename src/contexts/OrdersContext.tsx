@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus, TruckStatusChange, TruckStatus, Instruction, TruckLifecycleEvent, TruckLifecycleEventType, TruckBillingStatus } from '@/types/order';
+import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus, TruckStatusChange, TruckStatus, Instruction, TruckLifecycleEvent, TruckLifecycleEventType, TruckBillingStatus, OrderUnit } from '@/types/order';
 
 // Database types (manual since types.ts may not be updated yet)
 interface DbOrder {
@@ -301,8 +301,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
       const orderIds = ordersData.map(o => o.id);
 
-      // Fetch related data in parallel (including order_objects, trucks, and truck statuses)
-      const [objectsResult, stepsResult, articleRowsResult, historyResult, stepHistoryResult, truckHistoryResult, lifecycleEventsResult] = await Promise.all([
+      // Fetch related data in parallel (including order_objects, trucks, truck statuses, and v2 units)
+      const [objectsResult, stepsResult, articleRowsResult, historyResult, stepHistoryResult, truckHistoryResult, lifecycleEventsResult, unitsResult] = await Promise.all([
         supabase.from('order_objects').select('*').in('order_id', orderIds),
         supabase.from('order_steps').select('*').in('order_id', orderIds),
         supabase.from('article_rows').select('*').in('order_id', orderIds),
@@ -310,6 +310,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         supabase.from('step_status_history').select('*').in('order_id', orderIds),
         supabase.from('truck_status_history').select('*').in('order_id', orderIds),
         supabase.from('truck_lifecycle_events').select('*').in('order_id', orderIds),
+        supabase.from('order_units').select('*').in('order_id', orderIds),
       ]);
 
       if (objectsResult.error) throw objectsResult.error;
@@ -319,8 +320,30 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       if (stepHistoryResult.error) throw stepHistoryResult.error;
       if (truckHistoryResult.error) throw truckHistoryResult.error;
       if (lifecycleEventsResult.error) throw lifecycleEventsResult.error;
+      if (unitsResult.error) throw unitsResult.error;
 
-      // Fetch trucks and their step statuses
+      // Fetch V2 unit children (unit_objects and unit_object_steps)
+      const allUnitIds = (unitsResult.data || []).map(u => u.id);
+      let unitObjectsData: any[] = [];
+      let unitObjectStepsData: any[] = [];
+      if (allUnitIds.length > 0) {
+        const [uoResult, uosResult] = await Promise.all([
+          supabase.from('unit_objects').select('*').in('unit_id', allUnitIds),
+          // We need unit_object_ids first, but let's fetch all steps for all unit_objects in a second pass
+          supabase.from('unit_objects').select('id').in('unit_id', allUnitIds),
+        ]);
+        if (uoResult.error) throw uoResult.error;
+        unitObjectsData = uoResult.data || [];
+        
+        const unitObjectIds = unitObjectsData.map((uo: any) => uo.id);
+        if (unitObjectIds.length > 0) {
+          const stepsRes = await supabase.from('unit_object_steps').select('*').in('unit_object_id', unitObjectIds);
+          if (stepsRes.error) throw stepsRes.error;
+          unitObjectStepsData = stepsRes.data || [];
+        }
+      }
+
+      // Fetch trucks and their step statuses (V1)
       const objectIds = (objectsResult.data || []).map(o => o.id);
       
       let trucksData: DbObjectTruck[] = [];
@@ -346,10 +369,42 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         const orderTruckIds = orderTrucks.map(t => t.id);
         const orderTruckStatuses = truckStepStatusData.filter(s => orderTruckIds.includes(s.truck_id));
         const orderTruckHistory = (truckHistoryResult.data || []).filter(h => h.order_id === dbOrder.id) as DbTruckStatusHistory[];
-        
         const orderLifecycleEvents = (lifecycleEventsResult.data || []).filter(e => e.order_id === dbOrder.id) as DbTruckLifecycleEvent[];
         
-        return mapDbOrderToOrder(
+        // V2 units mapping
+        const orderUnits = (unitsResult.data || []).filter(u => u.order_id === dbOrder.id);
+        const mappedUnits = orderUnits.map((u: any) => {
+          const uObjects = unitObjectsData.filter((uo: any) => uo.unit_id === u.id);
+          return {
+            id: u.id,
+            orderId: u.order_id,
+            unitNumber: u.unit_number || '',
+            status: u.status,
+            billingStatus: u.billing_status,
+            sortOrder: u.sort_order ?? undefined,
+            createdAt: u.created_at,
+            objects: uObjects.map((uo: any) => ({
+              id: uo.id,
+              unitId: uo.unit_id,
+              name: uo.name,
+              description: uo.description || undefined,
+              createdAt: uo.created_at,
+              steps: unitObjectStepsData
+                .filter((s: any) => s.unit_object_id === uo.id)
+                .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+                .map((s: any) => ({
+                  id: s.id,
+                  unitObjectId: s.unit_object_id,
+                  templateId: s.template_id,
+                  name: s.name,
+                  sortOrder: s.sort_order,
+                  status: s.status,
+                })),
+            })),
+          };
+        });
+        
+        const mapped = mapDbOrderToOrder(
           dbOrder as unknown as DbOrder,
           orderObjects,
           (stepsResult.data || []).filter(s => s.order_id === dbOrder.id) as DbOrderStep[],
@@ -361,6 +416,13 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           orderTruckHistory,
           orderLifecycleEvents
         );
+        
+        // Attach v2 units
+        if (mappedUnits.length > 0) {
+          mapped.units = mappedUnits;
+        }
+        
+        return mapped;
       });
 
       setOrders(mappedOrders);
@@ -436,6 +498,24 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         },
         debouncedFetch
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'order_units',
+        },
+        debouncedFetch
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'unit_object_steps',
+        },
+        debouncedFetch
+      )
       .subscribe();
 
     return () => {
@@ -472,6 +552,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       total_price: order.totalPrice,
       xml_data: order.xmlData || null,
       instructions: order.instructions || null,
+      data_model_version: order.dataModelVersion ?? 1,
     };
     
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -576,6 +657,60 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         }))
       );
       if (rowsError) throw rowsError;
+    }
+
+    // V2: Insert units → unit_objects → unit_object_steps
+    if (order.dataModelVersion === 2 && order.units && order.units.length > 0) {
+      const unitsToInsert = order.units.map((u, idx) => ({
+        id: u.id,
+        order_id: orderId,
+        unit_number: u.unitNumber || null,
+        status: u.status || 'waiting',
+        billing_status: u.billingStatus || 'not_billable',
+        sort_order: idx,
+      }));
+      const { error: unitsError } = await supabase.from('order_units').insert(unitsToInsert);
+      if (unitsError) {
+        // Rollback: delete order
+        await supabase.from('orders').delete().eq('id', orderId);
+        throw unitsError;
+      }
+
+      const allObjects = order.units.flatMap(u =>
+        u.objects.map(o => ({
+          id: o.id,
+          unit_id: u.id,
+          name: o.name,
+          description: o.description || null,
+        }))
+      );
+      if (allObjects.length > 0) {
+        const { error: objError } = await supabase.from('unit_objects').insert(allObjects);
+        if (objError) {
+          await supabase.from('orders').delete().eq('id', orderId);
+          throw objError;
+        }
+      }
+
+      const allSteps = order.units.flatMap(u =>
+        u.objects.flatMap(o =>
+          o.steps.map((s, idx) => ({
+            id: s.id,
+            unit_object_id: o.id,
+            template_id: s.templateId,
+            name: s.name,
+            sort_order: idx,
+            status: s.status || 'pending',
+          }))
+        )
+      );
+      if (allSteps.length > 0) {
+        const { error: stepsError } = await supabase.from('unit_object_steps').insert(allSteps);
+        if (stepsError) {
+          await supabase.from('orders').delete().eq('id', orderId);
+          throw stepsError;
+        }
+      }
     }
 
     // Refresh and return the new order

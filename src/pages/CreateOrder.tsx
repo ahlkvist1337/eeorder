@@ -15,7 +15,8 @@ import { Upload, FileText, AlertCircle, CheckCircle2, Trash2 } from 'lucide-reac
 import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
 import { InstructionsEditor } from '@/components/InstructionsEditor';
 import { OrderObjectsEditor } from '@/components/OrderObjectsEditor';
-import type { Order, OrderStep, ParsedXMLOrder, ArticleRow, OrderObject, Instruction } from '@/types/order';
+import { UnitsEditor } from '@/components/UnitsEditor';
+import type { Order, OrderStep, ParsedXMLOrder, ArticleRow, OrderObject, Instruction, OrderUnit } from '@/types/order';
 
 export default function CreateOrder() {
   useDocumentTitle('Ny order');
@@ -32,8 +33,7 @@ export default function CreateOrder() {
   const [plannedStart, setPlannedStart] = useState('');
   const [plannedEnd, setPlannedEnd] = useState('');
   const [comment, setComment] = useState('');
-  const [manualObjects, setManualObjects] = useState<OrderObject[]>([]);
-  const [manualSteps, setManualSteps] = useState<OrderStep[]>([]);
+  const [manualUnits, setManualUnits] = useState<OrderUnit[]>([]);
   const [manualArticleRows, setManualArticleRows] = useState<ArticleRow[]>([]);
   const [manualError, setManualError] = useState<string | null>(null);
 
@@ -64,7 +64,7 @@ export default function CreateOrder() {
     const totalPrice = manualArticleRows.reduce((sum, row) => sum + row.price * row.quantity, 0);
 
     const newOrder: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'> = {
-      dataModelVersion: 1,
+      dataModelVersion: 2,
       orderNumber: orderNumber.trim(),
       customer: customer.trim(),
       customerReference: customerReference.trim(),
@@ -73,8 +73,8 @@ export default function CreateOrder() {
       plannedStart: plannedStart || undefined,
       plannedEnd: plannedEnd || undefined,
       comment: comment.trim() || undefined,
-      objects: manualObjects.length > 0 ? manualObjects : undefined,
-      steps: manualSteps,
+      units: manualUnits.length > 0 ? manualUnits : undefined,
+      steps: [],
       hasDeviation: false,
       totalPrice,
       articleRows: manualArticleRows.length > 0 ? manualArticleRows : undefined,
@@ -291,13 +291,11 @@ export default function CreateOrder() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Objekt & Behandlingssteg</Label>
+                    <Label>Enheter & Behandlingssteg</Label>
                     <div className="border rounded-md p-4">
-                      <OrderObjectsEditor
-                        objects={manualObjects}
-                        steps={manualSteps}
-                        onObjectsChange={setManualObjects}
-                        onStepsChange={setManualSteps}
+                      <UnitsEditor
+                        units={manualUnits}
+                        onUnitsChange={setManualUnits}
                       />
                     </div>
                   </div>
