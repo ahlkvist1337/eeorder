@@ -27,6 +27,7 @@ function getActiveTrucks(orders: Order[]): FlatTruck[] {
   const trucks: FlatTruck[] = [];
   
   for (const order of orders) {
+    if (order.productionStatus === 'cancelled') continue;
     const stepsWithObject = order.steps.filter(s => s.objectId);
     const stepsByObject = new Map<string, OrderStep[]>();
     stepsWithObject.forEach(step => {
@@ -54,6 +55,7 @@ function getPausedTrucks(orders: Order[]): FlatTruck[] {
   const trucks: FlatTruck[] = [];
   
   for (const order of orders) {
+    if (order.productionStatus === 'cancelled') continue;
     const stepsWithObject = order.steps.filter(s => s.objectId);
     const stepsByObject = new Map<string, OrderStep[]>();
     stepsWithObject.forEach(step => {
