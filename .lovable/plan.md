@@ -1,136 +1,82 @@
 
 
-# Omstrukturering: Huvudenhet som överordnad produktionsenhet
+# Plan: V2 UnitsEditor med full statushantering (som V1)
 
-## Bakgrund
+## Sammanfattning
 
-Idag: **Order → Objekt → Arbetskort (truck) → Stegstatus**
-Ett arbetskort tillhör ett enda objekt. Om en fysisk truck har flera objekttyper (Hytt, Flak) blir det separata arbetskort under varje objekt, utan direkt koppling sinsemellan.
+Ombyggnad av `UnitsEditor` så att den fungerar exakt som V1:s `ObjectTrucksEditor` — med klickbara stegstatusar, automatiska statusövergångar, namnbyte, duplicering och utskrift av arbetskort.
 
-Önskat: **Order → Huvudenhet → Objekt → Steg**
-En huvudenhet (t.ex. en truck) är den överordnade produktionsenheten. Den har flera objekt (delar) kopplade till sig, och varje objekt har sina behandlingssteg. Enheten är klar när alla objekt/steg är klara. Fakturering och leverans sker per enhet.
+## Vad som ändras
 
-## Designbeslut baserat på era svar
+### 1. Nya context-funktioner i `OrdersContext.tsx`
 
-- **Artikelrader** är affärsdata kopplad till ordern, inte strukturellt drivande för att skapa enheter. Flera artikelrader kan kopplas till samma enhet. Enheter skapas manuellt.
-- **Objekt** = delar av en enhet (Hytt, Flak, etc.) med egna behandlingssteg. Systemet är generiskt — inga hårdkodade "truck"-begrepp.
-- **Befintlig data** behålls orörd. Nya ordrar använder den nya strukturen.
+Tre nya funktioner som gör individuella uppdateringar (inte delete-and-recreate):
 
-## Databasändringar
+- **`updateUnitStatus(orderId, unitId, newStatus)`** — Uppdaterar `order_units.status`. Optimistisk uppdatering. Auto-sätter `billing_status = 'ready_for_billing'` vid leverans. Auto-slutför ordern om alla enheter är klara/packade/levererade.
+- **`updateUnitStepStatus(orderId, unitId, stepId, newStatus, stepName)`** — Uppdaterar `unit_object_steps.status`. Optimistisk uppdatering.
+- **`updateUnitBillingStatus(orderId, unitId, newStatus)`** — Uppdaterar `order_units.billing_status`. Optimistisk uppdatering.
 
-### Ny tabell: `order_units`
-Ersätter `object_trucks` som den primära produktionsenheten, men tillhör ordern direkt.
+Dessa speglar exakt v1-funktionerna `updateTruckStatus`, `updateTruckStepStatus`, `updateTruckBillingStatus`.
 
-```text
-order_units
-├── id (uuid, PK)
-├── order_id (uuid, FK → orders)
-├── unit_number (text, nullable) — valfritt identifieringsnummer
-├── status (truck_status enum — återanvänds)
-├── billing_status (truck_billing_status enum — återanvänds)
-├── sort_order (int, nullable)
-└── created_at (timestamptz)
-```
+### 2. Ombyggd `UnitsEditor.tsx`
 
-### Ny tabell: `unit_objects`
-Kopplar objekt till en enhet (istället för att objektet äger enheten).
+Ny layout per enhet som liknar `ObjectTrucksEditor`:
 
-```text
-unit_objects
-├── id (uuid, PK)
-├── unit_id (uuid, FK → order_units)
-├── name (text) — t.ex. "Hytt", "Flak"
-├── description (text, nullable)
-└── created_at (timestamptz)
-```
+**Per enhet (en rad):**
+- Enhetsnamn (klickbar för inline-redigering med penna-ikon)
+- Status-dropdown (Väntande → Ankommen → Startad → ... → Levererad)
+- Klickbara steg-badges per objekt (pending ○ → in_progress ● → completed ✓), grupperade per objektnamn
+- Pack/Leverera-knappar (visas vid rätt status)
+- Faktureringsbadge (visas vid levererad)
+- Skriv ut-knapp, duplicera-knapp, ta bort-knapp
 
-### Ny tabell: `unit_object_steps`
-Definierar behandlingssteg per objekt-typ inom en enhet.
+**Auto-statuslogik (exakt som v1):**
+- Steg klickas till `in_progress` → enhet sätts till `started` (om `waiting`/`arrived`/`paused`)
+- Alla steg `completed` → enhet sätts till `completed`
+- Alla steg tillbaka till `pending` → enhet sätts till `arrived` (om `started`/`paused`)
 
-```text
-unit_object_steps
-├── id (uuid, PK)
-├── unit_object_id (uuid, FK → unit_objects)
-├── template_id (text)
-├── name (text)
-├── sort_order (int)
-└── status (step_status enum) — spåras direkt här per enhet
-```
-
-### Befintliga tabeller — behålls oförändrade
-`order_objects`, `object_trucks`, `order_steps`, `truck_step_status` behålls för bakåtkompatibilitet med gamla ordrar.
-
-### Ny kolumn: `orders.data_model_version`
-`integer DEFAULT 1` — version 1 = gammal struktur, version 2 = ny struktur. Avgör vilken datamappning som används.
-
-### Koppling artikelrader → enheter
-Ny nullable-kolumn `article_rows.unit_id` (FK → order_units) för att kunna koppla artikelrader till specifika enheter i den nya modellen.
-
-## Typändringar (`src/types/order.ts`)
-
-Nya typer:
-
+**Nya props:**
 ```typescript
-interface OrderUnit {
-  id: string;
-  orderId: string;
-  unitNumber: string;
-  status: TruckStatus;       // Återanvänd befintlig enum
-  billingStatus: TruckBillingStatus;
-  sortOrder?: number;
-  objects: UnitObject[];
-  createdAt?: string;
-}
-
-interface UnitObject {
-  id: string;
-  unitId: string;
-  name: string;
-  description?: string;
-  steps: UnitObjectStep[];
-}
-
-interface UnitObjectStep {
-  id: string;
-  unitObjectId: string;
-  templateId: string;
-  name: string;
-  sortOrder: number;
-  status: StepStatus;
+interface UnitsEditorProps {
+  units: OrderUnit[];
+  onUnitsChange: (units: OrderUnit[]) => void;
+  onUnitStatusChange?: (unitId: string, status: TruckStatus) => void;
+  onUnitStepStatusChange?: (unitId: string, stepId: string, status: StepStatus) => void;
+  onUnitBillingStatusChange?: (unitId: string, status: TruckBillingStatus) => void;
+  orderInfo?: { id: string; orderNumber: string; customer: string; };
 }
 ```
 
-`Order`-typen utökas med `units?: OrderUnit[]` och `dataModelVersion: number`.
+**Duplicera enhet:** Kopierar alla objekt och steg till ny enhet med tomt enhetsnummer. Nya UUID:er genereras.
 
-## Påverkade filer (fas 2–4)
+### 3. Arbetskort-utskrift (`workCardPrint.ts`)
+
+Ny funktion `printWorkCardV2` som tar en `OrderUnit` och genererar PDF med:
+- Enhetsnummer som stor rubrik
+- Alla objekt listade med sina steg
+- QR-kod till ordern
+- Artikelrader kopplade till enheten (via `unit_id`)
+
+### 4. Integration i `OrderDetails.tsx`
+
+Koppla nya callbacks från context till `UnitsEditor`:
+```typescript
+<UnitsEditor
+  units={order.units || []}
+  onUnitsChange={...}
+  onUnitStatusChange={(unitId, status) => updateUnitStatus(order.id, unitId, status)}
+  onUnitStepStatusChange={(unitId, stepId, status) => updateUnitStepStatus(order.id, unitId, stepId, status, ...)}
+  onUnitBillingStatusChange={(unitId, status) => updateUnitBillingStatus(order.id, unitId, status)}
+  orderInfo={{ id: order.id, orderNumber: order.orderNumber, customer: order.customer }}
+/>
+```
+
+## Påverkade filer
 
 | Fil | Ändring |
 |-----|---------|
-| `src/types/order.ts` | Nya typer + hjälpfunktioner |
-| `src/contexts/OrdersContext.tsx` | Dubbel datamappning (v1/v2), nya CRUD-funktioner |
-| `src/components/OrderObjectsEditor.tsx` | Ny editor: UnitsEditor (enheter → objekt → steg) |
-| `src/components/ObjectTrucksEditor.tsx` | Ersätts av ny komponent för v2-ordrar |
-| `src/pages/CreateOrder.tsx` | Ny skapandeflöde med enheter |
-| `src/pages/OrderDetails.tsx` | Visa v1 eller v2 baserat på dataModelVersion |
-| `src/pages/ProductionScreen.tsx` | Hämta aktiva enheter från båda modellerna |
-| `src/components/ProductionTruckCard.tsx` | Visa alla objekt/steg per enhet |
-| `src/components/InvoicingTab.tsx` | Fakturering per enhet i v2 |
-| `src/hooks/useProductionStats.ts` | Stödja båda tabellerna |
-| `src/lib/workCardPrint.ts` | Anpassa för ny struktur |
-
-## Fasindelning
-
-**Fas 1: Databasschema** — Nya tabeller + version-kolumn. Inga befintliga tabeller ändras.
-
-**Fas 2: Typer & datamappning** — Nya TypeScript-typer. OrdersContext hanterar båda versionerna vid inläsning.
-
-**Fas 3: Skapande av ordrar (v2)** — Ny CreateOrder-vy med enhet-centrerat flöde. Befintliga ordrar visas med gammal logik.
-
-**Fas 4: Orderdetaljer & redigering** — OrderDetails visar v1 eller v2. Ny UnitsEditor-komponent.
-
-**Fas 5: Produktion & fakturering** — ProductionScreen och InvoicingTab stödjer båda modellerna.
-
-## Omfattning
-
-Detta är en stor omstrukturering som berör ~15 filer och ~4000 rader kod. Varje fas kan implementeras och verifieras separat. Rekommenderar att börja med fas 1 (databas) och fas 2 (typer) i ett första steg.
+| `src/contexts/OrdersContext.tsx` | 3 nya funktioner + context type |
+| `src/components/UnitsEditor.tsx` | Total ombyggnad med statushantering |
+| `src/pages/OrderDetails.tsx` | Koppla nya callbacks |
+| `src/lib/workCardPrint.ts` | Ny `printWorkCardV2` |
 
