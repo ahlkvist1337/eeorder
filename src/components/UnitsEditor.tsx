@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronRight, Box, Pencil, Check, X, Printer, Package, Truck as TruckIcon, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -16,7 +15,7 @@ import { useObjectTemplates } from '@/hooks/useObjectTemplates';
 import { useAuth } from '@/contexts/AuthContext';
 import type { OrderUnit, UnitObject, UnitObjectStep, StepStatus, TruckStatus, TruckBillingStatus, ArticleRow } from '@/types/order';
 import { truckStatusLabels, truckBillingStatusLabels } from '@/types/order';
-import { printWorkCardV2 } from '@/lib/workCardPrint';
+import { printWorkCardV2Object } from '@/lib/workCardPrint';
 
 interface UnitsEditorProps {
   units: OrderUnit[];
@@ -54,7 +53,6 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
   const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
   const [editingUnitNumber, setEditingUnitNumber] = useState('');
   
-  // Add object state per unit
   const [selectedObjectTemplate, setSelectedObjectTemplate] = useState<Record<string, string>>({});
   const [customObjectName, setCustomObjectName] = useState<Record<string, string>>({});
   const [selectedStepTemplate, setSelectedStepTemplate] = useState<Record<string, string>>({});
@@ -92,27 +90,25 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
       unitNumber: '',
       status: 'waiting',
       billingStatus: 'not_billable',
-      objects: unit.objects.map(obj => ({
-        id: crypto.randomUUID(),
-        unitId: '', // will be set by context
-        name: obj.name,
-        description: obj.description,
-        steps: obj.steps.map(s => ({
-          id: crypto.randomUUID(),
-          unitObjectId: '',
-          templateId: s.templateId,
-          name: s.name,
-          sortOrder: s.sortOrder,
-          status: 'pending' as StepStatus,
-        })),
-      })),
+      objects: unit.objects.map(obj => {
+        const newObjId = crypto.randomUUID();
+        return {
+          id: newObjId,
+          unitId: '', 
+          name: obj.name,
+          description: obj.description,
+          steps: obj.steps.map(s => ({
+            id: crypto.randomUUID(),
+            unitObjectId: newObjId,
+            templateId: s.templateId,
+            name: s.name,
+            sortOrder: s.sortOrder,
+            status: 'pending' as StepStatus,
+          })),
+        };
+      }),
     };
-    // Fix unitId references
-    newUnit.objects = newUnit.objects.map(obj => ({
-      ...obj,
-      unitId: newUnit.id,
-      steps: obj.steps.map(s => ({ ...s, unitObjectId: obj.id })),
-    }));
+    newUnit.objects = newUnit.objects.map(obj => ({ ...obj, unitId: newUnit.id }));
     onUnitsChange([...units, newUnit]);
   };
 
@@ -188,7 +184,6 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
             ),
           })),
         };
-        // Auto-status locally
         if (nextStatus === 'in_progress' && (updated.status === 'waiting' || updated.status === 'arrived' || updated.status === 'paused')) {
           updated.status = 'started';
         }
@@ -204,7 +199,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
     }
   };
 
-  // --- Object/Step CRUD (for building structure) ---
+  // --- Object/Step CRUD ---
   const handleAddObject = (unitId: string) => {
     const templateId = selectedObjectTemplate[unitId];
     const custom = customObjectName[unitId]?.trim();
@@ -293,12 +288,10 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
       {units.map((unit, unitIndex) => {
         const isExpanded = expandedUnits.has(unit.id);
         const isEditing = editingUnitId === unit.id;
-        const allSteps = unit.objects.flatMap(o => o.steps);
-        const hasSteps = allSteps.length > 0;
 
         return (
           <div key={unit.id} className="border rounded-md overflow-hidden">
-            {/* Unit header row — compact like V1 ObjectTrucksEditor */}
+            {/* Unit header row */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 py-2 px-3 bg-muted/30">
               {isEditing ? (
                 <div className="flex items-center gap-2">
@@ -327,7 +320,6 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                       {getUnitDisplayName(unit, unitIndex)}
                     </span>
                     
-                    {/* Status dropdown */}
                     <Select
                       value={unit.status}
                       onValueChange={(value: TruckStatus) => {
@@ -353,28 +345,34 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                     </Select>
                   </div>
 
-                  {/* Clickable step badges grouped by object */}
-                  {hasSteps && (
-                    <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:gap-2 flex-1 min-w-0">
-                      {unit.objects.map(obj => (
-                        obj.steps.map(step => {
-                          const colors = stepStatusColors[step.status];
-                          return (
-                            <button
-                              key={step.id}
-                              onClick={() => handleStepStatusClick(unit.id, step.id, step.status)}
-                              className={cn(
-                                'px-3 py-1.5 sm:px-2 sm:py-1 rounded-md text-sm font-medium transition-colors hover:opacity-80 min-h-[44px] sm:min-h-0 whitespace-normal break-words text-left leading-tight max-w-full',
-                                colors.bg,
-                                colors.text
-                              )}
-                              title={`${obj.name} → ${step.name}: Klicka för att ändra status`}
-                            >
-                              {step.name} {colors.label}
-                            </button>
-                          );
-                        })
-                      ))}
+                  {/* Step badges grouped by object */}
+                  {unit.objects.length > 0 && (
+                    <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                      {unit.objects.map(obj => {
+                        if (obj.steps.length === 0) return null;
+                        return (
+                          <div key={obj.id} className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs text-muted-foreground font-medium min-w-fit">{obj.name}:</span>
+                            {obj.steps.map(step => {
+                              const colors = stepStatusColors[step.status];
+                              return (
+                                <button
+                                  key={step.id}
+                                  onClick={() => handleStepStatusClick(unit.id, step.id, step.status)}
+                                  className={cn(
+                                    'px-2 py-1 sm:px-2 sm:py-0.5 rounded-md text-xs font-medium transition-colors hover:opacity-80 min-h-[44px] sm:min-h-0 whitespace-nowrap',
+                                    colors.bg,
+                                    colors.text
+                                  )}
+                                  title={`${obj.name} → ${step.name}: Klicka för att ändra status`}
+                                >
+                                  {step.name} {colors.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -423,24 +421,6 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                         <Pencil className="h-4 w-4" />
                       </Button>
                     )}
-                    {orderInfo && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9"
-                        onClick={async () => {
-                          await printWorkCardV2({
-                            unit,
-                            articleRows: articleRows?.filter(r => r.unitId === unit.id),
-                            order: orderInfo,
-                            baseUrl: window.location.origin,
-                          });
-                        }}
-                        title="Skriv ut arbetskort"
-                      >
-                        <Printer className="h-4 w-4" />
-                      </Button>
-                    )}
                     {isProduction && (
                       <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => handleDuplicateUnit(unit)} title="Duplicera">
                         <Copy className="h-4 w-4" />
@@ -486,16 +466,38 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                       <Box className="h-3.5 w-3.5 text-muted-foreground" />
                       <span className="text-sm font-medium">{obj.name}</span>
                       <span className="text-xs text-muted-foreground">{obj.steps.length} steg</span>
-                      {isProduction && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-destructive hover:text-destructive ml-auto"
-                          onClick={() => handleRemoveObject(unit.id, obj.id)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      )}
+                      <div className="ml-auto flex items-center gap-1">
+                        {/* Print work card per object */}
+                        {orderInfo && obj.steps.length > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={async () => {
+                              await printWorkCardV2Object({
+                                unitObject: obj,
+                                unitNumber: unit.unitNumber,
+                                articleRows: articleRows?.filter(r => r.unitId === unit.id),
+                                order: orderInfo,
+                                baseUrl: window.location.origin,
+                              });
+                            }}
+                            title="Skriv ut arbetskort för detta objekt"
+                          >
+                            <Printer className="h-3 w-3" />
+                          </Button>
+                        )}
+                        {isProduction && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-destructive hover:text-destructive"
+                            onClick={() => handleRemoveObject(unit.id, obj.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="px-3 pb-2 space-y-1.5">
@@ -514,7 +516,6 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                           )}
                         </div>
                       ))}
-                      {/* Add step */}
                       {isProduction && (
                         <div className="flex gap-1.5 pt-1">
                           <Select
