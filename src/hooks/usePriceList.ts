@@ -104,12 +104,12 @@ export function usePriceList() {
       .from('price_list')
       .select('id, part_number, step_name, price');
 
-    // Bygg map: part_number -> grundpris-rad (step_name = null)
-    const existingBasePrice = new Map<string, { id: string; price: number }>();
+    // Bygg map: part_number -> alla befintliga rader
+    const existingByPartNumber = new Map<string, { id: string; price: number }[]>();
     for (const p of existingPrices || []) {
-      if (!p.step_name) {
-        existingBasePrice.set(p.part_number, { id: p.id, price: p.price });
-      }
+      const list = existingByPartNumber.get(p.part_number) || [];
+      list.push({ id: p.id, price: p.price });
+      existingByPartNumber.set(p.part_number, list);
     }
 
     // Sortera senaste order först
@@ -138,11 +138,14 @@ export function usePriceList() {
     const toUpdate: { id: string; price: number; description: string }[] = [];
 
     for (const [pn, row] of latestPerPartNumber) {
-      const existing = existingBasePrice.get(pn);
-      if (!existing) {
+      const existingList = existingByPartNumber.get(pn);
+      if (!existingList || existingList.length === 0) {
         toInsert.push(row);
-      } else if (row.price > existing.price) {
-        toUpdate.push({ id: existing.id, price: row.price, description: row.description });
+      } else {
+        const lowest = existingList.reduce((a, b) => a.price < b.price ? a : b);
+        if (row.price > lowest.price) {
+          toUpdate.push({ id: lowest.id, price: row.price, description: row.description });
+        }
       }
     }
 
