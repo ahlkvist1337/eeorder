@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
@@ -48,6 +48,7 @@ import { toast } from 'sonner';
 
 export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { 
     getOrderById, 
@@ -84,6 +85,26 @@ export default function OrderDetails() {
       setHasUnsavedComment(false);
     }
   }, [order?.comment]);
+
+  // Auto-scroll to object if ?object= param is set (from QR code)
+  const scrolledToObjectRef = useRef(false);
+  useEffect(() => {
+    const objectId = searchParams.get('object');
+    if (!objectId || !order || scrolledToObjectRef.current) return;
+    
+    // Wait a tick for DOM to render
+    const timer = setTimeout(() => {
+      const el = document.querySelector(`[data-object-id="${objectId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Brief highlight
+        el.classList.add('ring-2', 'ring-primary', 'rounded-md');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'rounded-md'), 3000);
+        scrolledToObjectRef.current = true;
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [order, searchParams]);
 
   if (isLoading) {
     return (

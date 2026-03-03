@@ -1475,6 +1475,11 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   const updateUnits = useCallback(async (orderId: string, units: OrderUnit[]) => {
     markLocalUpdate();
     
+    // Optimistic local update — keeps UI expanded and stable
+    setOrders(prev => prev.map(o =>
+      o.id === orderId ? { ...o, units } : o
+    ));
+    
     // Delete existing units (CASCADE deletes unit_objects and unit_object_steps)
     const { error: deleteError } = await supabase.from('order_units').delete().eq('order_id', orderId);
     if (deleteError) throw deleteError;
@@ -1525,9 +1530,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         if (stepsError) throw stepsError;
       }
     }
-
-    await fetchOrders();
-  }, [fetchOrders, markLocalUpdate]);
+    // No fetchOrders() — optimistic update is already applied
+  }, [markLocalUpdate]);
 
   // V2: Update unit status (mirrors updateTruckStatus)
   const updateUnitStatus = useCallback(async (

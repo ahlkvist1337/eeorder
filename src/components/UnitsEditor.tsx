@@ -345,37 +345,6 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                     </Select>
                   </div>
 
-                  {/* Step badges grouped by object */}
-                  {unit.objects.length > 0 && (
-                    <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                      {unit.objects.map(obj => {
-                        if (obj.steps.length === 0) return null;
-                        return (
-                          <div key={obj.id} className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs text-muted-foreground font-medium min-w-fit">{obj.name}:</span>
-                            {obj.steps.map(step => {
-                              const colors = stepStatusColors[step.status];
-                              return (
-                                <button
-                                  key={step.id}
-                                  onClick={() => handleStepStatusClick(unit.id, step.id, step.status)}
-                                  className={cn(
-                                    'px-2 py-1 sm:px-2 sm:py-0.5 rounded-md text-xs font-medium transition-colors hover:opacity-80 min-h-[44px] sm:min-h-0 whitespace-nowrap',
-                                    colors.bg,
-                                    colors.text
-                                  )}
-                                  title={`${obj.name} → ${step.name}: Klicka för att ändra status`}
-                                >
-                                  {step.name} {colors.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
                   {/* Pack/Deliver buttons + Billing status */}
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {unit.status === 'completed' && onUnitStatusChange && (
@@ -457,60 +426,79 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
               )}
             </div>
 
-            {/* Expanded: edit objects/steps structure */}
-            {isExpanded && (
-              <div className="px-3 py-2 space-y-3 border-t">
+            {/* Objects with step badges — always visible */}
+            {unit.objects.length > 0 && (
+              <div className="px-3 py-2 space-y-2 border-t">
                 {unit.objects.map(obj => (
-                  <div key={obj.id} className="border rounded-md overflow-hidden bg-muted/10">
+                  <div key={obj.id} className="flex items-center gap-2 flex-wrap" data-object-id={obj.id}>
+                    <Box className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-medium">{obj.name}</span>
+                    {obj.steps.map(step => {
+                      const colors = stepStatusColors[step.status];
+                      return (
+                        <button
+                          key={step.id}
+                          onClick={() => handleStepStatusClick(unit.id, step.id, step.status)}
+                          className={cn(
+                            'px-2 py-1 sm:px-2 sm:py-0.5 rounded-md text-xs font-medium transition-colors hover:opacity-80 min-h-[44px] sm:min-h-0 whitespace-nowrap',
+                            colors.bg,
+                            colors.text
+                          )}
+                          title={`${obj.name} → ${step.name}: Klicka för att ändra status`}
+                        >
+                          {step.name} {colors.label}
+                        </button>
+                      );
+                    })}
+                    <div className="ml-auto shrink-0">
+                      {orderInfo && obj.steps.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 sm:h-6 sm:w-6"
+                          onClick={async () => {
+                            await printWorkCardV2Object({
+                              unitObject: obj,
+                              unitNumber: unit.unitNumber,
+                              articleRows: articleRows?.filter(r => r.unitId === unit.id),
+                              order: orderInfo,
+                              baseUrl: window.location.origin,
+                            });
+                          }}
+                          title="Skriv ut arbetskort"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Expanded: edit structure (add/remove objects & steps) */}
+            {isExpanded && (
+              <div className="px-3 py-2 space-y-3 border-t bg-muted/5">
+                {unit.objects.map(obj => (
+                  <div key={`edit-${obj.id}`} className="border rounded-md overflow-hidden bg-muted/10">
                     <div className="flex items-center gap-2 px-2 py-1.5">
                       <Box className="h-3.5 w-3.5 text-muted-foreground" />
                       <span className="text-sm font-medium">{obj.name}</span>
                       <span className="text-xs text-muted-foreground">{obj.steps.length} steg</span>
-                      <div className="ml-auto flex items-center gap-1">
-                        {/* Print work card per object */}
-                        {orderInfo && obj.steps.length > 0 && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={async () => {
-                              await printWorkCardV2Object({
-                                unitObject: obj,
-                                unitNumber: unit.unitNumber,
-                                articleRows: articleRows?.filter(r => r.unitId === unit.id),
-                                order: orderInfo,
-                                baseUrl: window.location.origin,
-                              });
-                            }}
-                            title="Skriv ut arbetskort för detta objekt"
-                          >
-                            <Printer className="h-3 w-3" />
-                          </Button>
-                        )}
+                      <div className="ml-auto">
                         {isProduction && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-destructive hover:text-destructive"
-                            onClick={() => handleRemoveObject(unit.id, obj.id)}
-                          >
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => handleRemoveObject(unit.id, obj.id)}>
                             <Trash2 className="h-3 w-3" />
                           </Button>
                         )}
                       </div>
                     </div>
-
                     <div className="px-3 pb-2 space-y-1.5">
                       {obj.steps.map(step => (
                         <div key={step.id} className="flex items-center gap-2 text-sm pl-2">
                           <span className="flex-1">{step.name}</span>
                           {isProduction && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 text-destructive"
-                              onClick={() => handleRemoveStep(unit.id, obj.id, step.id)}
-                            >
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleRemoveStep(unit.id, obj.id, step.id)}>
                               <Trash2 className="h-3 w-3" />
                             </Button>
                           )}
@@ -518,26 +506,11 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                       ))}
                       {isProduction && (
                         <div className="flex gap-1.5 pt-1">
-                          <Select
-                            value={selectedStepTemplate[obj.id] || ''}
-                            onValueChange={v => setSelectedStepTemplate(prev => ({ ...prev, [obj.id]: v }))}
-                          >
-                            <SelectTrigger className="h-8 text-xs flex-1">
-                              <SelectValue placeholder="Välj steg..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {treatmentTemplates.map(t => (
-                                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                              ))}
-                            </SelectContent>
+                          <Select value={selectedStepTemplate[obj.id] || ''} onValueChange={v => setSelectedStepTemplate(prev => ({ ...prev, [obj.id]: v }))}>
+                            <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="Välj steg..." /></SelectTrigger>
+                            <SelectContent>{treatmentTemplates.map(t => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
                           </Select>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 text-xs"
-                            onClick={() => handleAddStep(unit.id, obj.id)}
-                            disabled={!selectedStepTemplate[obj.id]}
-                          >
+                          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => handleAddStep(unit.id, obj.id)} disabled={!selectedStepTemplate[obj.id]}>
                             <Plus className="h-3 w-3 mr-1" /> Steg
                           </Button>
                         </div>
@@ -545,45 +518,16 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                     </div>
                   </div>
                 ))}
-
-                {/* Add object */}
                 {isProduction && (
                   <div className="flex gap-1.5">
-                    <Select
-                      value={selectedObjectTemplate[unit.id] || ''}
-                      onValueChange={v => {
-                        setSelectedObjectTemplate(prev => ({ ...prev, [unit.id]: v }));
-                        if (v !== '__custom__') setCustomObjectName(prev => ({ ...prev, [unit.id]: '' }));
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-xs flex-1">
-                        <SelectValue placeholder="Välj objekttyp..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {objectTemplates.map(t => (
-                          <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                        ))}
-                        <SelectItem value="__custom__">Eget namn...</SelectItem>
-                      </SelectContent>
+                    <Select value={selectedObjectTemplate[unit.id] || ''} onValueChange={v => { setSelectedObjectTemplate(prev => ({ ...prev, [unit.id]: v })); if (v !== '__custom__') setCustomObjectName(prev => ({ ...prev, [unit.id]: '' })); }}>
+                      <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="Välj objekttyp..." /></SelectTrigger>
+                      <SelectContent>{objectTemplates.map(t => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}<SelectItem value="__custom__">Eget namn...</SelectItem></SelectContent>
                     </Select>
                     {selectedObjectTemplate[unit.id] === '__custom__' && (
-                      <Input
-                        value={customObjectName[unit.id] || ''}
-                        onChange={e => setCustomObjectName(prev => ({ ...prev, [unit.id]: e.target.value }))}
-                        placeholder="Objektnamn"
-                        className="h-8 text-xs flex-1"
-                      />
+                      <Input value={customObjectName[unit.id] || ''} onChange={e => setCustomObjectName(prev => ({ ...prev, [unit.id]: e.target.value }))} placeholder="Objektnamn" className="h-8 text-xs flex-1" />
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-xs"
-                      onClick={() => handleAddObject(unit.id)}
-                      disabled={
-                        !selectedObjectTemplate[unit.id] ||
-                        (selectedObjectTemplate[unit.id] === '__custom__' && !customObjectName[unit.id]?.trim())
-                      }
-                    >
+                    <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => handleAddObject(unit.id)} disabled={!selectedObjectTemplate[unit.id] || (selectedObjectTemplate[unit.id] === '__custom__' && !customObjectName[unit.id]?.trim())}>
                       <Plus className="h-3 w-3 mr-1" /> Objekt
                     </Button>
                   </div>
