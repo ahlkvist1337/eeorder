@@ -64,6 +64,7 @@ export default function CreateOrder() {
     const totalPrice = manualArticleRows.reduce((sum, row) => sum + row.price * row.quantity, 0);
 
     const newOrder: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'> = {
+      dataModelVersion: 1,
       orderNumber: orderNumber.trim(),
       customer: customer.trim(),
       customerReference: customerReference.trim(),
@@ -176,6 +177,7 @@ export default function CreateOrder() {
     if (!parsedXml) return;
 
     const newOrder: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'> = {
+      dataModelVersion: 1,
       orderNumber: parsedXml.orderNumber,
       customer: parsedXml.customer,
       customerReference: parsedXml.customerReference,

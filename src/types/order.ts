@@ -113,6 +113,39 @@ export interface TruckStatusChange {
   toStatus: StepStatus;
 }
 
+// --- V2 types: Unit-centric model ---
+
+export interface UnitObjectStep {
+  id: string;
+  unitObjectId: string;
+  templateId: string;
+  name: string;
+  sortOrder: number;
+  status: StepStatus;
+}
+
+export interface UnitObject {
+  id: string;
+  unitId: string;
+  name: string;
+  description?: string;
+  steps: UnitObjectStep[];
+  createdAt?: string;
+}
+
+export interface OrderUnit {
+  id: string;
+  orderId: string;
+  unitNumber: string;
+  status: TruckStatus;
+  billingStatus: TruckBillingStatus;
+  sortOrder?: number;
+  objects: UnitObject[];
+  createdAt?: string;
+}
+
+// --- Order interface (supports both v1 and v2) ---
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -125,7 +158,7 @@ export interface Order {
   plannedEnd?: string;
   actualStart?: string;
   actualEnd?: string;
-  objects?: OrderObject[]; // Objects within the order
+  objects?: OrderObject[]; // V1: Objects within the order
   steps: OrderStep[];
   statusHistory: StatusChange[];
   stepStatusHistory: StepStatusChange[];
@@ -137,6 +170,10 @@ export interface Order {
   totalPrice: number;
   createdAt: string;
   updatedAt: string;
+  // Data model version: 1 = legacy (object→truck), 2 = new (unit→object→step)
+  dataModelVersion: number;
+  // V2: Units (main production entities)
+  units?: OrderUnit[];
   // XML import data
   xmlData?: {
     supplier?: string;
