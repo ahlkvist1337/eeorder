@@ -205,7 +205,7 @@ export default function OrderDetails() {
           </div>
           <div className="flex flex-wrap gap-2">
             <ProductionStatusBadge status={order.productionStatus} />
-            <BillingStatusBadge status={order.billingStatus} />
+            <BillingStatusBadge status={calculateOrderBillingStatus(order)} />
           </div>
           
           {/* Work card summary */}
