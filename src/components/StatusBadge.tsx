@@ -36,6 +36,7 @@ export function ProductionStatusBadge({ status, className }: ProductionStatusBad
 interface BillingStatusBadgeProps {
   status: BillingStatus;
   className?: string;
+  label?: string; // Optional override label (e.g. "Delvis klar för fakturering")
 }
 
 const billingStatusColors: Record<BillingStatus, string> = {
@@ -44,7 +45,7 @@ const billingStatusColors: Record<BillingStatus, string> = {
   billed: 'bg-[hsl(var(--billing-billed))] text-white',
 };
 
-export function BillingStatusBadge({ status, className }: BillingStatusBadgeProps) {
+export function BillingStatusBadge({ status, className, label }: BillingStatusBadgeProps) {
   return (
     <Badge 
       className={cn(
@@ -53,7 +54,7 @@ export function BillingStatusBadge({ status, className }: BillingStatusBadgeProp
         className
       )}
     >
-      {billingStatusLabels[status]}
+      {label || billingStatusLabels[status]}
     </Badge>
   );
 }

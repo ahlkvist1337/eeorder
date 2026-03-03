@@ -1550,6 +1550,16 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     const currentStatus = unit.status;
     if (currentStatus === newStatus) return;
 
+    // Create lifecycle event for optimistic update
+    const newLifecycleEvent: TruckLifecycleEvent = {
+      id: crypto.randomUUID(),
+      orderId,
+      truckId: unitId,
+      truckNumber: unit.unitNumber || '',
+      eventType: newStatus as TruckLifecycleEventType,
+      timestamp: new Date().toISOString(),
+    };
+
     // Optimistic update
     setOrders(prev => prev.map(o => {
       if (o.id !== orderId) return o;
@@ -1562,6 +1572,10 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
             ...(newStatus === 'delivered' ? { billingStatus: 'ready_for_billing' as TruckBillingStatus } : {}),
           } : u
         ),
+        truckLifecycleEvents: [
+          ...(o.truckLifecycleEvents || []),
+          newLifecycleEvent,
+        ],
       };
     }));
 
@@ -1571,6 +1585,15 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       dbUpdate.billing_status = 'ready_for_billing';
     }
     await supabase.from('order_units').update(dbUpdate).eq('id', unitId);
+
+    // Log lifecycle event to database
+    await supabase.from('truck_lifecycle_events').insert({
+      id: newLifecycleEvent.id,
+      order_id: orderId,
+      truck_id: unitId,
+      truck_number: unit.unitNumber || null,
+      event_type: newStatus,
+    });
 
     // Auto-complete order when ALL units are done
     if (['completed', 'packed', 'delivered'].includes(newStatus) && order.units) {
@@ -1651,6 +1674,17 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     await supabase.from('unit_object_steps')
       .update({ status: newStatus })
       .eq('id', stepId);
+
+    // Log step change to truck_status_history (reuse same table as V1)
+    await supabase.from('truck_status_history').insert({
+      order_id: orderId,
+      truck_id: unitId,
+      truck_number: unit.unitNumber || '',
+      step_id: stepId,
+      step_name: stepName,
+      from_status: currentStatus,
+      to_status: newStatus,
+    });
   }, [orders, markLocalUpdate]);
 
   // V2: Update unit billing status (mirrors updateTruckBillingStatus)

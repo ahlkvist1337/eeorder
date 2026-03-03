@@ -39,7 +39,7 @@ import { OrderDeviations } from '@/components/OrderDeviations';
 import { useOrders } from '@/hooks/useOrders';
 import { useOrderAttachments } from '@/hooks/useOrderAttachments';
 import { useAuth } from '@/contexts/AuthContext';
-import { orderAdminStatusLabels, billingStatusLabels, stepStatusLabels, getWorkUnitDisplayName, toAdminStatus, calculateOrderBillingStatus } from '@/types/order';
+import { orderAdminStatusLabels, billingStatusLabels, stepStatusLabels, getWorkUnitDisplayName, toAdminStatus, calculateOrderBillingStatus, getOrderBillingLabel } from '@/types/order';
 import type { ProductionStatus, BillingStatus, OrderStep, OrderObject, TruckStatus, StepStatus, OrderAdminStatus, ArticleRow, Instruction, OrderUnit } from '@/types/order';
 
 import { cn } from '@/lib/utils';
@@ -231,7 +231,7 @@ export default function OrderDetails() {
           </div>
           <div className="flex flex-wrap gap-2">
             <ProductionStatusBadge status={order.productionStatus} />
-            <BillingStatusBadge status={calculateOrderBillingStatus(order)} />
+            <BillingStatusBadge status={calculateOrderBillingStatus(order)} label={getOrderBillingLabel(order)} />
           </div>
           
           {/* Work card / unit summary */}
@@ -512,17 +512,91 @@ export default function OrderDetails() {
               </CardContent>
             </Card>
 
-            {/* Work Card Timeline History */}
+            {/* Timeline History */}
             <Card>
               <CardHeader className="pb-3 sm:pb-6">
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                   <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
-                  Historik per arbetskort
+                  {order.dataModelVersion === 2 ? 'Historik per enhet' : 'Historik per arbetskort'}
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 sm:pt-0">
-                {(() => {
-                  // Get all work cards from all objects
+                {order.dataModelVersion === 2 ? (() => {
+                  const allUnits = order.units || [];
+                  if (allUnits.length === 0) {
+                    return <p className="text-muted-foreground text-sm">Inga enheter finns på denna order.</p>;
+                  }
+                  return (
+                    <div className="space-y-6">
+                      {allUnits.map((unit, idx) => {
+                        const unitName = unit.unitNumber ? `#${unit.unitNumber}` : `Enhet ${idx + 1}`;
+                        
+                        // Step events from truck_status_history (reused for V2)
+                        const stepEvents = (order.truckStatusHistory || [])
+                          .filter(h => h.truckId === unit.id)
+                          .map(h => ({
+                            id: `step-${h.id}`,
+                            timestamp: h.timestamp,
+                            label: h.toStatus === 'in_progress'
+                              ? `${h.stepName}: Pågående`
+                              : h.toStatus === 'completed'
+                                ? `${h.stepName}: Klar`
+                                : h.stepName,
+                          }));
+                        
+                        // Lifecycle events
+                        const lifecycleEvents = (order.truckLifecycleEvents || [])
+                          .filter(e => e.truckId === unit.id && e.eventType !== 'step_started' && e.eventType !== 'step_completed')
+                          .map(e => ({
+                            id: `lifecycle-${e.id}`,
+                            timestamp: e.timestamp,
+                            label: e.eventType === 'arrived' ? 'Enhet ankommen'
+                              : e.eventType === 'started' ? 'Arbete påbörjat'
+                              : e.eventType === 'paused' ? 'Pausat'
+                              : e.eventType === 'completed' ? 'Enhet klar'
+                              : e.eventType === 'packed' ? 'Packat'
+                              : e.eventType === 'delivered' ? 'Levererat'
+                              : e.eventType,
+                          }));
+                        
+                        const allEvents = [...stepEvents, ...lifecycleEvents].sort((a, b) =>
+                          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                        );
+                        
+                        return (
+                          <div key={unit.id} className="border-b pb-4 last:border-0 last:pb-0">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-lg font-bold font-mono">{unitName}</span>
+                              {unit.objects.length > 0 && (
+                                <span className="text-sm text-muted-foreground">
+                                  • {unit.objects.map(o => o.name).join(', ')}
+                                </span>
+                              )}
+                            </div>
+                            {allEvents.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">Ingen historik ännu</p>
+                            ) : (
+                              <div className="relative pl-4 border-l-2 border-muted space-y-2">
+                                {allEvents.map(event => (
+                                  <div key={event.id} className="relative">
+                                    <div className="absolute -left-[9px] top-1.5 w-2 h-2 rounded-full bg-primary" />
+                                    <div className="flex items-center gap-2 text-sm">
+                                      <span className="text-muted-foreground min-w-[80px]">
+                                        {format(new Date(event.timestamp), 'd MMM HH:mm', { locale: sv })}
+                                      </span>
+                                      <span>{event.label}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })() : (() => {
+                  // V1: existing truck history
                   const allTrucks = (order.objects || []).flatMap(obj => 
                     (obj.trucks || []).map(truck => ({
                       ...truck,
@@ -537,7 +611,6 @@ export default function OrderDetails() {
                   return (
                     <div className="space-y-6">
                       {allTrucks.map(truck => {
-                        // Collect events from truck status history (step changes)
                         const stepEvents = (order.truckStatusHistory || [])
                           .filter(h => h.truckId === truck.id)
                           .map(h => ({
@@ -550,8 +623,6 @@ export default function OrderDetails() {
                                 : h.stepName,
                           }));
                         
-                        // Collect lifecycle events – exclude step_started/step_completed
-                        // since those are already covered by truck_status_history above
                         const lifecycleEvents = (order.truckLifecycleEvents || [])
                           .filter(e => e.truckId === truck.id && e.eventType !== 'step_started' && e.eventType !== 'step_completed')
                           .map(e => ({
@@ -565,7 +636,6 @@ export default function OrderDetails() {
                               : e.eventType,
                           }));
                         
-                        // Combine and sort by timestamp, deduplicate by label+timestamp proximity
                         const allEvents = [...stepEvents, ...lifecycleEvents].sort((a, b) => 
                           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
                         );
@@ -576,7 +646,6 @@ export default function OrderDetails() {
                               <span className="text-lg font-bold font-mono">{getWorkUnitDisplayName(truck.truckNumber, truck.objectName, truck.id)}</span>
                               <span className="text-sm text-muted-foreground">• {truck.objectName}</span>
                             </div>
-                            
                             {allEvents.length === 0 ? (
                               <p className="text-sm text-muted-foreground">Ingen historik ännu</p>
                             ) : (
@@ -637,7 +706,7 @@ export default function OrderDetails() {
 
                 <div className="space-y-1.5 sm:space-y-2">
                   <Label className="text-xs sm:text-sm">Faktureringsstatus</Label>
-                  <BillingStatusBadge status={calculateOrderBillingStatus(order)} />
+                  <BillingStatusBadge status={calculateOrderBillingStatus(order)} label={getOrderBillingLabel(order)} />
                 </div>
 
               </CardContent>

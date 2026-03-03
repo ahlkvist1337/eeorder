@@ -250,6 +250,28 @@ export const billingStatusLabels: Record<BillingStatus, string> = {
   billed: 'Fakturerad',
 };
 
+// Returns a display-friendly billing label for the order level,
+// distinguishing partial readiness from full readiness.
+export function getOrderBillingLabel(order: Order): string {
+  const computed = calculateOrderBillingStatus(order);
+  if (computed === 'not_ready') return billingStatusLabels.not_ready;
+  if (computed === 'billed') return billingStatusLabels.billed;
+
+  // ready_for_billing — check if ALL or only SOME are ready/billed
+  if (order.dataModelVersion === 2 && order.units && order.units.length > 1) {
+    const allReady = order.units.every(u => u.billingStatus === 'ready_for_billing' || u.billingStatus === 'billed');
+    if (!allReady) return 'Delvis klar för fakturering';
+  } else if (order.dataModelVersion !== 2) {
+    const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
+    if (allTrucks.length > 1) {
+      const allReady = allTrucks.every(t => t.billingStatus === 'ready_for_billing' || t.billingStatus === 'billed');
+      if (!allReady) return 'Delvis klar för fakturering';
+    }
+  }
+
+  return billingStatusLabels.ready_for_billing;
+}
+
 export const stepStatusLabels: Record<StepStatus, string> = {
   pending: 'Väntande',
   in_progress: 'Pågående',

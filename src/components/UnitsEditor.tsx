@@ -541,7 +541,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
             <Input
               value={newUnitNumber}
               onChange={e => setNewUnitNumber(e.target.value)}
-              placeholder="Enhetsnummer (valfritt, t.ex. registreringsnummer)"
+              placeholder="Enhetsnamn (valfritt)"
               className="h-9 text-sm"
               onKeyDown={e => { if (e.key === 'Enter') handleAddUnit(); }}
             />
