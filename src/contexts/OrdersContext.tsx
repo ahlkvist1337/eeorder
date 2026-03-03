@@ -81,6 +81,7 @@ interface DbArticleRow {
   price: number;
   step_id: string | null;
   object_id: string | null;
+  unit_id: string | null;
 }
 
 interface DbStatusHistory {
@@ -241,6 +242,7 @@ function mapDbOrderToOrder(
       price: Number(r.price),
       stepId: r.step_id || undefined,
       objectId: r.object_id || undefined,
+      unitId: r.unit_id || undefined,
     })),
     statusHistory: statusHistory.map(h => ({
       id: h.id,

@@ -21,9 +21,9 @@ interface InvoicableOrder {
   readyTrucks: ObjectTruck[];
   allTrucks: ObjectTruck[];
   articleRows: ArticleRow[];
+  isV2?: boolean;
 }
 
-// Quantity overrides: keyed by `${orderId}:${articleRowId}`
 type QuantityOverrides = Record<string, number>;
 
 export function InvoicingTab() {
@@ -34,10 +34,32 @@ export function InvoicingTab() {
   const [previouslyBilledByOrder, setPreviouslyBilledByOrder] = useState<Record<string, PreviouslyBilledItem[]>>({});
   const [billedLoaded, setBilledLoaded] = useState(false);
 
-  // Orders with at least one ready_for_billing truck
+  // Orders with at least one ready_for_billing truck/unit
   const invoicableOrders: InvoicableOrder[] = useMemo(() => {
     return orders
       .map(order => {
+        // V2: units as billing entities
+        if (order.dataModelVersion === 2 && order.units) {
+          const allUnitsAsTrucks: ObjectTruck[] = order.units.map(u => ({
+            id: u.id,
+            objectId: '',
+            truckNumber: u.unitNumber,
+            status: u.status,
+            billingStatus: u.billingStatus,
+            stepStatuses: [],
+            sortOrder: u.sortOrder,
+          }));
+          const readyTrucks = allUnitsAsTrucks.filter(t => t.billingStatus === 'ready_for_billing');
+          return {
+            order,
+            readyTrucks,
+            allTrucks: allUnitsAsTrucks,
+            articleRows: order.articleRows || [],
+            isV2: true,
+          };
+        }
+
+        // V1: existing logic
         const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
         const readyTrucks = allTrucks.filter(t => t.billingStatus === 'ready_for_billing');
         return {
@@ -81,7 +103,6 @@ export function InvoicingTab() {
     setBilledLoaded(true);
   }, [invoicableOrders, billedLoaded]);
 
-  // Load on first render when there are invoicable orders
   useMemo(() => {
     if (invoicableOrders.length > 0 && !billedLoaded) {
       loadPreviouslyBilled();
@@ -93,13 +114,24 @@ export function InvoicingTab() {
     row: ArticleRow,
     order: Order,
     readyTrucks: ObjectTruck[],
-    allTrucks: ObjectTruck[]
+    allTrucks: ObjectTruck[],
+    isV2?: boolean
   ): number => {
     const prev = (previouslyBilledByOrder[order.id] || [])
       .find(p => p.article_row_id === row.id);
     const prevQty = prev?.total_billed_quantity || 0;
     const remaining = row.quantity - prevQty;
 
+    // V2: proportional by units (no object linkage needed)
+    if (isV2) {
+      if (allTrucks.length === 0) return Math.max(0, remaining);
+      const readyCount = readyTrucks.length;
+      const totalCount = allTrucks.length;
+      const proportional = (readyCount / totalCount) * row.quantity;
+      return Math.max(0, Math.min(Math.round(proportional * 100) / 100, remaining));
+    }
+
+    // V1: existing logic
     if (!row.objectId) return Math.max(0, remaining);
 
     const object = order.objects?.find(o => o.id === row.objectId);
@@ -115,10 +147,10 @@ export function InvoicingTab() {
 
   const getOverrideKey = (orderId: string, rowId: string) => `${orderId}:${rowId}`;
 
-  const getQuantityToInvoice = (orderId: string, row: ArticleRow, order: Order, readyTrucks: ObjectTruck[], allTrucks: ObjectTruck[]) => {
+  const getQuantityToInvoice = (orderId: string, row: ArticleRow, order: Order, readyTrucks: ObjectTruck[], allTrucks: ObjectTruck[], isV2?: boolean) => {
     const key = getOverrideKey(orderId, row.id);
     if (quantityOverrides[key] !== undefined) return quantityOverrides[key];
-    return getSuggestedQuantity(row, order, readyTrucks, allTrucks);
+    return getSuggestedQuantity(row, order, readyTrucks, allTrucks, isV2);
   };
 
   const handleQuantityChange = (orderId: string, rowId: string, value: string) => {
@@ -145,20 +177,18 @@ export function InvoicingTab() {
     }
   };
 
-  // Calculate total for selected orders
   const selectedTotal = useMemo(() => {
     return invoicableOrders
       .filter(io => selectedOrderIds.has(io.order.id))
       .reduce((sum, io) => {
         const orderSum = io.articleRows.reduce((rowSum, row) => {
-          const qty = getQuantityToInvoice(io.order.id, row, io.order, io.readyTrucks, io.allTrucks);
+          const qty = getQuantityToInvoice(io.order.id, row, io.order, io.readyTrucks, io.allTrucks, io.isV2);
           return rowSum + qty * row.price;
         }, 0);
         return sum + orderSum;
       }, 0);
   }, [selectedOrderIds, invoicableOrders, quantityOverrides, previouslyBilledByOrder]);
 
-  // Build override data for export dialog
   const selectedOrdersForExport = useMemo(() => 
     orders.filter(o => selectedOrderIds.has(o.id)),
     [orders, selectedOrderIds]
@@ -174,7 +204,6 @@ export function InvoicingTab() {
     return result;
   }, [invoicableOrders, selectedOrderIds]);
 
-  // Build quantity overrides map for export: { articleRowId: quantity }
   const articleRowOverridesForExport = useMemo(() => {
     const result: Record<string, number> = {};
     for (const io of invoicableOrders) {
@@ -195,7 +224,7 @@ export function InvoicingTab() {
         <FileText className="h-12 w-12 text-muted-foreground mb-4" />
         <h3 className="text-lg font-medium mb-1">Inga ordrar redo för fakturering</h3>
         <p className="text-sm text-muted-foreground">
-          Arbetskort som markeras som "Levererat" blir automatiskt klara för fakturering.
+          Enheter som markeras som "Levererat" blir automatiskt klara för fakturering.
         </p>
       </div>
     );
@@ -203,7 +232,6 @@ export function InvoicingTab() {
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" onClick={toggleAll}>
@@ -230,13 +258,14 @@ export function InvoicingTab() {
         )}
       </div>
 
-      {/* Order cards */}
-      {invoicableOrders.map(({ order, readyTrucks, allTrucks, articleRows }) => {
+      {invoicableOrders.map(({ order, readyTrucks, allTrucks, articleRows, isV2 }) => {
         const isSelected = selectedOrderIds.has(order.id);
         const orderSubtotal = articleRows.reduce((sum, row) => {
-          const qty = getQuantityToInvoice(order.id, row, order, readyTrucks, allTrucks);
+          const qty = getQuantityToInvoice(order.id, row, order, readyTrucks, allTrucks, isV2);
           return sum + qty * row.price;
         }, 0);
+
+        const entityLabel = isV2 ? 'enheter' : 'kort';
 
         return (
           <Card key={order.id} className={isSelected ? 'ring-2 ring-primary' : ''}>
@@ -267,7 +296,6 @@ export function InvoicingTab() {
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              {/* Article rows table */}
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -281,7 +309,7 @@ export function InvoicingTab() {
                 </TableHeader>
                 <TableBody>
                   {articleRows.map(row => {
-                    const qty = getQuantityToInvoice(order.id, row, order, readyTrucks, allTrucks);
+                    const qty = getQuantityToInvoice(order.id, row, order, readyTrucks, allTrucks, isV2);
                     const prev = (previouslyBilledByOrder[order.id] || [])
                       .find(p => p.article_row_id === row.id);
                     const prevQty = prev?.total_billed_quantity || 0;
@@ -319,10 +347,9 @@ export function InvoicingTab() {
                 </TableBody>
               </Table>
 
-              {/* Delivered trucks info */}
               <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
                 <span>
-                  Levererade kort: {readyTrucks.map(t => getWorkUnitDisplayName(t.truckNumber, '', t.id)).join(', ')}
+                  Levererade {entityLabel}: {readyTrucks.map(t => getWorkUnitDisplayName(t.truckNumber, '', t.id)).join(', ')}
                   {' '}({readyTrucks.length} av {allTrucks.length})
                 </span>
               </div>
@@ -331,7 +358,6 @@ export function InvoicingTab() {
         );
       })}
 
-      {/* Export dialog - pass overrides */}
       <InvoiceExportDialog
         open={exportDialogOpen}
         onOpenChange={setExportDialogOpen}

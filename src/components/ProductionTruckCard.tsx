@@ -4,7 +4,7 @@ import { CalendarClock, Box, Pause, GripVertical, AlertTriangle } from 'lucide-r
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import type { Order, OrderObject, OrderStep, ObjectTruck, StepStatus, TruckStatus } from '@/types/order';
+import type { Order, OrderObject, OrderStep, ObjectTruck, StepStatus, TruckStatus, OrderUnit } from '@/types/order';
 import { truckStatusLabels, getWorkUnitDisplayName } from '@/types/order';
 
 interface ProductionTruckCardProps {
@@ -14,6 +14,9 @@ interface ProductionTruckCardProps {
   objectSteps: OrderStep[];
   isDragging?: boolean;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
+  // V2 support
+  unit?: OrderUnit;
+  isV2?: boolean;
 }
 
 const truckStatusColors: Record<TruckStatus, { bg: string; text: string; border: string }> = {
@@ -26,10 +29,10 @@ const truckStatusColors: Record<TruckStatus, { bg: string; text: string; border:
   delivered: { bg: 'bg-emerald-600/15', text: 'text-emerald-600', border: 'border-emerald-600' },
 };
 
-const stepStatusColors: Record<StepStatus, { bg: string; ring: string; label: string }> = {
-  completed: { bg: 'bg-[hsl(var(--status-completed))]', ring: 'ring-[hsl(var(--status-completed))]', label: '✓' },
-  in_progress: { bg: 'bg-[hsl(var(--status-started))]', ring: 'ring-[hsl(var(--status-started))]', label: '●' },
-  pending: { bg: 'bg-transparent', ring: 'ring-muted-foreground', label: '○' },
+const stepStatusColors: Record<StepStatus, { bg: string; ring: string }> = {
+  completed: { bg: 'bg-[hsl(var(--status-completed))]', ring: 'ring-[hsl(var(--status-completed))]' },
+  in_progress: { bg: 'bg-[hsl(var(--status-started))]', ring: 'ring-[hsl(var(--status-started))]' },
+  pending: { bg: 'bg-transparent', ring: 'ring-muted-foreground' },
 };
 
 function getStepStatusForTruck(truck: ObjectTruck, stepId: string): StepStatus {
@@ -38,30 +41,21 @@ function getStepStatusForTruck(truck: ObjectTruck, stepId: string): StepStatus {
 }
 
 function getCurrentStep(truck: ObjectTruck, steps: OrderStep[]): { step: OrderStep | null; status: StepStatus } {
-  // Check if all steps are completed
   const allCompleted = steps.every(step => {
     const status = getStepStatusForTruck(truck, step.id);
     return status === 'completed';
   });
   
-  if (allCompleted) {
-    return { step: null, status: 'completed' };
-  }
+  if (allCompleted) return { step: null, status: 'completed' };
   
-  // Find in_progress step
   for (const step of steps) {
     const status = getStepStatusForTruck(truck, step.id);
-    if (status === 'in_progress') {
-      return { step, status: 'in_progress' };
-    }
+    if (status === 'in_progress') return { step, status: 'in_progress' };
   }
   
-  // Find first pending step
   for (const step of steps) {
     const status = getStepStatusForTruck(truck, step.id);
-    if (status === 'pending') {
-      return { step, status: 'pending' };
-    }
+    if (status === 'pending') return { step, status: 'pending' };
   }
   
   return { step: null, status: 'pending' };
@@ -74,9 +68,11 @@ export function ProductionTruckCard({
   objectSteps,
   isDragging,
   dragHandleProps,
+  unit,
+  isV2,
 }: ProductionTruckCardProps) {
   const colors = truckStatusColors[truck.status];
-  const { step: currentStep, status: currentStepStatus } = getCurrentStep(truck, objectSteps);
+  const { step: currentStep } = !isV2 ? getCurrentStep(truck, objectSteps) : { step: null };
 
   // Deadline calculation
   const now = new Date();
@@ -103,7 +99,7 @@ export function ProductionTruckCard({
       isDragging && 'opacity-50 shadow-lg scale-[1.02]'
     )}>
       <CardContent className="p-4 flex flex-col h-full">
-        {/* Header: Drag handle + Truck number */}
+        {/* Header: Drag handle + Unit/Truck number */}
         <div className="flex items-start gap-2">
           {dragHandleProps && (
             <div 
@@ -115,12 +111,10 @@ export function ProductionTruckCard({
           )}
           
           <div className="flex-1 min-w-0">
-            {/* Display name (truck number or fallback) */}
             <div className={cn('text-4xl font-bold font-mono leading-none', colors.text)}>
               {getWorkUnitDisplayName(truck.truckNumber, object.name, truck.id)}
             </div>
             
-            {/* Truck status badge */}
             <Badge 
               className={cn(
                 'mt-2 font-medium',
@@ -135,52 +129,104 @@ export function ProductionTruckCard({
           </div>
         </div>
 
-        {/* Object name */}
-        <div className="mt-4 flex items-center gap-2">
-          <Box className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          <span className="font-semibold text-foreground truncate">{object.name}</span>
-        </div>
-
-        {/* Step progress */}
-        <div className="mt-3 flex-1">
-          <div className="space-y-1.5">
-            {objectSteps.map((step, index) => {
-              const status = getStepStatusForTruck(truck, step.id);
-              const stepColors = stepStatusColors[status];
-              const isCurrent = currentStep?.id === step.id;
-              
-              return (
-                <div 
-                  key={step.id}
-                  className={cn(
-                    'flex items-center gap-2 text-sm py-2 px-3 rounded-md transition-colors min-h-[44px]',
-                    isCurrent && 'bg-muted/50'
-                  )}
-                >
-                  <div className={cn(
-                    'w-5 h-5 rounded-full ring-2 flex-shrink-0 flex items-center justify-center text-xs',
-                    stepColors.bg,
-                    stepColors.ring
-                  )}>
-                    {status === 'completed' && (
-                      <span className="text-white text-xs">✓</span>
-                    )}
-                  </div>
-                  <span className={cn(
-                    'flex-1',
-                    status === 'completed' && 'text-muted-foreground line-through',
-                    isCurrent && 'font-medium'
-                  )}>
-                    {step.name}
-                  </span>
-                  {isCurrent && (
-                    <span className="text-xs text-muted-foreground">←</span>
-                  )}
+        {/* V2: Multiple objects with steps */}
+        {isV2 && unit ? (
+          <div className="mt-3 flex-1 space-y-3">
+            {unit.objects.map(obj => (
+              <div key={obj.id}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Box className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="font-semibold text-foreground text-sm">{obj.name}</span>
                 </div>
-              );
-            })}
+                <div className="space-y-1 ml-1">
+                  {obj.steps.map(step => {
+                    const stepColors = stepStatusColors[step.status];
+                    const isCurrent = step.status === 'in_progress';
+                    
+                    return (
+                      <div 
+                        key={step.id}
+                        className={cn(
+                          'flex items-center gap-2 text-sm py-1.5 px-2 rounded-md transition-colors',
+                          isCurrent && 'bg-muted/50'
+                        )}
+                      >
+                        <div className={cn(
+                          'w-4 h-4 rounded-full ring-2 flex-shrink-0 flex items-center justify-center text-xs',
+                          stepColors.bg,
+                          stepColors.ring
+                        )}>
+                          {step.status === 'completed' && (
+                            <span className="text-white text-[10px]">✓</span>
+                          )}
+                        </div>
+                        <span className={cn(
+                          'flex-1',
+                          step.status === 'completed' && 'text-muted-foreground line-through',
+                          isCurrent && 'font-medium'
+                        )}>
+                          {step.name}
+                        </span>
+                        {isCurrent && (
+                          <span className="text-xs text-muted-foreground">←</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+        ) : (
+          <>
+            {/* V1: Object name */}
+            <div className="mt-4 flex items-center gap-2">
+              <Box className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <span className="font-semibold text-foreground truncate">{object.name}</span>
+            </div>
+
+            {/* V1: Step progress */}
+            <div className="mt-3 flex-1">
+              <div className="space-y-1.5">
+                {objectSteps.map((step) => {
+                  const status = getStepStatusForTruck(truck, step.id);
+                  const sColors = stepStatusColors[status];
+                  const isCurrent = currentStep?.id === step.id;
+                  
+                  return (
+                    <div 
+                      key={step.id}
+                      className={cn(
+                        'flex items-center gap-2 text-sm py-2 px-3 rounded-md transition-colors min-h-[44px]',
+                        isCurrent && 'bg-muted/50'
+                      )}
+                    >
+                      <div className={cn(
+                        'w-5 h-5 rounded-full ring-2 flex-shrink-0 flex items-center justify-center text-xs',
+                        sColors.bg,
+                        sColors.ring
+                      )}>
+                        {status === 'completed' && (
+                          <span className="text-white text-xs">✓</span>
+                        )}
+                      </div>
+                      <span className={cn(
+                        'flex-1',
+                        status === 'completed' && 'text-muted-foreground line-through',
+                        isCurrent && 'font-medium'
+                      )}>
+                        {step.name}
+                      </span>
+                      {isCurrent && (
+                        <span className="text-xs text-muted-foreground">←</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Footer: Order info */}
         <div className="mt-4 pt-3 border-t border-border space-y-1.5">
@@ -194,9 +240,7 @@ export function ProductionTruckCard({
               'flex items-center gap-1.5 text-sm',
               isOverdue ? 'text-destructive font-medium' : isUrgent ? 'text-amber-600 font-medium' : 'text-muted-foreground'
             )}>
-              {isOverdue ? (
-                <AlertTriangle className="h-3.5 w-3.5" />
-              ) : isUrgent ? (
+              {isOverdue || isUrgent ? (
                 <AlertTriangle className="h-3.5 w-3.5" />
               ) : (
                 <CalendarClock className="h-3.5 w-3.5" />
