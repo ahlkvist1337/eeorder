@@ -112,6 +112,7 @@ interface DbTruckStatusHistory {
   from_status: StepStatus;
   to_status: StepStatus;
   timestamp: string;
+  changed_by_name: string | null;
 }
 
 interface DbTruckLifecycleEvent {
@@ -123,6 +124,7 @@ interface DbTruckLifecycleEvent {
   step_name: string | null;
   timestamp: string;
   note: string | null;
+  changed_by_name: string | null;
 }
 
 interface BulkOrderUpdates {
@@ -270,6 +272,7 @@ function mapDbOrderToOrder(
       stepName: h.step_name,
       fromStatus: h.from_status,
       toStatus: h.to_status,
+      changedByName: h.changed_by_name || undefined,
     })),
     truckLifecycleEvents: lifecycleEvents.map(e => ({
       id: e.id,
@@ -280,12 +283,21 @@ function mapDbOrderToOrder(
       stepName: e.step_name || undefined,
       timestamp: e.timestamp,
       note: e.note || undefined,
+      changedByName: e.changed_by_name || undefined,
     })),
   };
 }
 
+// Helper to extract initials from full name
+function getInitials(fullName: string | null | undefined): string {
+  if (!fullName || !fullName.trim()) return '?';
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return parts.map(p => p[0]).join('').toUpperCase().substring(0, 3);
+}
+
 export function OrdersProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -1211,6 +1223,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       step_name: stepName,
       from_status: currentStatus,
       to_status: newStatus,
+      changed_by_name: getInitials(profile?.full_name),
     });
   }, [orders]);
 
@@ -1357,6 +1370,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       truck_id: truckId,
       truck_number: truck?.truckNumber || null,
       event_type: newStatus,
+      changed_by_name: getInitials(profile?.full_name),
     });
 
     // Auto-complete order when ALL trucks are completed
@@ -1593,6 +1607,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       truck_id: unitId,
       truck_number: unit.unitNumber || null,
       event_type: newStatus,
+      changed_by_name: getInitials(profile?.full_name),
     });
 
     // Auto-complete order when ALL units are done
@@ -1684,6 +1699,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       step_name: stepName,
       from_status: currentStatus,
       to_status: newStatus,
+      changed_by_name: getInitials(profile?.full_name),
     });
   }, [orders, markLocalUpdate]);
 

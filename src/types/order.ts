@@ -111,6 +111,7 @@ export interface TruckStatusChange {
   stepName: string;
   fromStatus: StepStatus;
   toStatus: StepStatus;
+  changedByName?: string;
 }
 
 // --- V2 types: Unit-centric model ---
@@ -315,6 +316,7 @@ export interface TruckLifecycleEvent {
   stepName?: string;
   timestamp: string;
   note?: string;
+  changedByName?: string;
 }
 
 export const truckLifecycleEventLabels: Record<TruckLifecycleEventType, string> = {

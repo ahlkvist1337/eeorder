@@ -542,6 +542,7 @@ export default function OrderDetails() {
                               : h.toStatus === 'completed'
                                 ? `${h.stepName}: Klar`
                                 : h.stepName,
+                            changedBy: h.changedByName,
                           }));
                         
                         // Lifecycle events
@@ -557,6 +558,7 @@ export default function OrderDetails() {
                               : e.eventType === 'packed' ? 'Packat'
                               : e.eventType === 'delivered' ? 'Levererat'
                               : e.eventType,
+                            changedBy: e.changedByName,
                           }));
                         
                         const allEvents = [...stepEvents, ...lifecycleEvents].sort((a, b) =>
@@ -584,7 +586,10 @@ export default function OrderDetails() {
                                       <span className="text-muted-foreground min-w-[80px]">
                                         {format(new Date(event.timestamp), 'd MMM HH:mm', { locale: sv })}
                                       </span>
-                                      <span>{event.label}</span>
+                                      <span className="flex-1">{event.label}</span>
+                                      {event.changedBy && (
+                                        <span className="text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{event.changedBy}</span>
+                                      )}
                                     </div>
                                   </div>
                                 ))}
@@ -621,6 +626,7 @@ export default function OrderDetails() {
                               : h.toStatus === 'completed'
                                 ? `${h.stepName}: Klar`
                                 : h.stepName,
+                            changedBy: h.changedByName,
                           }));
                         
                         const lifecycleEvents = (order.truckLifecycleEvents || [])
@@ -634,6 +640,7 @@ export default function OrderDetails() {
                               : e.eventType === 'completed' ? 'Arbetskort klart'
                               : e.eventType === 'planned' ? 'Arbetskort planerat'
                               : e.eventType,
+                            changedBy: e.changedByName,
                           }));
                         
                         const allEvents = [...stepEvents, ...lifecycleEvents].sort((a, b) => 
@@ -657,7 +664,10 @@ export default function OrderDetails() {
                                       <span className="text-muted-foreground min-w-[80px]">
                                         {format(new Date(event.timestamp), 'd MMM HH:mm', { locale: sv })}
                                       </span>
-                                      <span>{event.label}</span>
+                                      <span className="flex-1">{event.label}</span>
+                                      {event.changedBy && (
+                                        <span className="text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{event.changedBy}</span>
+                                      )}
                                     </div>
                                   </div>
                                 ))}
