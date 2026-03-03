@@ -149,6 +149,9 @@ interface OrdersContextType {
   updateTruckBillingStatus: (orderId: string, truckId: string, newStatus: TruckBillingStatus) => Promise<void>;
   bulkUpdateOrders: (orderIds: string[], updates: BulkOrderUpdates) => Promise<void>;
   updateUnits: (orderId: string, units: OrderUnit[]) => Promise<void>;
+  updateUnitStatus: (orderId: string, unitId: string, newStatus: TruckStatus) => Promise<void>;
+  updateUnitStepStatus: (orderId: string, unitId: string, stepId: string, newStatus: StepStatus, stepName: string) => Promise<void>;
+  updateUnitBillingStatus: (orderId: string, unitId: string, newStatus: TruckBillingStatus) => Promise<void>;
 }
 
 const OrdersContext = createContext<OrdersContextType | null>(null);
@@ -1526,6 +1529,151 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     await fetchOrders();
   }, [fetchOrders, markLocalUpdate]);
 
+  // V2: Update unit status (mirrors updateTruckStatus)
+  const updateUnitStatus = useCallback(async (
+    orderId: string,
+    unitId: string,
+    newStatus: TruckStatus
+  ) => {
+    markLocalUpdate();
+    
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    
+    const unit = order.units?.find(u => u.id === unitId);
+    if (!unit) return;
+    
+    const currentStatus = unit.status;
+    if (currentStatus === newStatus) return;
+
+    // Optimistic update
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      return {
+        ...o,
+        units: o.units?.map(u =>
+          u.id === unitId ? { 
+            ...u, 
+            status: newStatus,
+            ...(newStatus === 'delivered' ? { billingStatus: 'ready_for_billing' as TruckBillingStatus } : {}),
+          } : u
+        ),
+      };
+    }));
+
+    // Update in DB
+    const dbUpdate: Record<string, unknown> = { status: newStatus };
+    if (newStatus === 'delivered') {
+      dbUpdate.billing_status = 'ready_for_billing';
+    }
+    await supabase.from('order_units').update(dbUpdate).eq('id', unitId);
+
+    // Auto-complete order when ALL units are done
+    if (['completed', 'packed', 'delivered'].includes(newStatus) && order.units) {
+      const doneStatuses = ['completed', 'packed', 'delivered'];
+      const allDone = order.units.every(u => 
+        u.id === unitId ? true : doneStatuses.includes(u.status)
+      );
+      
+      if (allDone && order.units.length > 0) {
+        const statusesThatChange = ['created', 'arrived', 'started', 'paused'];
+        if (statusesThatChange.includes(order.productionStatus)) {
+          await supabase.from('status_history').insert({
+            order_id: orderId,
+            from_status: order.productionStatus,
+            to_status: 'completed',
+          });
+          await supabase.from('orders')
+            .update({ production_status: 'completed' })
+            .eq('id', orderId);
+          
+          setOrders(prev => prev.map(o => 
+            o.id === orderId ? { ...o, productionStatus: 'completed' as ProductionStatus } : o
+          ));
+        }
+      }
+    }
+  }, [orders, markLocalUpdate]);
+
+  // V2: Update unit step status (mirrors updateTruckStepStatus)
+  const updateUnitStepStatus = useCallback(async (
+    orderId: string,
+    unitId: string,
+    stepId: string,
+    newStatus: StepStatus,
+    stepName: string
+  ) => {
+    markLocalUpdate();
+    
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    
+    const unit = order.units?.find(u => u.id === unitId);
+    if (!unit) return;
+
+    // Find current status
+    let currentStatus: StepStatus = 'pending';
+    for (const obj of unit.objects) {
+      const step = obj.steps.find(s => s.id === stepId);
+      if (step) {
+        currentStatus = step.status;
+        break;
+      }
+    }
+    
+    if (currentStatus === newStatus) return;
+
+    // Optimistic update
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      return {
+        ...o,
+        units: o.units?.map(u => {
+          if (u.id !== unitId) return u;
+          return {
+            ...u,
+            objects: u.objects.map(obj => ({
+              ...obj,
+              steps: obj.steps.map(s =>
+                s.id === stepId ? { ...s, status: newStatus } : s
+              ),
+            })),
+          };
+        }),
+      };
+    }));
+
+    // Update in DB
+    await supabase.from('unit_object_steps')
+      .update({ status: newStatus })
+      .eq('id', stepId);
+  }, [orders, markLocalUpdate]);
+
+  // V2: Update unit billing status (mirrors updateTruckBillingStatus)
+  const updateUnitBillingStatus = useCallback(async (
+    orderId: string,
+    unitId: string,
+    newStatus: TruckBillingStatus
+  ) => {
+    markLocalUpdate();
+    
+    // Optimistic update
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      return {
+        ...o,
+        units: o.units?.map(u =>
+          u.id === unitId ? { ...u, billingStatus: newStatus } : u
+        ),
+      };
+    }));
+
+    // Update in DB
+    await supabase.from('order_units')
+      .update({ billing_status: newStatus } as any)
+      .eq('id', unitId);
+  }, [orders, markLocalUpdate]);
+
   return (
     <OrdersContext.Provider value={{
       orders,
@@ -1545,6 +1693,9 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       updateTruckBillingStatus,
       bulkUpdateOrders,
       updateUnits,
+      updateUnitStatus,
+      updateUnitStepStatus,
+      updateUnitBillingStatus,
     }}>
       {children}
     </OrdersContext.Provider>

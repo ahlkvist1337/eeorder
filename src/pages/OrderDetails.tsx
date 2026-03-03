@@ -59,6 +59,9 @@ export default function OrderDetails() {
     updateTruckStepStatus,
     updateTruckBillingStatus,
     updateUnits,
+    updateUnitStatus,
+    updateUnitStepStatus,
+    updateUnitBillingStatus,
     deleteOrder,
     isLoading 
   } = useOrders();
@@ -436,6 +439,19 @@ export default function OrderDetails() {
                         toast.error('Kunde inte spara ändringarna. Försök igen.');
                       }
                     }}
+                    onUnitStatusChange={(unitId, status) => updateUnitStatus(order.id, unitId, status)}
+                    onUnitStepStatusChange={(unitId, stepId, status) => {
+                      const unit = order.units?.find(u => u.id === unitId);
+                      const stepName = unit?.objects.flatMap(o => o.steps).find(s => s.id === stepId)?.name || '';
+                      updateUnitStepStatus(order.id, unitId, stepId, status, stepName);
+                    }}
+                    onUnitBillingStatusChange={(unitId, status) => updateUnitBillingStatus(order.id, unitId, status)}
+                    orderInfo={{
+                      id: order.id,
+                      orderNumber: order.orderNumber,
+                      customer: order.customer,
+                    }}
+                    articleRows={order.articleRows}
                   />
                 ) : (
                   <OrderObjectsEditor
