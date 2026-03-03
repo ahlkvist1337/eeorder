@@ -4,7 +4,7 @@ import { CalendarClock, Box, Pause, GripVertical, AlertTriangle } from 'lucide-r
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import type { Order, OrderObject, OrderStep, ObjectTruck, StepStatus, TruckStatus, OrderUnit } from '@/types/order';
+import type { Order, OrderObject, OrderStep, ObjectTruck, StepStatus, TruckStatus, OrderUnit, UnitObject } from '@/types/order';
 import { truckStatusLabels, getWorkUnitDisplayName } from '@/types/order';
 
 interface ProductionTruckCardProps {
@@ -16,6 +16,7 @@ interface ProductionTruckCardProps {
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
   // V2 support
   unit?: OrderUnit;
+  unitObject?: UnitObject;
   isV2?: boolean;
 }
 
@@ -69,6 +70,7 @@ export function ProductionTruckCard({
   isDragging,
   dragHandleProps,
   unit,
+  unitObject,
   isV2,
 }: ProductionTruckCardProps) {
   const colors = truckStatusColors[truck.status];
@@ -129,53 +131,49 @@ export function ProductionTruckCard({
           </div>
         </div>
 
-        {/* V2: Multiple objects with steps */}
-        {isV2 && unit ? (
-          <div className="mt-3 flex-1 space-y-3">
-            {unit.objects.map(obj => (
-              <div key={obj.id}>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Box className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <span className="font-semibold text-foreground text-sm">{obj.name}</span>
-                </div>
-                <div className="space-y-1 ml-1">
-                  {obj.steps.map(step => {
-                    const stepColors = stepStatusColors[step.status];
-                    const isCurrent = step.status === 'in_progress';
-                    
-                    return (
-                      <div 
-                        key={step.id}
-                        className={cn(
-                          'flex items-center gap-2 text-sm py-1.5 px-2 rounded-md transition-colors',
-                          isCurrent && 'bg-muted/50'
-                        )}
-                      >
-                        <div className={cn(
-                          'w-4 h-4 rounded-full ring-2 flex-shrink-0 flex items-center justify-center text-xs',
-                          stepColors.bg,
-                          stepColors.ring
-                        )}>
-                          {step.status === 'completed' && (
-                            <span className="text-white text-[10px]">✓</span>
-                          )}
-                        </div>
-                        <span className={cn(
-                          'flex-1',
-                          step.status === 'completed' && 'text-muted-foreground line-through',
-                          isCurrent && 'font-medium'
-                        )}>
-                          {step.name}
-                        </span>
-                        {isCurrent && (
-                          <span className="text-xs text-muted-foreground">←</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+        {/* V2: Single object with its steps */}
+        {isV2 && unitObject ? (
+          <div className="mt-3 flex-1 space-y-2">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Box className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <span className="font-semibold text-foreground text-sm">{unitObject.name}</span>
+            </div>
+            <div className="space-y-1 ml-1">
+              {unitObject.steps.map(step => {
+                const stepColors = stepStatusColors[step.status];
+                const isCurrent = step.status === 'in_progress';
+                
+                return (
+                  <div 
+                    key={step.id}
+                    className={cn(
+                      'flex items-center gap-2 text-sm py-1.5 px-2 rounded-md transition-colors',
+                      isCurrent && 'bg-muted/50'
+                    )}
+                  >
+                    <div className={cn(
+                      'w-4 h-4 rounded-full ring-2 flex-shrink-0 flex items-center justify-center text-xs',
+                      stepColors.bg,
+                      stepColors.ring
+                    )}>
+                      {step.status === 'completed' && (
+                        <span className="text-white text-[10px]">✓</span>
+                      )}
+                    </div>
+                    <span className={cn(
+                      'flex-1',
+                      step.status === 'completed' && 'text-muted-foreground line-through',
+                      isCurrent && 'font-medium'
+                    )}>
+                      {step.name}
+                    </span>
+                    {isCurrent && (
+                      <span className="text-xs text-muted-foreground">←</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : (
           <>

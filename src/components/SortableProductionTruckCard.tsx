@@ -1,15 +1,16 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ProductionTruckCard } from './ProductionTruckCard';
-import type { Order, OrderObject, OrderStep, ObjectTruck, OrderUnit } from '@/types/order';
+import type { Order, OrderObject, OrderStep, ObjectTruck, OrderUnit, UnitObject } from '@/types/order';
 
-interface SortableProductionTruckCardProps {
+export interface SortableProductionTruckCardProps {
   id: string;
   truck: ObjectTruck;
   object: OrderObject;
   order: Order;
   objectSteps: OrderStep[];
   unit?: OrderUnit;
+  unitObject?: UnitObject;
   isV2?: boolean;
 }
 
@@ -20,6 +21,7 @@ export function SortableProductionTruckCard({
   order,
   objectSteps,
   unit,
+  unitObject,
   isV2,
 }: SortableProductionTruckCardProps) {
   const {
@@ -46,6 +48,7 @@ export function SortableProductionTruckCard({
         isDragging={isDragging}
         dragHandleProps={listeners}
         unit={unit}
+        unitObject={unitObject}
         isV2={isV2}
       />
     </div>

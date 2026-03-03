@@ -14,7 +14,7 @@ import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
 import { useObjectTemplates } from '@/hooks/useObjectTemplates';
 import { useAuth } from '@/contexts/AuthContext';
 import type { OrderUnit, UnitObject, UnitObjectStep, StepStatus, TruckStatus, TruckBillingStatus, ArticleRow } from '@/types/order';
-import { truckStatusLabels, truckBillingStatusLabels } from '@/types/order';
+import { truckStatusLabels } from '@/types/order';
 import { printWorkCardV2Object } from '@/lib/workCardPrint';
 
 interface UnitsEditorProps {
@@ -451,16 +451,50 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                         </Button>
                       )}
 
-                      {/* Billing badge */}
-                      {obj.status === 'delivered' && (
-                        <span className={cn(
-                          'text-xs px-1.5 py-0.5 rounded-md font-medium',
-                          obj.billingStatus === 'billed' ? 'bg-[hsl(var(--billing-billed)/0.15)] text-[hsl(var(--billing-billed))]' :
-                          obj.billingStatus === 'ready_for_billing' ? 'bg-[hsl(var(--billing-ready)/0.15)] text-[hsl(var(--billing-ready))]' :
-                          'bg-muted text-muted-foreground'
-                        )}>
-                          {truckBillingStatusLabels[obj.billingStatus]}
-                        </span>
+                      {/* Spacer to push action buttons right */}
+                      <div className="flex-1" />
+
+                      {/* Action buttons inline on same row */}
+                      {orderInfo && obj.steps.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 sm:h-6 sm:w-6"
+                          onClick={async () => {
+                            await printWorkCardV2Object({
+                              unitObject: obj,
+                              unitNumber: unit.unitNumber,
+                              articleRows: articleRows?.filter(r => r.unitId === unit.id),
+                              order: orderInfo,
+                              baseUrl: window.location.origin,
+                            });
+                          }}
+                          title="Skriv ut arbetskort"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {isProduction && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 sm:h-6 sm:w-6"
+                          onClick={() => setAddingStepForObject(prev => prev === obj.id ? null : obj.id)}
+                          title="Lägg till steg"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {isProduction && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 sm:h-6 sm:w-6 text-destructive hover:text-destructive"
+                          onClick={() => handleRemoveObject(unit.id, obj.id)}
+                          title="Ta bort objekt"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       )}
                     </div>
                     
@@ -487,50 +521,6 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                       </div>
                     )}
 
-                    {/* Action buttons for object */}
-                    <div className="flex items-center gap-0.5 ml-5 mt-1">
-                      {isProduction && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 sm:h-6 sm:w-6"
-                          onClick={() => setAddingStepForObject(prev => prev === obj.id ? null : obj.id)}
-                          title="Lägg till steg"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      {orderInfo && obj.steps.length > 0 && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 sm:h-6 sm:w-6"
-                          onClick={async () => {
-                            await printWorkCardV2Object({
-                              unitObject: obj,
-                              unitNumber: unit.unitNumber,
-                              articleRows: articleRows?.filter(r => r.unitId === unit.id),
-                              order: orderInfo,
-                              baseUrl: window.location.origin,
-                            });
-                          }}
-                          title="Skriv ut arbetskort"
-                        >
-                          <Printer className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      {isProduction && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 sm:h-6 sm:w-6 text-destructive hover:text-destructive"
-                          onClick={() => handleRemoveObject(unit.id, obj.id)}
-                          title="Ta bort objekt"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
                     {/* Inline step-adder */}
                     {addingStepForObject === obj.id && isProduction && (
                       <div className="flex gap-1.5 ml-5 mt-1">

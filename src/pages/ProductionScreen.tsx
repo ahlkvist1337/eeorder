@@ -10,7 +10,7 @@ import { sv } from 'date-fns/locale';
 import { Pause, Package, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import eeLogo from '@/assets/ee_logga.png';
-import type { Order, OrderObject, OrderStep, ObjectTruck, OrderUnit } from '@/types/order';
+import type { Order, OrderObject, OrderStep, ObjectTruck, OrderUnit, UnitObject } from '@/types/order';
 import { getWorkUnitDisplayName } from '@/types/order';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -22,6 +22,7 @@ interface FlatTruck {
   objectSteps: OrderStep[];
   // V2 support
   unit?: OrderUnit;
+  unitObject?: UnitObject;
   isV2?: boolean;
 }
 
@@ -32,32 +33,35 @@ function getActiveTrucks(orders: Order[]): FlatTruck[] {
   for (const order of orders) {
     if (order.productionStatus === 'cancelled') continue;
 
-    // V2: units as production entities
+// V2: one card per unit_object with active status
     if (order.dataModelVersion === 2 && order.units) {
       for (const unit of order.units) {
-        if (unit.status === 'arrived' || unit.status === 'started') {
-          trucks.push({
-            truck: {
-              id: unit.id,
-              objectId: '',
-              truckNumber: unit.unitNumber,
-              status: unit.status,
-              billingStatus: unit.billingStatus,
-              stepStatuses: [],
-              sortOrder: unit.sortOrder,
-            },
-            object: {
-              id: unit.id,
-              name: unit.unitNumber || 'Enhet',
-              plannedQuantity: 1,
-              receivedQuantity: 0,
-              completedQuantity: 0,
-            },
-            order,
-            objectSteps: [],
-            unit,
-            isV2: true,
-          });
+        for (const obj of unit.objects) {
+          if (obj.status === 'arrived' || obj.status === 'started') {
+            trucks.push({
+              truck: {
+                id: obj.id, // use object id as card id
+                objectId: '',
+                truckNumber: unit.unitNumber,
+                status: obj.status,
+                billingStatus: obj.billingStatus,
+                stepStatuses: [],
+                sortOrder: unit.sortOrder,
+              },
+              object: {
+                id: obj.id,
+                name: obj.name,
+                plannedQuantity: 1,
+                receivedQuantity: 0,
+                completedQuantity: 0,
+              },
+              order,
+              objectSteps: [],
+              unit,
+              unitObject: obj,
+              isV2: true,
+            });
+          }
         }
       }
       continue;
@@ -93,32 +97,35 @@ function getPausedTrucks(orders: Order[]): FlatTruck[] {
   for (const order of orders) {
     if (order.productionStatus === 'cancelled') continue;
 
-    // V2: units
+// V2: paused unit objects
     if (order.dataModelVersion === 2 && order.units) {
       for (const unit of order.units) {
-        if (unit.status === 'paused') {
-          trucks.push({
-            truck: {
-              id: unit.id,
-              objectId: '',
-              truckNumber: unit.unitNumber,
-              status: unit.status,
-              billingStatus: unit.billingStatus,
-              stepStatuses: [],
-              sortOrder: unit.sortOrder,
-            },
-            object: {
-              id: unit.id,
-              name: unit.unitNumber || 'Enhet',
-              plannedQuantity: 1,
-              receivedQuantity: 0,
-              completedQuantity: 0,
-            },
-            order,
-            objectSteps: [],
-            unit,
-            isV2: true,
-          });
+        for (const obj of unit.objects) {
+          if (obj.status === 'paused') {
+            trucks.push({
+              truck: {
+                id: obj.id,
+                objectId: '',
+                truckNumber: unit.unitNumber,
+                status: obj.status,
+                billingStatus: obj.billingStatus,
+                stepStatuses: [],
+                sortOrder: unit.sortOrder,
+              },
+              object: {
+                id: obj.id,
+                name: obj.name,
+                plannedQuantity: 1,
+                receivedQuantity: 0,
+                completedQuantity: 0,
+              },
+              order,
+              objectSteps: [],
+              unit,
+              unitObject: obj,
+              isV2: true,
+            });
+          }
         }
       }
       continue;
@@ -175,8 +182,8 @@ export default function ProductionScreen() {
   const activeTrucks = useMemo(() => sortTrucks(getActiveTrucks(orders)), [orders]);
   const pausedTrucks = useMemo(() => getPausedTrucks(orders), [orders]);
 
-  // Track which IDs are v2 units for correct table updates
-  const v2UnitIds = useMemo(() => new Set(
+  // Track which IDs are v2 unit objects for correct table updates
+  const v2UnitObjectIds = useMemo(() => new Set(
     [...activeTrucks, ...pausedTrucks].filter(t => t.isV2).map(t => t.truck.id)
   ), [activeTrucks, pausedTrucks]);
 
@@ -207,13 +214,14 @@ export default function ProductionScreen() {
     const updates = newOrder.map((id, index) => ({ id, sort_order: index }));
     
     for (const update of updates) {
-      const table = v2UnitIds.has(update.id) ? 'order_units' : 'object_trucks';
+      // V2 cards use unit_object IDs — skip sort persistence for V2 (sort_order is on unit level)
+      if (v2UnitObjectIds.has(update.id)) continue;
       await supabase
-        .from(table)
+        .from('object_trucks')
         .update({ sort_order: update.sort_order })
         .eq('id', update.id);
     }
-  }, [localTruckOrder, isProduction, v2UnitIds]);
+  }, [localTruckOrder, isProduction, v2UnitObjectIds]);
 
   const handleResetSorting = useCallback(async () => {
     if (!isProduction) return;
@@ -347,7 +355,7 @@ export default function ProductionScreen() {
             strategy={rectSortingStrategy}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-              {sortedActiveTrucks.map(({ truck, object, order, objectSteps, unit, isV2 }) => (
+              {sortedActiveTrucks.map(({ truck, object, order, objectSteps, unit, unitObject, isV2 }) => (
                 <SortableProductionTruckCard
                   key={truck.id}
                   id={truck.id}
@@ -356,6 +364,7 @@ export default function ProductionScreen() {
                   order={order}
                   objectSteps={objectSteps}
                   unit={unit}
+                  unitObject={unitObject}
                   isV2={isV2}
                 />
               ))}

@@ -715,6 +715,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           unit_id: u.id,
           name: o.name,
           description: o.description || null,
+          status: o.status || 'waiting',
+          billing_status: o.billingStatus || 'not_billable',
         }))
       );
       if (allObjects.length > 0) {
