@@ -1,44 +1,52 @@
 
 
-# Plan: Migrate XML import to V2 and remove V1 defaults
+# Fix: V2 drag persistence — add sort_order to unit_objects and fix routing
 
-## Summary
-
-XML import currently creates V1 orders (`dataModelVersion: 1`, `OrderObject[]` + `OrderStep[]`), while manual creation uses V2 (`OrderUnit[]`). This causes mismatches in status cascading, billing, and production views.
+## Root cause
+1. `handleDragEnd` skips V2 items entirely (line 218: `continue`)
+2. `handleResetSorting` routes V2 to `order_units` table — wrong, should be `unit_objects`
+3. `unit_objects` table lacks a `sort_order` column
 
 ## Changes
 
-### 1. `src/pages/CreateOrder.tsx` — Switch XML import to V2
+### 1. Database migration
+Add `sort_order` column to `unit_objects`:
+```sql
+ALTER TABLE public.unit_objects ADD COLUMN sort_order integer;
+```
 
-**Remove** V1 state variables:
-- `xmlObjects` (`OrderObject[]`) → replace with `xmlUnits` (`OrderUnit[]`)
-- `xmlSteps` (`OrderStep[]`) → no longer needed (steps live inside unit objects)
+### 2. `src/pages/ProductionScreen.tsx`
 
-**Replace** `OrderObjectsEditor` with `UnitsEditor` in the XML import UI (same component used by manual creation).
+**`handleDragEnd`** (lines 216-223): Remove the skip. Route V2 items to `unit_objects`, V1 to `object_trucks`. Add debug log.
 
-**Update** `handleXmlSubmit`:
-- Set `dataModelVersion: 2`
-- Use `units: xmlUnits` instead of `objects: xmlObjects`
-- Remove `steps: xmlSteps`
+```typescript
+for (const update of updates) {
+  const isV2 = v2UnitObjectIds.has(update.id);
+  const table = isV2 ? 'unit_objects' : 'object_trucks';
+  console.log('Drag end - updating table:', table, 'for item', update.id, 'to position', update.sort_order);
+  await supabase.from(table).update({ sort_order: update.sort_order }).eq('id', update.id);
+}
+```
 
-**Reset** handler also updated to clear `xmlUnits` instead of `xmlObjects`/`xmlSteps`.
+**`handleResetSorting`** (line 230): Change `'order_units'` to `'unit_objects'` for V2 items.
 
-### 2. `src/contexts/OrdersContext.tsx` — Default to V2
+### 3. `src/pages/ProductionScreen.tsx` — FlatTruck builder
+In `getActiveTrucks` (line ~53), read `sort_order` from `unitObject` (obj) instead of hardcoding `unit.sortOrder`:
+```typescript
+sortOrder: obj.sort_order ?? unit.sortOrder,
+```
+This requires the `UnitObject` type to include `sortOrder`.
 
-Two lines to change:
-- Line 177: `(dbOrder as any).data_model_version ?? 1` → `?? 2`
-- Line 589: `order.dataModelVersion ?? 1` → `?? 2`
+### 4. `src/types/order.ts`
+Add `sortOrder?: number | null` to `UnitObject` interface (if not already present).
 
-This ensures any order without an explicit version defaults to V2.
-
-### 3. No other file changes needed
-
-The V1/V2 conditionals in `order.ts`, `InvoicingTab.tsx`, `ProductionScreen.tsx`, `OrderDetails.tsx`, and `ProductionTruckCard.tsx` will continue to work — they just won't hit V1 branches for new orders. Existing V1 orders in the database remain supported.
-
-## Affected files
+### 5. `src/contexts/OrdersContext.tsx`
+Map `sort_order` from DB to `sortOrder` on unit objects when hydrating.
 
 | File | Change |
 |------|--------|
-| `src/pages/CreateOrder.tsx` | Replace V1 objects/steps state with V2 units; use `UnitsEditor` for XML; set `dataModelVersion: 2` |
-| `src/contexts/OrdersContext.tsx` | Default `data_model_version` fallback from `1` to `2` (2 lines) |
+| DB migration | Add `sort_order` to `unit_objects` |
+| `src/pages/ProductionScreen.tsx` | Fix table routing in drag+reset; add debug log |
+| `src/types/order.ts` | Add `sortOrder` to `UnitObject` |
+| `src/contexts/OrdersContext.tsx` | Map `sort_order` field for unit objects |
 
