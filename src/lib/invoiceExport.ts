@@ -35,6 +35,7 @@ export interface InvoiceExportData {
   grandTotal: number;
   previouslyBilledGrandTotal: number;
   isPartial: boolean; // DELFAKTURA or SLUTFAKTURA
+  orderCount: number; // antal ordrar i exporten
 }
 
 // Previously billed data fetched from DB
@@ -201,6 +202,7 @@ export function prepareInvoiceExportData(
     grandTotal,
     previouslyBilledGrandTotal,
     isPartial,
+    orderCount: exportOrders.length,
   };
 }
 

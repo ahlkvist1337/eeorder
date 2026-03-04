@@ -548,6 +548,15 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         {
           event: '*',
           schema: 'public',
+          table: 'unit_objects',
+        },
+        debouncedFetch
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
           table: 'unit_object_steps',
         },
         debouncedFetch
