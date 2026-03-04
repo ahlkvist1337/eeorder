@@ -1,62 +1,38 @@
 
 
-# Fix: Delfakturerad badge/lås + status-rollback
+## Analys
 
-## Problem 1: Ingen visuell indikation eller lås för delfakturerade enheter
-Enheter med `billingStatus === 'ready_for_billing'` eller `'billed'` saknar badge och kan redigeras fritt.
+Buggen sitter i att UnitsEditor renderas **inuti** `<form>`-taggen i CreateOrder.tsx. HTML-knappar utan explicit `type="button"` defaultar till `type="submit"`, vilket betyder att varje knapptryck i UnitsEditor (t.ex. "Lagg till enhet") **samtidigt submitar formularet** och triggar `handleManualSubmit` -> `addOrder` -> redirect.
 
-## Problem 2: Status cascadar inte vid steg-rollback
-I `updateUnitStepStatus` (rad 1730-1810): Om ett steg går från `completed` → `in_progress` medan objektet är `completed`, saknas logik för att backa objektet till `started`. Dessutom återställs inte `billing_status` vid rollback i step-automationen.
+Dessutom saknar `onKeyDown`-hanteraren for Enter-tangenten (rad 599) ett `e.preventDefault()`, sa Enter i enhetsnamnfaltet ocksa submitar formularet.
 
-## Ändringar
+## Fix
 
-### 1. `src/components/UnitsEditor.tsx`
+### `src/components/UnitsEditor.tsx`
 
-**Unit header (rad 327-347)** — Lägg till badge efter enhetsnamn:
-- Om `unit.billingStatus === 'billed'`: röd badge "Fakturerad"
-- Om `unit.billingStatus === 'ready_for_billing'`: orange badge "Klar för fakturering"
+Lagga till `type="button"` pa samtliga `<Button>`-element i komponenten som INTE ar avsedda att submita ett formular. Det gar alla knappar i komponenten -- ca 15 stycken:
 
-**Objekt-rad (rad 397-537)** — Lås redigering om enheten är fakturerad/klar:
-- Ny variabel `unitLocked = unit.billingStatus === 'billed' || unit.billingStatus === 'ready_for_billing'`
-- Om `unitLocked && !isAdmin`:
-  - Disable status-dropdown (redan `Select`), steg-knappar, ta bort-knappar, lägg till steg
-  - Stegbadges: `pointer-events-none opacity-60`
-- Om `unitLocked && isAdmin`:
-  - Visa allt som vanligt men med varningsdialog vid klick på steg/status: `confirm('Är du säker? Detta kan påverka fakturering')`
+- Rad 328, 330: Spara/Avbryt redigeringsknapp
+- Rad 373: Redigera-knapp
+- Rad 378: Duplicera-knapp  
+- Rad 382: Expand/collapse-knapp
+- Rad 392: Ta bort-enhet-knapp
+- Rad 541, 555: Ta bort steg-knappar
+- Rad 558: Lagg till steg-knapp
+- Rad 580: Lagg till objekt-knapp
+- Rad 602: Lagg till enhet-knapp
+- Alla ovriga knappar i objektrader (skriv ut, ta bort objekt, statusdropdowns etc.)
 
-**Import**: Lägg till `useAuth` → `isAdmin` (redan importeras `isProduction`)
-
-### 2. `src/contexts/OrdersContext.tsx` — `updateUnitStepStatus` (rad 1730-1810)
-
-**Rad 1736-1742** — Utöka step-automation med rollback från `completed`:
+Plus: Rad 599 -- lagga till `e.preventDefault()` i `onKeyDown`-hanteraren for Enter sa att Enter inte submitar formularet:
 ```typescript
-// Existing: step → in_progress → object starts (waiting/arrived)
-// ADD: step rollback from completed → any non-completed:
-//   if object was completed/packed/delivered and now a step is no longer completed → object → started
-if (newStatus !== 'completed' && currentStatus === 'completed') {
-  const finishedObjStatuses: TruckStatus[] = ['completed', 'packed', 'delivered'];
-  if (finishedObjStatuses.includes(parentObj.status)) {
-    targetObjectStatus = 'started';
-  }
-}
+onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddUnit(); } }}
 ```
 
-**Rad 1758-1775** — Efter object status rollback, reset billing:
-```typescript
-// If object moved back from delivered/completed → reset billing
-if (targetObjectStatus === 'started' || targetObjectStatus === 'arrived') {
-  await supabase.from('unit_objects').update({ billing_status: 'not_billable' }).eq('id', parentObj.id);
-  // Update unit billing aggregate
-  // ... same pattern as in updateUnitObjectStatus
-}
-```
+### Ingen andring i CreateOrder.tsx
 
-Add `console.log('Status rollback: Steg ändrat – uppdaterar enhet/order status')` for debug.
+Formularet och `handleManualSubmit` fungerar korrekt -- problemet ar enbart att knappar i UnitsEditor triggar submit.
 
-## Filöversikt
-
-| Fil | Ändring |
+| Fil | Andring |
 |-----|---------|
-| `src/components/UnitsEditor.tsx` | Badge + lås för fakturerade enheter, admin-override med confirm |
-| `src/contexts/OrdersContext.tsx` | Step rollback → object status + billing reset cascade |
+| `src/components/UnitsEditor.tsx` | `type="button"` pa alla Button-element + `e.preventDefault()` pa Enter |
 
