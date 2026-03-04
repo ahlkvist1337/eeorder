@@ -845,6 +845,7 @@ export type Database = {
           description: string | null
           id: string
           name: string
+          sort_order: number | null
           status: Database["public"]["Enums"]["truck_status"]
           unit_id: string
         }
@@ -854,6 +855,7 @@ export type Database = {
           description?: string | null
           id?: string
           name: string
+          sort_order?: number | null
           status?: Database["public"]["Enums"]["truck_status"]
           unit_id: string
         }
@@ -863,6 +865,7 @@ export type Database = {
           description?: string | null
           id?: string
           name?: string
+          sort_order?: number | null
           status?: Database["public"]["Enums"]["truck_status"]
           unit_id?: string
         }

@@ -422,6 +422,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
               description: uo.description || undefined,
               status: uo.status || 'waiting',
               billingStatus: uo.billing_status || 'not_billable',
+              sortOrder: uo.sort_order ?? undefined,
               createdAt: uo.created_at,
               steps: unitObjectStepsData
                 .filter((s: any) => s.unit_object_id === uo.id)

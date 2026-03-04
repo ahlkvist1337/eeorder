@@ -133,6 +133,7 @@ export interface UnitObject {
   status: TruckStatus;
   billingStatus: TruckBillingStatus;
   steps: UnitObjectStep[];
+  sortOrder?: number | null;
   createdAt?: string;
 }
 

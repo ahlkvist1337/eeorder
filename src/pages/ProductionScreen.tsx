@@ -46,7 +46,7 @@ function getActiveTrucks(orders: Order[]): FlatTruck[] {
                 status: obj.status,
                 billingStatus: obj.billingStatus,
                 stepStatuses: [],
-                sortOrder: unit.sortOrder,
+                sortOrder: obj.sortOrder ?? unit.sortOrder,
               },
               object: {
                 id: obj.id,
@@ -110,7 +110,7 @@ function getPausedTrucks(orders: Order[]): FlatTruck[] {
                 status: obj.status,
                 billingStatus: obj.billingStatus,
                 stepStatuses: [],
-                sortOrder: unit.sortOrder,
+                sortOrder: obj.sortOrder ?? unit.sortOrder,
               },
               object: {
                 id: obj.id,
@@ -213,11 +213,13 @@ export default function ProductionScreen() {
     
     const updates = newOrder.map((id, index) => ({ id, sort_order: index }));
     
+    console.log('Drag end - old order:', localTruckOrder, 'new order:', newOrder);
     for (const update of updates) {
-      // V2 cards use unit_object IDs — skip sort persistence for V2 (sort_order is on unit level)
-      if (v2UnitObjectIds.has(update.id)) continue;
+      const isV2 = v2UnitObjectIds.has(update.id);
+      const table = isV2 ? 'unit_objects' : 'object_trucks';
+      console.log('Drag end - updating table:', table, 'for item', update.id, 'to position', update.sort_order);
       await supabase
-        .from('object_trucks')
+        .from(table)
         .update({ sort_order: update.sort_order })
         .eq('id', update.id);
     }
@@ -227,7 +229,7 @@ export default function ProductionScreen() {
     if (!isProduction) return;
     
     for (const flatTruck of activeTrucks) {
-      const table = flatTruck.isV2 ? 'order_units' : 'object_trucks';
+      const table = flatTruck.isV2 ? 'unit_objects' : 'object_trucks';
       await supabase
         .from(table)
         .update({ sort_order: null })
