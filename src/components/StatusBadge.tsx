@@ -46,11 +46,15 @@ const billingStatusColors: Record<BillingStatus, string> = {
 };
 
 export function BillingStatusBadge({ status, className, label }: BillingStatusBadgeProps) {
+  const isPartial = label === 'Delvis fakturerbar';
+  const colorClass = isPartial
+    ? 'bg-orange-500 text-white'
+    : billingStatusColors[status];
   return (
     <Badge 
       className={cn(
         'font-medium rounded-sm',
-        billingStatusColors[status],
+        colorClass,
         className
       )}
     >
