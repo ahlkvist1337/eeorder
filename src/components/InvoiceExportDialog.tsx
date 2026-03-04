@@ -202,9 +202,17 @@ export function InvoiceExportDialog({ open, onOpenChange, orders, trucksByOrderO
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Exportera fakturaunderlag</DialogTitle>
+          <DialogTitle>
+            {orders.length > 1 && readyTrucks.length === totalUnitsCount
+              ? `Fakturaunderlag – ${orders.length} ordrar`
+              : readyTrucks.length < totalUnitsCount
+                ? 'Exportera delfakturaunderlag'
+                : 'Exportera fakturaunderlag'}
+          </DialogTitle>
           <DialogDescription>
-            Skapa fakturaunderlag för {isV2 ? 'enheter' : 'arbetskort'} markerade som "Klar för fakturering".
+            {orders.length > 1 && readyTrucks.length === totalUnitsCount
+              ? `Samlat underlag för ${orders.length} klara ordrar.`
+              : `Skapa fakturaunderlag för ${isV2 ? 'enheter' : 'arbetskort'} markerade som "Klar för fakturering".`}
           </DialogDescription>
         </DialogHeader>
 
@@ -212,9 +220,11 @@ export function InvoiceExportDialog({ open, onOpenChange, orders, trucksByOrderO
           {/* Summary */}
           <div className="rounded-lg bg-muted p-4 space-y-1">
             <p className="font-medium">
-              {isV2
-                ? `Delfaktura – ${readyTrucks.length} av ${totalUnitsCount} enheter klara för fakturering`
-                : `${readyTrucks.length} arbetskort klara för fakturering`}
+              {orders.length > 1 && readyTrucks.length === totalUnitsCount
+                ? `${orders.length} ordrar – samtliga enheter klara för fakturering`
+                : isV2
+                  ? `Delfaktura – ${readyTrucks.length} av ${totalUnitsCount} enheter klara för fakturering`
+                  : `${readyTrucks.length} arbetskort klara för fakturering`}
             </p>
             <p className="text-2xl font-bold">
               ~{formatCurrency(Math.round(totalAmount))}

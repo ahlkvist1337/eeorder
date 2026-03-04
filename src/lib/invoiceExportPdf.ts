@@ -7,25 +7,41 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   
-  // Title - DELFAKTURA or SLUTFAKTURA
+  // Title - DELFAKTURA, FAKTURAUNDERLAG, or multi-order
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
-  const title = data.isPartial ? 'DELFAKTURAUNDERLAG' : 'FAKTURAUNDERLAG';
+  let title: string;
+  if (data.isPartial) {
+    title = 'DELFAKTURAUNDERLAG';
+  } else if (data.orderCount > 1) {
+    title = `FAKTURAUNDERLAG – ${data.orderCount} ORDRAR`;
+  } else {
+    title = 'FAKTURAUNDERLAG';
+  }
   doc.text(title, pageWidth / 2, 25, { align: 'center' });
+  
+  // Multi-order subtitle
+  let subtitleOffset = 0;
+  if (data.orderCount > 1 && !data.isPartial) {
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Samlat underlag för ${data.orderCount} klara ordrar`, pageWidth / 2, 33, { align: 'center' });
+    subtitleOffset = 10;
+  }
   
   // Export metadata
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Export-ID: ${data.exportId}`, 14, 40);
-  doc.text(`Exportdatum: ${data.exportDateFormatted}`, 14, 46);
-  doc.text(`Antal ordrar: ${data.orders.length}`, 14, 52);
-  doc.text(`Totalt belopp: ${formatCurrency(data.grandTotal)}`, 14, 58);
+  doc.text(`Export-ID: ${data.exportId}`, 14, 40 + subtitleOffset);
+  doc.text(`Exportdatum: ${data.exportDateFormatted}`, 14, 46 + subtitleOffset);
+  doc.text(`Antal ordrar: ${data.orders.length}`, 14, 52 + subtitleOffset);
+  doc.text(`Totalt belopp: ${formatCurrency(data.grandTotal)}`, 14, 58 + subtitleOffset);
   
   if (data.previouslyBilledGrandTotal > 0) {
-    doc.text(`Tidigare fakturerat: ${formatCurrency(data.previouslyBilledGrandTotal)}`, 14, 64);
+    doc.text(`Tidigare fakturerat: ${formatCurrency(data.previouslyBilledGrandTotal)}`, 14, 64 + subtitleOffset);
   }
   
-  let yPosition = data.previouslyBilledGrandTotal > 0 ? 76 : 70;
+  let yPosition = (data.previouslyBilledGrandTotal > 0 ? 76 : 70) + subtitleOffset;
   
   // Process each order
   for (let i = 0; i < data.orders.length; i++) {
@@ -167,6 +183,6 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
     doc.text(`Sida ${i} av ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
   }
   
-  const prefix = data.isPartial ? 'delfaktura' : 'fakturaunderlag';
+  const prefix = data.isPartial ? 'delfaktura' : (data.orderCount > 1 ? 'samlat-fakturaunderlag' : 'fakturaunderlag');
   doc.save(`${prefix}-${data.exportId}.pdf`);
 }
