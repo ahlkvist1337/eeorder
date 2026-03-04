@@ -1,52 +1,64 @@
 
 
-## Problem
+## Issues Found
 
-The `markLocalUpdate()` timestamp-based guard (2 seconds) is still not enough. Even though we added `markLocalUpdate()` after every `await`, the realtime events from the last DB writes can arrive **after** the 2-second window expires post-last-write. The timestamp approach is inherently racy -- it depends on network latency being under 2 seconds, which isn't guaranteed.
+### 1. Search with `#` doesn't find V2 units
+The search in `OrdersTable` only looks at V1 truck numbers (`order.objects.trucks.truckNumber`). It never searches V2 unit numbers (`order.units.unitNumber`), so searching for `#1` finds nothing in V2 orders.
 
-V1 worked because `updateTruckStepStatus` had only 2 simple DB writes (no cascade), so the chain completed fast enough.
-
-## Fix: Operation-in-progress counter
-
-Replace the fragile timestamp-only approach with a **counter + trailing guard** pattern:
-
-1. Add `operationInProgressRef = useRef<number>(0)` alongside `lastLocalUpdateRef`
-2. In `debouncedFetch`, skip if `operationInProgressRef.current > 0` (hard block during operations)
-3. Wrap each long update function in `operationInProgressRef.current++` / `operationInProgressRef.current--` + `markLocalUpdate()` in a `finally` block
-4. Remove all the intermediate `markLocalUpdate()` calls (no longer needed -- the counter handles the guard during the chain, and the trailing `markLocalUpdate()` in `finally` handles the 2-second post-operation window)
-
-### File: `src/contexts/OrdersContext.tsx`
-
-**Add ref** (near line 484):
+**Fix** (`src/components/OrdersTable.tsx`, lines 48-65): Add V2 unit numbers to the search pool:
 ```typescript
-const operationInProgressRef = useRef<number>(0);
+// Add V2 unit numbers
+const allUnitNumbers = (order.units || [])
+  .map(u => (u.unitNumber || '').toLowerCase());
+```
+Then add `allUnitNumbers.some(un => un.includes(query))` to the `matchesSearch` condition.
+
+---
+
+### 2. InvoicingTab not showing "Delvis fakturerbar" order
+**Root cause**: Bug in `updateUnitObjectStatus` (line 2042-2054). When all objects in a unit reach "delivered", lines 1997-2009 correctly set all objects' `billingStatus` to `ready_for_billing` in DB and state. But then lines 2042-2054 recalculate unit billing using the **old** object billing statuses (captured at function start), overwriting the correct `ready_for_billing` with `not_billable`.
+
+The InvoicingTab checks `u.billingStatus === 'ready_for_billing'` at unit level, so the order never appears.
+
+**Fix** (`src/contexts/OrdersContext.tsx`, lines 2042-2054): After the "all objects delivered" block (line 1997-2009) sets objects to `ready_for_billing`, also set the unit billing directly and skip the redundant aggregation:
+
+```typescript
+if (updatedObjs.every(ob => finishedObjStatuses.includes(ob.status))) {
+  // All delivered → set all objects AND unit to ready_for_billing
+  for (const ob of updatedObjs) {
+    await supabase.from('unit_objects').update({ billing_status: 'ready_for_billing' }).eq('id', ob.id);
+  }
+  await supabase.from('order_units').update({ billing_status: 'ready_for_billing' }).eq('id', unitId);
+  setOrders(prev => prev.map(o => {
+    if (o.id !== orderId) return o;
+    return {
+      ...o,
+      units: o.units?.map(u => u.id === unitId ? {
+        ...u,
+        billingStatus: 'ready_for_billing' as TruckBillingStatus,
+        objects: u.objects.map(ob => ({ ...ob, billingStatus: 'ready_for_billing' as TruckBillingStatus })),
+      } : u),
+    };
+  }));
+} else {
+  // Only run billing aggregation when NOT all delivered
+  const billingNewStatus = resetBilling ? 'not_billable' : obj.billingStatus;
+  // ... existing aggregation logic ...
+}
 ```
 
-**Update debouncedFetch** (line 492-494):
-```typescript
-if (operationInProgressRef.current > 0) return;
-const timeSinceLocalUpdate = Date.now() - lastLocalUpdateRef.current;
-if (timeSinceLocalUpdate < 2000) return;
-```
+---
 
-**Wrap these functions** in `operationInProgressRef.current++` at the start, and a `finally` block with `operationInProgressRef.current--; markLocalUpdate();`:
-- `updateUnitStepStatus`
-- `updateUnitObjectStatus`
-- `updateUnitObjectBillingStatus`
-- `updateTruckStepStatus`
-- `updateTruckStatus`
-- `updateTruckBillingStatus`
-- `updateProductionStatus`
-- `updateOrderStep`
+### 3. Step statuses still jumping back (visual bug)
+The history log confirms changes ARE saved to DB. The visual revert is likely caused by the same pattern: multiple sequential `setOrders` calls within the same function, where later calls don't account for changes made by earlier calls (they all reference the stale `unit`/`order` captured at function start). Each `setOrders(prev => ...)` uses functional form correctly, but the **DB write decisions** are based on stale data.
 
-Remove all intermediate `markLocalUpdate()` calls from these functions (they become unnecessary with the counter).
+This is the same class of bug as issue #2. The fix for issue #2 will also address part of this by ensuring the final `setOrders` at the end of `updateUnitObjectStatus` doesn't overwrite earlier optimistic updates.
 
-| Change | Detail |
-|--------|--------|
-| New ref | `operationInProgressRef` counter |
-| debouncedFetch | Hard-block while counter > 0 |
-| 8 update functions | Wrap in counter increment/decrement with finally + trailing markLocalUpdate |
-| Cleanup | Remove ~40 intermediate markLocalUpdate calls |
+### Files changed
+| File | Change |
+|------|--------|
+| `src/components/OrdersTable.tsx` | Add V2 unit numbers to search |
+| `src/contexts/OrdersContext.tsx` | Fix billing aggregation to not overwrite correct state |
 
-No database changes. No new dependencies.
+No database changes needed.
 
