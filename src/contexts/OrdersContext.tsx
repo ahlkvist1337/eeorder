@@ -1722,6 +1722,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     await supabase.from('unit_object_steps')
       .update({ status: newStatus })
       .eq('id', stepId);
+    markLocalUpdate();
 
     // Log step change with object name prefix: "Objektnamn: Stegnamn"
     const logStepName = objectName ? `${objectName}: ${stepName}` : stepName;
@@ -1735,6 +1736,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       to_status: newStatus,
       changed_by_name: getInitials(profile?.full_name),
     });
+    markLocalUpdate();
 
     // --- V2 Step automation: auto-start / auto-revert / auto-complete object ---
     const parentObj = unit.objects.find(obj => obj.steps.some(s => s.id === stepId));
@@ -1769,6 +1771,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           console.log('Status rollback: Billing reset till not_billable för objekt', parentObj.id);
         }
         await supabase.from('unit_objects').update(objUpdate).eq('id', parentObj.id);
+        markLocalUpdate();
         
         // Log lifecycle event
         await supabase.from('truck_lifecycle_events').insert({
@@ -1779,6 +1782,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           step_name: parentObj.name,
           changed_by_name: getInitials(profile?.full_name),
         });
+        markLocalUpdate();
 
         // Optimistic update for object status + billing
         const allObjectsUpdated = unit.objects.map(ob => ob.id === parentObj.id ? { 
@@ -1795,6 +1799,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           const allReady = allObjectsUpdated.every(ob => ob.billingStatus === 'ready_for_billing' || ob.billingStatus === 'billed');
           computedUnitBilling = allBilled ? 'billed' : allReady ? 'ready_for_billing' : 'not_billable';
           await supabase.from('order_units').update({ billing_status: computedUnitBilling }).eq('id', unitId);
+          markLocalUpdate();
         }
 
         setOrders(prev => prev.map(o => {
@@ -1815,6 +1820,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
         if (computedUnitStatus !== unit.status) {
           await supabase.from('order_units').update({ status: computedUnitStatus }).eq('id', unitId);
+          markLocalUpdate();
         }
 
         // Check order auto-complete
@@ -1828,22 +1834,26 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         const allUnitsFinished = updatedUnits.length > 0 && updatedUnits.every(u => finishedStatuses.includes(u.status));
         if (allUnitsFinished && order.productionStatus !== 'completed') {
           await supabase.from('orders').update({ production_status: 'completed' }).eq('id', orderId);
+          markLocalUpdate();
           await supabase.from('status_history').insert({
             order_id: orderId,
             from_status: order.productionStatus,
             to_status: 'completed',
           });
+          markLocalUpdate();
           setOrders(prev => prev.map(o => o.id === orderId ? { ...o, productionStatus: 'completed' as ProductionStatus } : o));
         }
 
         // Check order auto-revert: if object went back from finished → order should revert to 'created'
         if (!finishedStatuses.includes(targetObjectStatus!) && order.productionStatus === 'completed') {
           await supabase.from('orders').update({ production_status: 'created' }).eq('id', orderId);
+          markLocalUpdate();
           await supabase.from('status_history').insert({
             order_id: orderId,
             from_status: order.productionStatus,
             to_status: 'created',
           });
+          markLocalUpdate();
           setOrders(prev => prev.map(o => o.id === orderId ? { ...o, productionStatus: 'created' as ProductionStatus } : o));
         }
       }
@@ -1944,6 +1954,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       dbUpdate.billing_status = 'not_billable';
     }
     await supabase.from('unit_objects').update(dbUpdate).eq('id', objectId);
+    markLocalUpdate();
 
     // Log lifecycle event
     await supabase.from('truck_lifecycle_events').insert({
@@ -1955,12 +1966,14 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       step_name: obj.name,
       changed_by_name: getInitials(profile?.full_name),
     });
+    markLocalUpdate();
 
     // Also update parent unit status aggregated from objects
     const allObjects = unit.objects.map(ob => ob.id === objectId ? { ...ob, status: newStatus } : ob);
     const computedUnitStatus = computeAggregateStatus(allObjects.map(ob => ob.status));
     if (computedUnitStatus !== unit.status) {
       await supabase.from('order_units').update({ status: computedUnitStatus }).eq('id', unitId);
+      markLocalUpdate();
       setOrders(prev => prev.map(o => {
         if (o.id !== orderId) return o;
         return {
@@ -1979,6 +1992,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     if (updatedObjs.every(ob => finishedObjStatuses.includes(ob.status))) {
       for (const ob of updatedObjs) {
         await supabase.from('unit_objects').update({ billing_status: 'ready_for_billing' }).eq('id', ob.id);
+        markLocalUpdate();
       }
       setOrders(prev => prev.map(o => {
         if (o.id !== orderId) return o;
@@ -2002,22 +2016,26 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     const allUnitsFinished = updatedUnits.length > 0 && updatedUnits.every(u => finishedStatuses.includes(u.status));
     if (allUnitsFinished && order.productionStatus !== 'completed') {
       await supabase.from('orders').update({ production_status: 'completed' }).eq('id', orderId);
+      markLocalUpdate();
       await supabase.from('status_history').insert({
         order_id: orderId,
         from_status: order.productionStatus,
         to_status: 'completed',
       });
+      markLocalUpdate();
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, productionStatus: 'completed' as ProductionStatus } : o));
     }
 
     // Auto-revert order: if object moved back and order was completed → revert to 'created'
     if (movingBack && order.productionStatus === 'completed') {
       await supabase.from('orders').update({ production_status: 'created' }).eq('id', orderId);
+      markLocalUpdate();
       await supabase.from('status_history').insert({
         order_id: orderId,
         from_status: order.productionStatus,
         to_status: 'created',
       });
+      markLocalUpdate();
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, productionStatus: 'created' as ProductionStatus } : o));
     }
 
@@ -2029,6 +2047,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     const unitBilling: TruckBillingStatus = allBilled ? 'billed' : someReady ? 'ready_for_billing' : 'not_billable';
     if (unitBilling !== unit.billingStatus) {
       await supabase.from('order_units').update({ billing_status: unitBilling }).eq('id', unitId);
+      markLocalUpdate();
       setOrders(prev => prev.map(o => {
         if (o.id !== orderId) return o;
         return { ...o, units: o.units?.map(u => u.id === unitId ? { ...u, billingStatus: unitBilling } : u) };
@@ -2066,6 +2085,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     await supabase.from('unit_objects')
       .update({ billing_status: newStatus })
       .eq('id', objectId);
+    markLocalUpdate();
 
     // Aggregate billing to parent unit
     const order = orders.find(o => o.id === orderId);
@@ -2077,6 +2097,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       const unitBilling: TruckBillingStatus = allBilled ? 'billed' : someReady ? 'ready_for_billing' : 'not_billable';
       if (unitBilling !== unit.billingStatus) {
         await supabase.from('order_units').update({ billing_status: unitBilling }).eq('id', unitId);
+        markLocalUpdate();
         setOrders(prev => prev.map(o => {
           if (o.id !== orderId) return o;
           return { ...o, units: o.units?.map(u => u.id === unitId ? { ...u, billingStatus: unitBilling } : u) };
