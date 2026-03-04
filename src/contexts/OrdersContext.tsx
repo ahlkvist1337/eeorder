@@ -1982,7 +1982,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     }
 
     // Aggregate billing_status for the unit
-    const billingNewStatus: TruckBillingStatus = newStatus === 'delivered' ? 'ready_for_billing' : (resetBilling ? 'not_billable' : obj.billingStatus);
+    const billingNewStatus: TruckBillingStatus = resetBilling ? 'not_billable' : obj.billingStatus;
     const updatedObjsForBilling = unit.objects.map(ob => ob.id === objectId ? { ...ob, billingStatus: billingNewStatus } : ob);
     const allBilled = updatedObjsForBilling.every(ob => ob.billingStatus === 'billed');
     const someReady = updatedObjsForBilling.some(ob => ob.billingStatus === 'ready_for_billing' || ob.billingStatus === 'billed');
