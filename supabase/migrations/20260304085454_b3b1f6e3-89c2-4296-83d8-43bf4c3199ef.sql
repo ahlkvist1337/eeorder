@@ -1,0 +1,1 @@
+ALTER TABLE public.unit_objects ADD COLUMN sort_order integer;
