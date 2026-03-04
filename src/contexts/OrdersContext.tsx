@@ -1886,7 +1886,6 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
               ob.id === objectId ? { 
                 ...ob, 
                 status: newStatus,
-                ...(newStatus === 'delivered' ? { billingStatus: 'ready_for_billing' as TruckBillingStatus } : {}),
                 ...(resetBilling ? { billingStatus: 'not_billable' as TruckBillingStatus } : {}),
               } : ob
             ),
@@ -1901,9 +1900,6 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
     // Update in DB
     const dbUpdate: Record<string, unknown> = { status: newStatus };
-    if (newStatus === 'delivered') {
-      dbUpdate.billing_status = 'ready_for_billing';
-    }
     if (resetBilling) {
       dbUpdate.billing_status = 'not_billable';
     }
@@ -1930,6 +1926,27 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         return {
           ...o,
           units: o.units?.map(u => u.id === unitId ? { ...u, status: computedUnitStatus } : u),
+        };
+      }));
+    }
+
+    // Check if ALL objects in unit are finished → set billing_status on all
+    const finishedObjStatuses = ['completed', 'packed', 'delivered'];
+    const updatedObjs = unit.objects.map(ob => ob.id === objectId ? { ...ob, status: newStatus } : ob);
+    const doneCount = updatedObjs.filter(ob => finishedObjStatuses.includes(ob.status)).length;
+    console.log('Checking unit completion:', doneCount, 'objects done out of', updatedObjs.length);
+
+    if (updatedObjs.every(ob => finishedObjStatuses.includes(ob.status))) {
+      for (const ob of updatedObjs) {
+        await supabase.from('unit_objects').update({ billing_status: 'ready_for_billing' }).eq('id', ob.id);
+      }
+      setOrders(prev => prev.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          units: o.units?.map(u => u.id === unitId ? {
+            ...u, objects: u.objects.map(ob => ({ ...ob, billingStatus: 'ready_for_billing' as TruckBillingStatus })),
+          } : u),
         };
       }));
     }

@@ -266,13 +266,13 @@ export function getOrderBillingLabel(order: Order): string {
     const allObjects = order.units.flatMap(u => u.objects);
     if (allObjects.length > 1) {
       const allReady = allObjects.every(o => o.billingStatus === 'ready_for_billing' || o.billingStatus === 'billed');
-      if (!allReady) return 'Delvis klar för fakturering';
+      if (!allReady) return 'Delvis fakturerbar';
     }
   } else if (order.dataModelVersion !== 2) {
     const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
     if (allTrucks.length > 1) {
       const allReady = allTrucks.every(t => t.billingStatus === 'ready_for_billing' || t.billingStatus === 'billed');
-      if (!allReady) return 'Delvis klar för fakturering';
+      if (!allReady) return 'Delvis fakturerbar';
     }
   }
 
