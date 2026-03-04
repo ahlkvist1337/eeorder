@@ -1,38 +1,32 @@
 
 
-## Analys
+## Problem
 
-Buggen sitter i att UnitsEditor renderas **inuti** `<form>`-taggen i CreateOrder.tsx. HTML-knappar utan explicit `type="button"` defaultar till `type="submit"`, vilket betyder att varje knapptryck i UnitsEditor (t.ex. "Lagg till enhet") **samtidigt submitar formularet** och triggar `handleManualSubmit` -> `addOrder` -> redirect.
+Step statuses "jump back" because the 2-second realtime guard window expires before all sequential database operations complete. Here is the timeline:
 
-Dessutom saknar `onKeyDown`-hanteraren for Enter-tangenten (rad 599) ett `e.preventDefault()`, sa Enter i enhetsnamnfaltet ocksa submitar formularet.
+1. User clicks step status badge
+2. `markLocalUpdate()` is called ONCE at the start (timestamp = T)
+3. Optimistic UI update shows new status immediately
+4. Sequential `await` chain begins: `unit_object_steps.update` → `truck_status_history.insert` → `unit_objects.update` → `truck_lifecycle_events.insert` → `order_units.update` → `orders.update`
+5. Each DB write triggers a Supabase realtime event
+6. The later events arrive at T + 3-5 seconds, AFTER the 2-second guard has expired
+7. `debouncedFetch` runs → `fetchOrders()` overwrites optimistic state with stale data → step "jumps back"
 
 ## Fix
 
-### `src/components/UnitsEditor.tsx`
+Add `markLocalUpdate()` after every `await` in the long chains, so the 2-second guard window keeps getting extended. This is the minimal change -- no restructuring, no `Promise.all`, no new logic.
 
-Lagga till `type="button"` pa samtliga `<Button>`-element i komponenten som INTE ar avsedda att submita ett formular. Det gar alla knappar i komponenten -- ca 15 stycken:
+### Files to change
 
-- Rad 328, 330: Spara/Avbryt redigeringsknapp
-- Rad 373: Redigera-knapp
-- Rad 378: Duplicera-knapp  
-- Rad 382: Expand/collapse-knapp
-- Rad 392: Ta bort-enhet-knapp
-- Rad 541, 555: Ta bort steg-knappar
-- Rad 558: Lagg till steg-knapp
-- Rad 580: Lagg till objekt-knapp
-- Rad 602: Lagg till enhet-knapp
-- Alla ovriga knappar i objektrader (skriv ut, ta bort objekt, statusdropdowns etc.)
+**`src/contexts/OrdersContext.tsx`** -- add `markLocalUpdate()` after each `await` in:
 
-Plus: Rad 599 -- lagga till `e.preventDefault()` i `onKeyDown`-hanteraren for Enter sa att Enter inte submitar formularet:
-```typescript
-onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddUnit(); } }}
-```
+1. **`updateUnitStepStatus`** (line 1672-1851): Add after each of the ~8 `await` calls (lines 1722, 1728, 1771, 1774, 1797, 1817, 1830-1835, 1841-1846)
 
-### Ingen andring i CreateOrder.tsx
+2. **`updateUnitObjectStatus`** (line 1878-2037): Add after each of the ~8 `await` calls (lines 1946, 1949, 1963, 1981, 2004-2009, 2015-2020, 2031, 2079)
 
-Formularet och `handleManualSubmit` fungerar korrekt -- problemet ar enbart att knappar i UnitsEditor triggar submit.
+3. **`updateUnitObjectBillingStatus`** (line 2039-2086): Add after each `await` (lines 2066, 2079)
 
-| Fil | Andring |
-|-----|---------|
-| `src/components/UnitsEditor.tsx` | `type="button"` pa alla Button-element + `e.preventDefault()` pa Enter |
+4. **`updateTruckStepStatus`** (V1 equivalent, if still used): Same pattern
+
+No other files change. No database changes. No new dependencies.
 
