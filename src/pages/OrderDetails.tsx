@@ -3,7 +3,8 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { format } from 'date-fns';
 import { sv } from 'date-fns/locale';
-import { ArrowLeft, AlertTriangle, Clock, Package, Wrench, Save, CalendarIcon, FileText, Box } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Clock, Package, Wrench, Save, CalendarIcon, FileText, Box, Pencil } from 'lucide-react';
+import { BillingStatusOverrideDialog } from '@/components/BillingStatusOverrideDialog';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -65,13 +66,14 @@ export default function OrderDetails() {
     updateUnitBillingStatus,
     updateUnitObjectStatus,
     updateUnitObjectBillingStatus,
+    overrideOrderBillingStatus,
     deleteOrder,
     isLoading 
   } = useOrders();
 
   const order = getOrderById(id || '');
   const { attachments, refetch: refetchAttachments } = useOrderAttachments(id || '');
-  const { isAdmin, isProduction } = useAuth();
+  const { isAdmin, isProduction, profile } = useAuth();
   
   // Set dynamic page title
   useDocumentTitle(order ? `Order ${order.orderNumber}` : 'Order');
@@ -79,6 +81,7 @@ export default function OrderDetails() {
   // Local state for order comment
   const [localComment, setLocalComment] = useState(order?.comment || '');
   const [hasUnsavedComment, setHasUnsavedComment] = useState(false);
+  const [billingOverrideOpen, setBillingOverrideOpen] = useState(false);
 
   // Sync local state when order changes
   useEffect(() => {
@@ -798,7 +801,19 @@ export default function OrderDetails() {
 
                 <div className="space-y-1.5 sm:space-y-2">
                   <Label className="text-xs sm:text-sm">Faktureringsstatus</Label>
-                  <BillingStatusBadge status={calculateOrderBillingStatus(order)} label={getOrderBillingLabel(order)} />
+                  <div className="flex items-center gap-2">
+                    <BillingStatusBadge status={calculateOrderBillingStatus(order)} label={getOrderBillingLabel(order)} />
+                    {isAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => setBillingOverrideOpen(true)}
+                      >
+                        Ändra
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
               </CardContent>
@@ -868,6 +883,16 @@ export default function OrderDetails() {
           </div>
         </div>
       </div>
+      {order && (
+        <BillingStatusOverrideDialog
+          open={billingOverrideOpen}
+          onOpenChange={setBillingOverrideOpen}
+          onConfirm={async (newStatus, comment) => {
+            await overrideOrderBillingStatus(order.id, newStatus, comment, profile?.full_name || 'Admin');
+            toast.success('Faktureringsstatus uppdaterad');
+          }}
+        />
+      )}
     </Layout>
   );
 }
