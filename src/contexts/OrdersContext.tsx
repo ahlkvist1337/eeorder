@@ -174,7 +174,7 @@ function mapDbOrderToOrder(
   lifecycleEvents: DbTruckLifecycleEvent[]
 ): Order {
   return {
-    dataModelVersion: (dbOrder as any).data_model_version ?? 1,
+    dataModelVersion: (dbOrder as any).data_model_version ?? 2,
     id: dbOrder.id,
     orderNumber: dbOrder.order_number,
     customer: dbOrder.customer,
@@ -586,7 +586,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       total_price: order.totalPrice,
       xml_data: order.xmlData || null,
       instructions: order.instructions || null,
-      data_model_version: order.dataModelVersion ?? 1,
+      data_model_version: order.dataModelVersion ?? 2,
     };
     
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

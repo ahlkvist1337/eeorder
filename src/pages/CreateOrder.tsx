@@ -14,9 +14,9 @@ import { parseMonitorXML } from '@/lib/xmlParser';
 import { Upload, FileText, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
 import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
 import { InstructionsEditor } from '@/components/InstructionsEditor';
-import { OrderObjectsEditor } from '@/components/OrderObjectsEditor';
+
 import { UnitsEditor } from '@/components/UnitsEditor';
-import type { Order, OrderStep, ParsedXMLOrder, ArticleRow, OrderObject, Instruction, OrderUnit } from '@/types/order';
+import type { Order, ParsedXMLOrder, ArticleRow, Instruction, OrderUnit } from '@/types/order';
 
 export default function CreateOrder() {
   useDocumentTitle('Ny order');
@@ -40,8 +40,7 @@ export default function CreateOrder() {
   // XML import state
   const [xmlError, setXmlError] = useState<string | null>(null);
   const [parsedXml, setParsedXml] = useState<ParsedXMLOrder | null>(null);
-  const [xmlObjects, setXmlObjects] = useState<OrderObject[]>([]);
-  const [xmlSteps, setXmlSteps] = useState<OrderStep[]>([]);
+  const [xmlUnits, setXmlUnits] = useState<OrderUnit[]>([]);
   const [xmlComment, setXmlComment] = useState('');
   const [xmlInstructions, setXmlInstructions] = useState<Instruction[]>([]);
   const [xmlArticleRows, setXmlArticleRows] = useState<ArticleRow[]>([]);
@@ -177,7 +176,7 @@ export default function CreateOrder() {
     if (!parsedXml) return;
 
     const newOrder: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'> = {
-      dataModelVersion: 1,
+      dataModelVersion: 2,
       orderNumber: parsedXml.orderNumber,
       customer: parsedXml.customer,
       customerReference: parsedXml.customerReference,
@@ -187,8 +186,8 @@ export default function CreateOrder() {
       plannedStart: normalizeDate(parsedXml.orderDate),
       plannedEnd: normalizeDate(parsedXml.deliveryDate),
       comment: xmlComment.trim() || undefined,
-      objects: xmlObjects.length > 0 ? xmlObjects : undefined,
-      steps: xmlSteps,
+      units: xmlUnits.length > 0 ? xmlUnits : undefined,
+      steps: [],
       hasDeviation: false,
       totalPrice: xmlArticleRows.reduce((sum, row) => sum + row.price * row.quantity, 0),
       xmlData: {
@@ -438,13 +437,11 @@ export default function CreateOrder() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Objekt & Behandlingssteg</Label>
+                      <Label>Enheter & Behandlingssteg</Label>
                       <div className="border rounded-md p-4">
-                        <OrderObjectsEditor
-                          objects={xmlObjects}
-                          steps={xmlSteps}
-                          onObjectsChange={setXmlObjects}
-                          onStepsChange={setXmlSteps}
+                        <UnitsEditor
+                          units={xmlUnits}
+                          onUnitsChange={setXmlUnits}
                         />
                       </div>
                     </div>
@@ -465,8 +462,7 @@ export default function CreateOrder() {
                         variant="outline" 
                         onClick={() => {
                           setParsedXml(null);
-                          setXmlObjects([]);
-                          setXmlSteps([]);
+                          setXmlUnits([]);
                           setXmlComment('');
                           setXmlInstructions([]);
                           setXmlArticleRows([]);
