@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useTreatmentSteps } from '@/hooks/useTreatmentSteps';
 import { useObjectTemplates } from '@/hooks/useObjectTemplates';
@@ -48,7 +49,7 @@ const truckStatusColors: Record<TruckStatus, string> = {
 export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitStepStatusChange, onUnitBillingStatusChange, onUnitObjectStatusChange, onUnitObjectBillingStatusChange, orderInfo, articleRows }: UnitsEditorProps) {
   const { steps: treatmentTemplates } = useTreatmentSteps();
   const { templates: objectTemplates } = useObjectTemplates();
-  const { isProduction } = useAuth();
+  const { isProduction, isAdmin } = useAuth();
   
   const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set());
   const [newUnitNumber, setNewUnitNumber] = useState('');
@@ -138,6 +139,16 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
 
   // --- Step status click (auto-status logic like V1) ---
   const handleStepStatusClick = (unitId: string, objectId: string, stepId: string, currentStatus: StepStatus) => {
+    // Check unit lock
+    const parentUnit = units.find(u => u.id === unitId);
+    if (parentUnit) {
+      const unitLocked = parentUnit.billingStatus === 'billed' || parentUnit.billingStatus === 'ready_for_billing';
+      if (unitLocked && !isAdmin) return;
+      if (unitLocked && isAdmin) {
+        if (!confirm('Är du säker? Detta kan påverka fakturering')) return;
+      }
+    }
+
     const nextStatus: StepStatus =
       currentStatus === 'pending' ? 'in_progress' :
       currentStatus === 'in_progress' ? 'completed' : 'pending';
@@ -324,11 +335,19 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
               ) : (
                 <>
                   {/* Unit name + aggregate status */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                   <div className="flex items-center gap-2 flex-shrink-0">
                     <span className="font-mono font-bold text-sm min-w-[60px]">
                       {getUnitDisplayName(unit, unitIndex)}
                     </span>
                     
+                    {/* Billing status badge */}
+                    {unit.billingStatus === 'billed' && (
+                      <Badge className="bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0 rounded-sm">Fakturerad</Badge>
+                    )}
+                    {unit.billingStatus === 'ready_for_billing' && (
+                      <Badge className="bg-orange-500 text-white text-[10px] px-1.5 py-0 rounded-sm">Klar för fakturering</Badge>
+                    )}
+
                     {/* Aggregate status summary */}
                     {unit.objects.length > 0 && (() => {
                       const total = unit.objects.length;
@@ -394,16 +413,23 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
             {/* Objects with step badges — always visible */}
             {unit.objects.length > 0 && (
               <div className="px-3 py-2 space-y-2 border-t">
-                {unit.objects.map(obj => (
+                {unit.objects.map(obj => {
+                  const unitLocked = unit.billingStatus === 'billed' || unit.billingStatus === 'ready_for_billing';
+                  const isLocked = unitLocked && !isAdmin;
+                  return (
                   <div key={obj.id} data-object-id={obj.id}>
                     <div className="flex items-center gap-2 flex-wrap">
                       <Box className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <span className="text-sm font-medium">{obj.name}</span>
                       
-                      {/* Object status dropdown */}
+                       {/* Object status dropdown */}
                       <Select
                         value={obj.status}
+                        disabled={isLocked}
                         onValueChange={(value: TruckStatus) => {
+                          if (unitLocked && isAdmin) {
+                            if (!confirm('Är du säker? Detta kan påverka fakturering')) return;
+                          }
                           if (onUnitObjectStatusChange) {
                             onUnitObjectStatusChange(unit.id, obj.id, value);
                           } else {
@@ -474,7 +500,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                           <Printer className="h-3.5 w-3.5" />
                         </Button>
                       )}
-                      {isProduction && (
+                      {isProduction && !isLocked && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -485,7 +511,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                           <Plus className="h-3.5 w-3.5" />
                         </Button>
                       )}
-                      {isProduction && (
+                      {isProduction && !isLocked && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -510,7 +536,8 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                               className={cn(
                                 'px-2 py-1 sm:px-2 sm:py-0.5 rounded-md text-xs font-medium transition-colors hover:opacity-80 min-h-[44px] sm:min-h-0 whitespace-nowrap',
                                 colors.bg,
-                                colors.text
+                                colors.text,
+                                isLocked && 'pointer-events-none opacity-60'
                               )}
                               title={`${obj.name} → ${step.name}: Klicka för att ändra status`}
                             >
@@ -534,7 +561,8 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                       </div>
                     )}
                   </div>
-                ))}
+                );
+                })}
               </div>
             )}
 

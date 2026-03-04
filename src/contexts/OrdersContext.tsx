@@ -1739,11 +1739,27 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         targetObjectStatus = 'arrived';
       } else if (newStatus === 'completed' && updatedSteps.every(s => s.status === 'completed')) {
         targetObjectStatus = 'completed';
+      } else if (newStatus !== 'completed' && currentStatus === 'completed') {
+        // Rollback: step went from completed → non-completed, revert finished object
+        const finishedObjStatuses: TruckStatus[] = ['completed', 'packed', 'delivered'];
+        if (finishedObjStatuses.includes(parentObj.status)) {
+          targetObjectStatus = 'started';
+          console.log('Status rollback: Steg ändrat – uppdaterar enhet/order status');
+        }
       }
 
       if (targetObjectStatus && targetObjectStatus !== parentObj.status) {
-        // Update object status in DB
-        await supabase.from('unit_objects').update({ status: targetObjectStatus }).eq('id', parentObj.id);
+        // Reset billing if rolling back from finished state
+        const rollingBackBilling = (targetObjectStatus === 'started' || targetObjectStatus === 'arrived') && 
+          ['completed', 'packed', 'delivered'].includes(parentObj.status);
+        
+        // Update object status (and billing if rolling back) in DB
+        const objUpdate: Record<string, unknown> = { status: targetObjectStatus };
+        if (rollingBackBilling) {
+          objUpdate.billing_status = 'not_billable';
+          console.log('Status rollback: Billing reset till not_billable för objekt', parentObj.id);
+        }
+        await supabase.from('unit_objects').update(objUpdate).eq('id', parentObj.id);
         
         // Log lifecycle event
         await supabase.from('truck_lifecycle_events').insert({
@@ -1755,10 +1771,23 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           changed_by_name: getInitials(profile?.full_name),
         });
 
-        // Optimistic update for object status
-        const allObjectsUpdated = unit.objects.map(ob => ob.id === parentObj.id ? { ...ob, status: targetObjectStatus! } : ob);
+        // Optimistic update for object status + billing
+        const allObjectsUpdated = unit.objects.map(ob => ob.id === parentObj.id ? { 
+          ...ob, 
+          status: targetObjectStatus!,
+          ...(rollingBackBilling ? { billingStatus: 'not_billable' as TruckBillingStatus } : {}),
+        } : ob);
         const computedUnitStatus = computeAggregateStatus(allObjectsUpdated.map(ob => ob.status));
         
+        // Recompute unit billing: if any object is not_billable, unit is not_billable
+        let computedUnitBilling = unit.billingStatus;
+        if (rollingBackBilling) {
+          const allBilled = allObjectsUpdated.every(ob => ob.billingStatus === 'billed');
+          const allReady = allObjectsUpdated.every(ob => ob.billingStatus === 'ready_for_billing' || ob.billingStatus === 'billed');
+          computedUnitBilling = allBilled ? 'billed' : allReady ? 'ready_for_billing' : 'not_billable';
+          await supabase.from('order_units').update({ billing_status: computedUnitBilling }).eq('id', unitId);
+        }
+
         setOrders(prev => prev.map(o => {
           if (o.id !== orderId) return o;
           return {
@@ -1768,7 +1797,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
               return {
                 ...u,
                 status: computedUnitStatus,
-                objects: u.objects.map(ob => ob.id === parentObj.id ? { ...ob, status: targetObjectStatus! } : ob),
+                billingStatus: computedUnitBilling,
+                objects: allObjectsUpdated,
               };
             }),
           };
