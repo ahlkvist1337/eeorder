@@ -49,13 +49,23 @@ export function InvoiceExportDialog({ open, onOpenChange, orders, trucksByOrderO
     }
   }
 
-  // Calculate total from ready trucks proportionally (simplified preview)
+  // Calculate total from ready trucks/units proportionally (simplified preview)
+  const isV2 = orders.some(o => o.dataModelVersion === 2);
+  const totalUnitsCount = orders.reduce((sum, order) => {
+    if (order.dataModelVersion === 2 && order.units) return sum + order.units.length;
+    return sum + (order.objects || []).flatMap(obj => obj.trucks || []).length;
+  }, 0);
   const totalAmount = readyTrucks.length > 0
     ? orders.reduce((sum, order) => {
         const orderTrucks = trucksByOrder[order.id] || [];
         if (orderTrucks.length === 0) return sum;
-        const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
-        const ratio = allTrucks.length > 0 ? orderTrucks.length / allTrucks.length : 0;
+        let allCount: number;
+        if (order.dataModelVersion === 2 && order.units) {
+          allCount = order.units.length;
+        } else {
+          allCount = (order.objects || []).flatMap(obj => obj.trucks || []).length;
+        }
+        const ratio = allCount > 0 ? orderTrucks.length / allCount : 0;
         const orderTotal = (order.articleRows || []).reduce(
           (rowSum, row) => rowSum + (row.quantity * row.price), 0
         );
@@ -143,18 +153,42 @@ export function InvoiceExportDialog({ open, onOpenChange, orders, trucksByOrderO
           await supabase.from('invoice_export_items').insert(exportItems as any);
         }
 
-        // Mark trucks as billed
+        // Mark trucks/units as billed
         const allTruckIds = exportData.orders.flatMap(o => o.truckIds);
         if (allTruckIds.length > 0) {
-          await supabase.from('object_trucks')
-            .update({ billing_status: 'billed' } as any)
-            .in('id', allTruckIds);
+          if (isV2) {
+            // V2: mark unit_objects and order_units as billed
+            // Get all unit objects for the ready units
+            for (const order of orders) {
+              if (order.dataModelVersion !== 2 || !order.units) continue;
+              const readyUnitIds = (trucksByOrder[order.id] || []).map(t => t.id);
+              const readyUnits = order.units.filter(u => readyUnitIds.includes(u.id));
+              const objectIds = readyUnits.flatMap(u => u.objects.map(o => o.id));
+              if (objectIds.length > 0) {
+                await supabase.from('unit_objects')
+                  .update({ billing_status: 'billed' } as any)
+                  .in('id', objectIds);
+              }
+              if (readyUnitIds.length > 0) {
+                await supabase.from('order_units')
+                  .update({ billing_status: 'billed' } as any)
+                  .in('id', readyUnitIds);
+              }
+              const unitNames = readyUnits.map((u, i) => u.unitNumber || `Enhet ${i + 1}`);
+              console.log(`Export: ${readyUnitIds.length} av ${order.units.length} enheter, belopp: ${Math.round(exportData.grandTotal)} kr, enhet-ID/namn: ${unitNames.join(', ')}`);
+            }
+          } else {
+            await supabase.from('object_trucks')
+              .update({ billing_status: 'billed' } as any)
+              .in('id', allTruckIds);
+          }
         }
       }
 
       const typeLabel = exportData.isPartial ? 'Delfaktura' : 'Fakturaunderlag';
       const formats = [exportPdf && 'PDF', exportExcel && 'Excel'].filter(Boolean).join(' och ');
-      toast.success(`${typeLabel} exporterat (${readyTrucks.length} arbetskort) som ${formats}`);
+      const entityLabel = isV2 ? `${readyTrucks.length} av ${totalUnitsCount} enheter` : `${readyTrucks.length} arbetskort`;
+      toast.success(`${typeLabel} exporterat (${entityLabel}) som ${formats}`);
       onOpenChange(false);
     } catch (error) {
       console.error('Export failed:', error);
@@ -170,7 +204,7 @@ export function InvoiceExportDialog({ open, onOpenChange, orders, trucksByOrderO
         <DialogHeader>
           <DialogTitle>Exportera fakturaunderlag</DialogTitle>
           <DialogDescription>
-            Skapa fakturaunderlag för arbetskort markerade som "Klar för fakturering".
+            Skapa fakturaunderlag för {isV2 ? 'enheter' : 'arbetskort'} markerade som "Klar för fakturering".
           </DialogDescription>
         </DialogHeader>
 
@@ -178,7 +212,9 @@ export function InvoiceExportDialog({ open, onOpenChange, orders, trucksByOrderO
           {/* Summary */}
           <div className="rounded-lg bg-muted p-4 space-y-1">
             <p className="font-medium">
-              {readyTrucks.length} arbetskort klara för fakturering
+              {isV2
+                ? `Delfaktura – ${readyTrucks.length} av ${totalUnitsCount} enheter klara för fakturering`
+                : `${readyTrucks.length} arbetskort klara för fakturering`}
             </p>
             <p className="text-2xl font-bold">
               ~{formatCurrency(Math.round(totalAmount))}

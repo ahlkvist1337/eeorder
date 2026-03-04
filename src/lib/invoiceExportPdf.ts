@@ -10,7 +10,7 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
   // Title - DELFAKTURA or SLUTFAKTURA
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
-  const title = data.isPartial ? 'DELFAKTURA' : 'FAKTURAUNDERLAG';
+  const title = data.isPartial ? 'DELFAKTURAUNDERLAG' : 'FAKTURAUNDERLAG';
   doc.text(title, pageWidth / 2, 25, { align: 'center' });
   
   // Export metadata
@@ -65,7 +65,8 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
     
     // Show which trucks are included
     if (order.truckNumbers.length > 0) {
-      doc.text(`Arbetskort: ${order.truckNumbers.map(n => `#${n}`).join(', ')}`, 14, yPosition);
+      const entityLabel = data.isPartial ? 'Enheter' : 'Arbetskort';
+      doc.text(`${entityLabel}: ${order.truckNumbers.map(n => `#${n}`).join(', ')}`, 14, yPosition);
       yPosition += 5;
     }
     

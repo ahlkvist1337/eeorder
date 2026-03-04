@@ -40,10 +40,10 @@ export function InvoicingTab() {
       .map(order => {
         // V2: units as billing entities
         if (order.dataModelVersion === 2 && order.units) {
-          const allUnitsAsTrucks: ObjectTruck[] = order.units.map(u => ({
+          const allUnitsAsTrucks: ObjectTruck[] = order.units.map((u, index) => ({
             id: u.id,
             objectId: '',
-            truckNumber: u.unitNumber,
+            truckNumber: u.unitNumber || `Enhet ${index + 1}`,
             status: u.status,
             billingStatus: u.billingStatus,
             stepStatuses: [],
