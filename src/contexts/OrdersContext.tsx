@@ -1932,7 +1932,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     }
 
     // Check if ALL objects in unit are finished → set billing_status on all
-    const finishedObjStatuses = ['completed', 'packed', 'delivered'];
+    const finishedObjStatuses = ['delivered'];
     const updatedObjs = unit.objects.map(ob => ob.id === objectId ? { ...ob, status: newStatus } : ob);
     const doneCount = updatedObjs.filter(ob => finishedObjStatuses.includes(ob.status)).length;
     console.log('Checking unit completion:', doneCount, 'objects done out of', updatedObjs.length);
