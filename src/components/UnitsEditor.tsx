@@ -321,14 +321,14 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                     className="h-9 w-32 text-sm font-mono"
                     autoFocus
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveEdit();
+                      if (e.key === 'Enter') { e.preventDefault(); handleSaveEdit(); }
                       if (e.key === 'Escape') handleCancelEdit();
                     }}
                   />
-                  <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleSaveEdit}>
+                  <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={handleSaveEdit}>
                     <Check className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleCancelEdit}>
+                  <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={handleCancelEdit}>
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
@@ -370,16 +370,17 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                   {/* Action buttons */}
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {isProduction && (
-                      <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => handleStartEdit(unit)} title="Byt namn">
+                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={() => handleStartEdit(unit)} title="Byt namn">
                         <Pencil className="h-4 w-4" />
                       </Button>
                     )}
                     {isProduction && (
-                      <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => handleDuplicateUnit(unit)} title="Duplicera">
+                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={() => handleDuplicateUnit(unit)} title="Duplicera">
                         <Copy className="h-4 w-4" />
                       </Button>
                     )}
                     <Button
+                      type="button"
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9"
@@ -390,6 +391,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                     </Button>
                     {isProduction && (
                       <Button
+                        type="button"
                         variant="ghost"
                         size="icon"
                         className="h-9 w-9 text-destructive hover:text-destructive"
@@ -454,6 +456,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                       {/* Pack button */}
                       {obj.status === 'completed' && onUnitObjectStatusChange && (
                         <Button
+                          type="button"
                           variant="outline"
                           size="sm"
                           className="h-7 text-xs bg-amber-500/10 border-amber-500 text-amber-700 hover:bg-amber-500/20"
@@ -467,6 +470,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                       {/* Deliver button */}
                       {obj.status === 'packed' && onUnitObjectStatusChange && (
                         <Button
+                          type="button"
                           variant="outline"
                           size="sm"
                           className="h-7 text-xs bg-emerald-600/10 border-emerald-600 text-emerald-700 hover:bg-emerald-600/20"
@@ -483,6 +487,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                       {/* Action buttons inline on same row */}
                       {orderInfo && obj.steps.length > 0 && (
                         <Button
+                          type="button"
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 sm:h-6 sm:w-6"
@@ -502,6 +507,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                       )}
                       {isProduction && !isLocked && (
                         <Button
+                          type="button"
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 sm:h-6 sm:w-6"
@@ -513,6 +519,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                       )}
                       {isProduction && !isLocked && (
                         <Button
+                          type="button"
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 sm:h-6 sm:w-6 text-destructive hover:text-destructive"
@@ -530,7 +537,8 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                         {obj.steps.map(step => {
                           const colors = stepStatusColors[step.status];
                           return (
-                            <button
+                      <button
+                              type="button"
                               key={step.id}
                               onClick={() => handleStepStatusClick(unit.id, obj.id, step.id, step.status)}
                               className={cn(
@@ -555,7 +563,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                           <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="Välj steg..." /></SelectTrigger>
                           <SelectContent>{treatmentTemplates.map(t => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent>
                         </Select>
-                        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { handleAddStep(unit.id, obj.id); }} disabled={!selectedStepTemplate[obj.id]}>
+                        <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => { handleAddStep(unit.id, obj.id); }} disabled={!selectedStepTemplate[obj.id]}>
                           <Plus className="h-3 w-3 mr-1" /> Steg
                         </Button>
                       </div>
@@ -577,7 +585,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                   {selectedObjectTemplate[unit.id] === '__custom__' && (
                     <Input value={customObjectName[unit.id] || ''} onChange={e => setCustomObjectName(prev => ({ ...prev, [unit.id]: e.target.value }))} placeholder="Objektnamn" className="h-8 text-xs flex-1" />
                   )}
-                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => handleAddObject(unit.id)} disabled={!selectedObjectTemplate[unit.id] || (selectedObjectTemplate[unit.id] === '__custom__' && !customObjectName[unit.id]?.trim())}>
+                  <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => handleAddObject(unit.id)} disabled={!selectedObjectTemplate[unit.id] || (selectedObjectTemplate[unit.id] === '__custom__' && !customObjectName[unit.id]?.trim())}>
                     <Plus className="h-3 w-3 mr-1" /> Objekt
                   </Button>
                 </div>
@@ -596,10 +604,10 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
               onChange={e => setNewUnitNumber(e.target.value)}
               placeholder="Enhetsnamn (valfritt)"
               className="h-9 text-sm"
-              onKeyDown={e => { if (e.key === 'Enter') handleAddUnit(); }}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddUnit(); } }}
             />
           </div>
-          <Button variant="outline" size="sm" className="h-9" onClick={handleAddUnit}>
+          <Button type="button" variant="outline" size="sm" className="h-9" onClick={handleAddUnit}>
             <Plus className="h-4 w-4 mr-1" /> Lägg till enhet
           </Button>
         </div>
