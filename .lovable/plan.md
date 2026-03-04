@@ -1,64 +1,41 @@
 
 
-# Fix: Billing status per enhet + ny badge för "Delvis"
+# Manuell override av faktureringsstatus (admin)
 
-## Två ändringar
+## Vad
+En admin-knapp bredvid faktureringsstatusen i OrderDetails som öppnar en dialog för att manuellt ändra billing_status på orderns enheter/objekt. Logga vem och varför.
 
-### 1. Billing-logik: vänta tills ALLA objekt i enheten är klara (`src/contexts/OrdersContext.tsx`)
+## Ändringar
 
-**Nuvarande beteende (rad 1889, 1904-1905):** När ETT objekt sätts till `delivered` → dess `billing_status` sätts direkt till `ready_for_billing`. Detta gör att `calculateOrderBillingStatus` ser "delvis klar" för tidigt.
+### 1. Ny komponent: `src/components/BillingStatusOverrideDialog.tsx`
+- Dialog med:
+  - Dropdown: "Ej klar" (`not_billable`), "Klar för fakturering" (`ready_for_billing`), "Fakturerad" (`billed`)
+  - Valfritt kommentarsfält ("Varför ändrad?")
+  - Bekräfta-knapp
+- Props: `orderId`, `open`, `onOpenChange`, `onConfirm(newStatus, comment)`
 
-**Nytt beteende:** Ta bort den direkta `billing_status`-uppdateringen vid leverans. Lägg istället till en check efter enhetsstatus-aggregeringen (rad ~1935): om ALLA objekt i enheten nu är `completed`/`packed`/`delivered`, sätt `billing_status = 'ready_for_billing'` på samtliga objekt i enheten. Annars ingen ändring.
+### 2. `src/pages/OrderDetails.tsx` (rad ~798-802)
+- Bredvid `BillingStatusBadge` i Faktureringsstatus-sektionen, lägg till en liten knapp "Ändra" (synlig bara för `isAdmin`)
+- Klick öppnar `BillingStatusOverrideDialog`
+- `onConfirm` handler:
+  - Uppdaterar alla unit_objects (V2) eller object_trucks (V1) till vald `billing_status` via supabase
+  - Uppdaterar lokal state via `setOrders` eller refetch
+  - Loggar ändringen till `truck_lifecycle_events` med `event_type: 'billing_override'`, `note: kommentar`, `changed_by_name`
+  - Toast-bekräftelse
 
-```typescript
-// Rad ~1889: Ta bort delivered → ready_for_billing
-// Rad ~1904-1905: Ta bort billing_status från dbUpdate vid delivered
+### 3. `src/contexts/OrdersContext.tsx`
+- Ny funktion `overrideOrderBillingStatus(orderId, newBillingStatus, comment)`:
+  - V2: uppdaterar alla `unit_objects` + `order_units` billing_status
+  - V1: uppdaterar alla `object_trucks` billing_status
+  - Loggar till `truck_lifecycle_events`
+  - Uppdaterar lokal state
+- Exponera i context interface
 
-// Ny kod efter rad 1935 (efter unit status aggregation):
-const finishedObjStatuses = ['completed', 'packed', 'delivered'];
-const updatedObjs = unit.objects.map(ob => ob.id === objectId ? { ...ob, status: newStatus } : ob);
-const doneCount = updatedObjs.filter(ob => finishedObjStatuses.includes(ob.status)).length;
-console.log('Checking unit completion:', doneCount, 'objects done out of', updatedObjs.length);
-
-if (updatedObjs.every(ob => finishedObjStatuses.includes(ob.status))) {
-  // Alla objekt klara → sätt billing_status på alla
-  for (const ob of updatedObjs) {
-    await supabase.from('unit_objects').update({ billing_status: 'ready_for_billing' }).eq('id', ob.id);
-  }
-  setOrders(prev => prev.map(o => {
-    if (o.id !== orderId) return o;
-    return { ...o, units: o.units?.map(u => u.id === unitId ? {
-      ...u, objects: u.objects.map(ob => ({ ...ob, billingStatus: 'ready_for_billing' })),
-    } : u) };
-  }));
-}
-```
-
-Behåll `resetBilling`-logiken (backning) oförändrad.
-
-### 2. Badge: "Delvis fakturerbar" med orange färg
-
-**`src/types/order.ts`** (rad 269, 275): Ändra `'Delvis klar för fakturering'` → `'Delvis fakturerbar'`
-
-**`src/components/StatusBadge.tsx`** (rad 48-59): Detektera `label === 'Delvis fakturerbar'` och applicera orange:
-
-```tsx
-export function BillingStatusBadge({ status, className, label }: BillingStatusBadgeProps) {
-  const isPartial = label === 'Delvis fakturerbar';
-  const colorClass = isPartial
-    ? 'bg-orange-500 text-white'
-    : billingStatusColors[status];
-  return (
-    <Badge className={cn('font-medium rounded-sm', colorClass, className)}>
-      {label || billingStatusLabels[status]}
-    </Badge>
-  );
-}
-```
+### Filöversikt
 
 | Fil | Ändring |
 |-----|---------|
-| `src/contexts/OrdersContext.tsx` | Ta bort per-objekt billing vid leverans; lägg till enhetscheck + debug log |
-| `src/types/order.ts` | Korta label till "Delvis fakturerbar" |
-| `src/components/StatusBadge.tsx` | Orange färg för delvis-badge |
+| `src/components/BillingStatusOverrideDialog.tsx` | Ny dialog-komponent |
+| `src/pages/OrderDetails.tsx` | Admin-knapp + dialog integration (~rad 798-802) |
+| `src/contexts/OrdersContext.tsx` | Ny `overrideOrderBillingStatus` funktion |
 
