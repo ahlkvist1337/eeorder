@@ -1,41 +1,22 @@
 
 
-# Manuell override av faktureringsstatus (admin)
+# Ändra: Billing-trigger kräver "Levererat" (inte bara "Klar")
 
-## Vad
-En admin-knapp bredvid faktureringsstatusen i OrderDetails som öppnar en dialog för att manuellt ändra billing_status på orderns enheter/objekt. Logga vem och varför.
+## Problem
+Nuvarande logik i `OrdersContext.tsx` (rad 1935) räknar `completed`, `packed` och `delivered` som "klara" statusar för att trigga `ready_for_billing`. Användaren vill att billing_status bara sätts när alla objekt i enheten är **Levererat** (`delivered`).
 
-## Ändringar
+## Ändring
 
-### 1. Ny komponent: `src/components/BillingStatusOverrideDialog.tsx`
-- Dialog med:
-  - Dropdown: "Ej klar" (`not_billable`), "Klar för fakturering" (`ready_for_billing`), "Fakturerad" (`billed`)
-  - Valfritt kommentarsfält ("Varför ändrad?")
-  - Bekräfta-knapp
-- Props: `orderId`, `open`, `onOpenChange`, `onConfirm(newStatus, comment)`
+### `src/contexts/OrdersContext.tsx` (rad 1935)
+Ändra `finishedObjStatuses` från `['completed', 'packed', 'delivered']` till `['delivered']`:
 
-### 2. `src/pages/OrderDetails.tsx` (rad ~798-802)
-- Bredvid `BillingStatusBadge` i Faktureringsstatus-sektionen, lägg till en liten knapp "Ändra" (synlig bara för `isAdmin`)
-- Klick öppnar `BillingStatusOverrideDialog`
-- `onConfirm` handler:
-  - Uppdaterar alla unit_objects (V2) eller object_trucks (V1) till vald `billing_status` via supabase
-  - Uppdaterar lokal state via `setOrders` eller refetch
-  - Loggar ändringen till `truck_lifecycle_events` med `event_type: 'billing_override'`, `note: kommentar`, `changed_by_name`
-  - Toast-bekräftelse
+```typescript
+const finishedObjStatuses = ['delivered'];
+```
 
-### 3. `src/contexts/OrdersContext.tsx`
-- Ny funktion `overrideOrderBillingStatus(orderId, newBillingStatus, comment)`:
-  - V2: uppdaterar alla `unit_objects` + `order_units` billing_status
-  - V1: uppdaterar alla `object_trucks` billing_status
-  - Loggar till `truck_lifecycle_events`
-  - Uppdaterar lokal state
-- Exponera i context interface
-
-### Filöversikt
+En rad. Resten av logiken (check, db-uppdatering, lokal state) förblir identisk.
 
 | Fil | Ändring |
 |-----|---------|
-| `src/components/BillingStatusOverrideDialog.tsx` | Ny dialog-komponent |
-| `src/pages/OrderDetails.tsx` | Admin-knapp + dialog integration (~rad 798-802) |
-| `src/contexts/OrdersContext.tsx` | Ny `overrideOrderBillingStatus` funktion |
+| `src/contexts/OrdersContext.tsx` | `finishedObjStatuses = ['delivered']` (rad 1935) |
 
