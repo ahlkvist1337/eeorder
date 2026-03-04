@@ -157,6 +157,7 @@ interface OrdersContextType {
   updateUnitBillingStatus: (orderId: string, unitId: string, newStatus: TruckBillingStatus) => Promise<void>;
   updateUnitObjectStatus: (orderId: string, unitId: string, objectId: string, newStatus: TruckStatus) => Promise<void>;
   updateUnitObjectBillingStatus: (orderId: string, unitId: string, objectId: string, newStatus: TruckBillingStatus) => Promise<void>;
+  overrideOrderBillingStatus: (orderId: string, newStatus: TruckBillingStatus, comment: string, changedByName: string) => Promise<void>;
 }
 
 const OrdersContext = createContext<OrdersContextType | null>(null);
@@ -2045,6 +2046,68 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     }
   }, [orders, markLocalUpdate]);
 
+  // Admin override: set billing_status on all objects/trucks in an order
+  const overrideOrderBillingStatus = useCallback(async (
+    orderId: string,
+    newStatus: TruckBillingStatus,
+    comment: string,
+    changedByName: string
+  ) => {
+    markLocalUpdate();
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+
+    if (order.dataModelVersion === 2 && order.units) {
+      // V2: update all unit_objects + order_units
+      for (const unit of order.units) {
+        for (const obj of unit.objects) {
+          await supabase.from('unit_objects').update({ billing_status: newStatus }).eq('id', obj.id);
+          // Log to truck_lifecycle_events
+          await supabase.from('truck_lifecycle_events').insert({
+            order_id: orderId,
+            truck_id: obj.id,
+            truck_number: unit.unitNumber || '',
+            event_type: 'billing_override',
+            note: comment || `Manuell ändring till ${newStatus}`,
+            changed_by_name: changedByName,
+          });
+        }
+        await supabase.from('order_units').update({ billing_status: newStatus }).eq('id', unit.id);
+      }
+    } else {
+      // V1: update all object_trucks
+      const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
+      for (const truck of allTrucks) {
+        await supabase.from('object_trucks').update({ billing_status: newStatus }).eq('id', truck.id);
+        await supabase.from('truck_lifecycle_events').insert({
+          order_id: orderId,
+          truck_id: truck.id,
+          truck_number: truck.truckNumber || '',
+          event_type: 'billing_override',
+          note: comment || `Manuell ändring till ${newStatus}`,
+          changed_by_name: changedByName,
+        });
+      }
+    }
+
+    // Update local state
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      return {
+        ...o,
+        units: o.units?.map(u => ({
+          ...u,
+          billingStatus: newStatus,
+          objects: u.objects.map(ob => ({ ...ob, billingStatus: newStatus })),
+        })),
+        objects: o.objects?.map(obj => ({
+          ...obj,
+          trucks: obj.trucks?.map(t => ({ ...t, billingStatus: newStatus })),
+        })),
+      };
+    }));
+  }, [orders, markLocalUpdate]);
+
   return (
     <OrdersContext.Provider value={{
       orders,
@@ -2069,6 +2132,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       updateUnitBillingStatus,
       updateUnitObjectStatus,
       updateUnitObjectBillingStatus,
+      overrideOrderBillingStatus,
     }}>
       {children}
     </OrdersContext.Provider>
