@@ -157,8 +157,10 @@ export function prepareInvoiceExportData(
     const previouslyBilled = previouslyBilledByOrder[order.id] || [];
     
     // Check if this is a partial invoice
-    const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
-    if (trucksToInvoice.length < allTrucks.length) {
+    const allCount = (order.dataModelVersion === 2 && order.units)
+      ? order.units.length
+      : (order.objects || []).flatMap(obj => obj.trucks || []).length;
+    if (trucksToInvoice.length < allCount) {
       isPartial = true;
     }
     
@@ -184,7 +186,7 @@ export function prepareInvoiceExportData(
       orderTotal,
       previouslyBilledTotal: prevTotal,
       truckIds: trucksToInvoice.map(t => t.id),
-      truckNumbers: trucksToInvoice.map(t => t.truckNumber || t.id.slice(-4)),
+      truckNumbers: trucksToInvoice.map((t, i) => t.truckNumber || `Enhet ${i + 1}`),
     };
   });
 

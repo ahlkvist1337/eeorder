@@ -342,8 +342,11 @@ export function getWorkUnitDisplayName(truckNumber: string | null | undefined, o
   if (truckNumber && truckNumber.trim()) {
     return `#${truckNumber}`;
   }
-  // Fallback: object name + short ID
-  return `${objectName.substring(0, 12)} ${truckId.slice(-4).toUpperCase()}`;
+  // Fallback: object name + "Enhet" if no name
+  if (!objectName || !objectName.trim()) {
+    return 'Enhet';
+  }
+  return objectName.substring(0, 20);
 }
 
 // Calculate object quantities automatically from work cards
