@@ -1,0 +1,1 @@
+ALTER TABLE public.orders ALTER COLUMN data_model_version SET DEFAULT 2;
