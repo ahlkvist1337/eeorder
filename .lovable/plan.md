@@ -2,46 +2,34 @@
 
 ## Problem
 
-The "previously billed" tracking relies entirely on `invoice_export_items` records. For this order, no such records exist (likely billed via admin override or a previous export that didn't save items correctly). So `prevQty = 0`, meaning:
-- "Antal" shows 4 (correct — that's the article row total)
-- "Att fakturera" suggests 2 (correct proportional calc)
-- But the input `max` allows up to 4 instead of capping at 3 (since 1 unit is already billed)
+Orders with billing status "Fakturerad" (billed) should appear under "Orderhistorik" instead of only orders that are both `completed` AND `billed`. The "Fakturerad" option should be removed from the billing filter dropdown on the active orders tab since those orders will no longer appear there.
 
-The system needs a fallback: when `invoice_export_items` has no data, derive previously billed quantity from the count of units with `billingStatus === 'billed'`.
+## Changes
 
-## Fix
+### 1. `src/pages/Index.tsx` — Update archive/active split logic
 
-### `src/components/InvoicingTab.tsx`
+Currently (lines 58-68):
+- Active: orders where NOT (`completed` AND `billed`)
+- Archive: orders where `completed` AND `billed`
 
-**1. Add fallback billed calculation in `getSuggestedQuantity`:**
+Change to:
+- Active: orders where billing status is NOT `billed` (regardless of production status)
+- Archive: orders where billing status IS `billed` OR (`completed` AND `billed`)
 
-When `prevQty` from DB is 0 but there are billed units, compute it from unit ratios:
+More precisely: any order whose computed billing status is `billed` goes to archive.
 
-```typescript
-// Fallback: derive from billed units count
-const billedUnits = allTrucks.filter(t => t.billingStatus === 'billed').length;
-const prevQtyFromUnits = allTrucks.length > 0 
-  ? Math.round((billedUnits / allTrucks.length) * row.quantity) 
-  : 0;
-const effectivePrevQty = Math.max(prevQty, prevQtyFromUnits);
-const remaining = row.quantity - effectivePrevQty;
-```
+### 2. `src/components/OrderFilters.tsx` — Remove "Fakturerad" from billing filter
 
-**2. Fix the `max` attribute on the quantity input** to use the same effective remaining:
+Filter the `billingStatusLabels` entries to exclude `billed`, since those orders are now only in the archive tab. Only show `not_ready` and `ready_for_billing`.
 
-Currently: `max={row.quantity - prevQty}` where prevQty comes only from DB records.
-Fix: compute effective prevQty the same way and use it for max.
+### 3. `src/types/order.ts` — No changes needed
 
-**3. Apply same fallback in `invoiceExport.ts`** `calculateProportionalBilling` so the export also respects billed units.
-
-### `src/lib/invoiceExport.ts`
-
-In the V2 branch, add the same fallback logic: if `prevQty` from DB is 0, derive it from billed unit count.
+The `billingStatusLabels` object stays as-is since it's used elsewhere (e.g., badge display).
 
 | File | Change |
 |------|--------|
-| `InvoicingTab.tsx` | Fallback prevQty from billed units count; fix max on input |
-| `invoiceExport.ts` | Same fallback in V2 proportional branch |
+| `src/pages/Index.tsx` | Archive = billed orders; Active = non-billed |
+| `src/components/OrderFilters.tsx` | Remove "Fakturerad" from billing dropdown |
 
 No database changes needed.
 
