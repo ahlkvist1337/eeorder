@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, ExternalLink, CheckSquare, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -103,6 +103,11 @@ export function InvoicingTab() {
     setBilledLoaded(true);
   }, [invoicableOrders, billedLoaded]);
 
+  // Reset billedLoaded when orders change (new billing records might exist)
+  useEffect(() => {
+    setBilledLoaded(false);
+  }, [orders]);
+
   useMemo(() => {
     if (invoicableOrders.length > 0 && !billedLoaded) {
       loadPreviouslyBilled();
@@ -127,7 +132,7 @@ export function InvoicingTab() {
       if (allTrucks.length === 0) return Math.max(0, remaining);
       const readyCount = readyTrucks.length;
       const totalCount = allTrucks.length;
-      const proportional = (readyCount / totalCount) * row.quantity;
+      const proportional = (readyCount / totalCount) * remaining;
       return Math.max(0, Math.min(Math.round(proportional), remaining));
     }
 
@@ -360,7 +365,10 @@ export function InvoicingTab() {
 
       <InvoiceExportDialog
         open={exportDialogOpen}
-        onOpenChange={setExportDialogOpen}
+        onOpenChange={(open) => {
+          setExportDialogOpen(open);
+          if (!open) setBilledLoaded(false);
+        }}
         orders={selectedOrdersForExport}
         trucksByOrderOverride={trucksByOrderForExport}
         previouslyBilledOverride={previouslyBilledByOrder}
