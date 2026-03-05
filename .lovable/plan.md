@@ -1,64 +1,80 @@
 
 
-## Issues Found
+## Problem Analysis
 
-### 1. Search with `#` doesn't find V2 units
-The search in `OrdersTable` only looks at V1 truck numbers (`order.objects.trucks.truckNumber`). It never searches V2 unit numbers (`order.units.unitNumber`), so searching for `#1` finds nothing in V2 orders.
+### 1. Step status jump-back (root cause found)
 
-**Fix** (`src/components/OrdersTable.tsx`, lines 48-65): Add V2 unit numbers to the search pool:
-```typescript
-// Add V2 unit numbers
-const allUnitNumbers = (order.units || [])
-  .map(u => (u.unitNumber || '').toLowerCase());
+In `updateUnitStepStatus`, there are multiple `setOrders` calls. The first one (line 1716) correctly applies the step status change. But the second one (line 1814) overwrites it because `allObjectsUpdated` (line 1798) is computed from stale `unit.objects` captured at function start (line 1698), which doesn't include the step change. The objects array written to state at line 1824 has the OLD step statuses, reverting the visual update.
+
+```text
+Timeline:
+1. setOrders(step → completed)     ← correct, user sees "Klar"
+2. ... DB writes ...
+3. allObjectsUpdated = unit.objects.map(...)  ← uses STALE unit from line 1698
+4. setOrders(objects: allObjectsUpdated)      ← overwrites step back to old status!
 ```
-Then add `allUnitNumbers.some(un => un.includes(query))` to the `matchesSearch` condition.
 
----
+### 2. Invoice quantity not proportional / previously billed stale
 
-### 2. InvoicingTab not showing "Delvis fakturerbar" order
-**Root cause**: Bug in `updateUnitObjectStatus` (line 2042-2054). When all objects in a unit reach "delivered", lines 1997-2009 correctly set all objects' `billingStatus` to `ready_for_billing` in DB and state. But then lines 2042-2054 recalculate unit billing using the **old** object billing statuses (captured at function start), overwriting the correct `ready_for_billing` with `not_billable`.
+Two sub-issues:
+- **`billedLoaded` never resets**: After an export inserts records into `invoice_export_items`, the `billedLoaded` flag stays `true` so the previously billed data is never re-fetched. On the second billing, `prevQty = 0` and the user can select the full quantity.
+- **Proportional calc uses `row.quantity` instead of `remaining`**: Line 130 calculates `(readyCount / totalCount) * row.quantity` then caps with `remaining`. This is correct for first billing but misleading for subsequent. Should use `remaining` as the base for proportion.
 
-The InvoicingTab checks `u.billingStatus === 'ready_for_billing'` at unit level, so the order never appears.
+## Proposed Changes
 
-**Fix** (`src/contexts/OrdersContext.tsx`, lines 2042-2054): After the "all objects delivered" block (line 1997-2009) sets objects to `ready_for_billing`, also set the unit billing directly and skip the redundant aggregation:
+### File: `src/contexts/OrdersContext.tsx`
+
+**Fix step jump-back** (lines 1797-1802): Include the step status change in `allObjectsUpdated` so it doesn't overwrite the optimistic step update:
 
 ```typescript
-if (updatedObjs.every(ob => finishedObjStatuses.includes(ob.status))) {
-  // All delivered → set all objects AND unit to ready_for_billing
-  for (const ob of updatedObjs) {
-    await supabase.from('unit_objects').update({ billing_status: 'ready_for_billing' }).eq('id', ob.id);
-  }
-  await supabase.from('order_units').update({ billing_status: 'ready_for_billing' }).eq('id', unitId);
-  setOrders(prev => prev.map(o => {
-    if (o.id !== orderId) return o;
-    return {
-      ...o,
-      units: o.units?.map(u => u.id === unitId ? {
-        ...u,
-        billingStatus: 'ready_for_billing' as TruckBillingStatus,
-        objects: u.objects.map(ob => ({ ...ob, billingStatus: 'ready_for_billing' as TruckBillingStatus })),
-      } : u),
+const allObjectsUpdated = unit.objects.map(ob => {
+  // Preserve the step status change from earlier in this function
+  const updatedSteps = ob.steps.map(s => s.id === stepId ? { ...s, status: newStatus } : s);
+  if (ob.id === parentObj.id) {
+    return { 
+      ...ob,
+      steps: updatedSteps,
+      status: targetObjectStatus!,
+      ...(rollingBackBilling ? { billingStatus: 'not_billable' as TruckBillingStatus } : {}),
     };
-  }));
-} else {
-  // Only run billing aggregation when NOT all delivered
-  const billingNewStatus = resetBilling ? 'not_billable' : obj.billingStatus;
-  // ... existing aggregation logic ...
-}
+  }
+  return { ...ob, steps: updatedSteps };
+});
 ```
 
----
+### File: `src/components/InvoicingTab.tsx`
 
-### 3. Step statuses still jumping back (visual bug)
-The history log confirms changes ARE saved to DB. The visual revert is likely caused by the same pattern: multiple sequential `setOrders` calls within the same function, where later calls don't account for changes made by earlier calls (they all reference the stale `unit`/`order` captured at function start). Each `setOrders(prev => ...)` uses functional form correctly, but the **DB write decisions** are based on stale data.
+**Fix 1 -- Reset billedLoaded** when orders change or export dialog closes (so previously billed data is re-fetched):
 
-This is the same class of bug as issue #2. The fix for issue #2 will also address part of this by ensuring the final `setOrders` at the end of `updateUnitObjectStatus` doesn't overwrite earlier optimistic updates.
+```typescript
+// Reset billedLoaded when orders change (new billing records might exist)
+useEffect(() => {
+  setBilledLoaded(false);
+}, [orders]);
+```
 
-### Files changed
-| File | Change |
-|------|--------|
-| `src/components/OrdersTable.tsx` | Add V2 unit numbers to search |
-| `src/contexts/OrdersContext.tsx` | Fix billing aggregation to not overwrite correct state |
+And reset after export dialog closes:
+```typescript
+// In the exportDialogOpen onChange handler, reset billedLoaded
+onOpenChange={(open) => {
+  setExportDialogOpen(open);
+  if (!open) setBilledLoaded(false);
+}}
+```
+
+**Fix 2 -- Proportional calc** (line 130): Use `remaining` instead of `row.quantity` so the proportion is based on what's left to bill:
+
+```typescript
+const proportional = (readyCount / totalCount) * remaining;
+```
+
+This ensures that for a second billing, the quantity is proportional to the remaining unbilled amount.
+
+| File | Change | Bug Fixed |
+|------|--------|-----------|
+| `OrdersContext.tsx` | Include step update in `allObjectsUpdated` | Step status jump-back |
+| `InvoicingTab.tsx` | Reset `billedLoaded` on orders change + dialog close | Stale previously billed data |
+| `InvoicingTab.tsx` | Use `remaining` in V2 proportional calc | Wrong quantity suggestion |
 
 No database changes needed.
 
