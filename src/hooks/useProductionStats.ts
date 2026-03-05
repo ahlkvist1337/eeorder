@@ -19,7 +19,7 @@ interface ProductionStats {
 }
 
 export function useProductionStats(orders: Order[], dateFilter: Date | null = null): ProductionStats {
-  const [trucks, setTrucks] = useState<Array<{ id: string; status: string; object_id: string; truck_number: string | null }>>([]);
+  const [workItems, setWorkItems] = useState<Array<{ id: string; status: string; name: string | null }>>([]);
   const [lifecycleEvents, setLifecycleEvents] = useState<Array<{ 
     truck_id: string; 
     event_type: string; 
@@ -33,12 +33,17 @@ export function useProductionStats(orders: Order[], dateFilter: Date | null = nu
     const fetchData = async () => {
       setIsLoading(true);
       
-      const [trucksResult, eventsResult] = await Promise.all([
+      const [trucksResult, unitObjectsResult, eventsResult] = await Promise.all([
         supabase.from('object_trucks').select('id, status, object_id, truck_number'),
+        supabase.from('unit_objects').select('id, status, unit_id, name'),
         supabase.from('truck_lifecycle_events').select('truck_id, event_type, timestamp, truck_number, order_id'),
       ]);
 
-      if (trucksResult.data) setTrucks(trucksResult.data);
+      const merged = [
+        ...(trucksResult.data || []).map(t => ({ id: t.id, status: t.status, name: t.truck_number })),
+        ...(unitObjectsResult.data || []).map(o => ({ id: o.id, status: o.status, name: o.name })),
+      ];
+      setWorkItems(merged);
       if (eventsResult.data) setLifecycleEvents(eventsResult.data);
       
       setIsLoading(false);
@@ -57,8 +62,8 @@ export function useProductionStats(orders: Order[], dateFilter: Date | null = nu
       : lifecycleEvents;
 
     // Count by status (always current state, not filtered)
-    const inProgress = trucks.filter(t => t.status === 'arrived' || t.status === 'started').length;
-    const waiting = trucks.filter(t => t.status === 'waiting').length;
+    const inProgress = workItems.filter(t => t.status === 'arrived' || t.status === 'started').length;
+    const waiting = workItems.filter(t => t.status === 'waiting').length;
 
     // Completed today (or within period)
     const completedToday = filteredEvents.filter(e => 
@@ -66,9 +71,9 @@ export function useProductionStats(orders: Order[], dateFilter: Date | null = nu
       new Date(e.timestamp) >= todayStart
     ).length;
 
-    // Get active truck IDs
+    // Get active work item IDs
     const activeTruckIds = new Set(
-      trucks
+      workItems
         .filter(t => t.status === 'arrived' || t.status === 'started')
         .map(t => t.id)
     );
@@ -82,10 +87,10 @@ export function useProductionStats(orders: Order[], dateFilter: Date | null = nu
     if (arrivedEventsForActive.length > 0) {
       const oldest = arrivedEventsForActive[0];
       const days = differenceInDays(now, new Date(oldest.timestamp));
-      const truck = trucks.find(t => t.id === oldest.truck_id);
+      const item = workItems.find(t => t.id === oldest.truck_id);
       oldestActiveInfo = {
         days,
-        truckNumber: truck?.truck_number || 'Okänt'
+        truckNumber: item?.name || 'Okänt'
       };
     }
 
@@ -140,7 +145,7 @@ export function useProductionStats(orders: Order[], dateFilter: Date | null = nu
       avgLeadTimeDays,
       isLoading
     };
-  }, [trucks, lifecycleEvents, orders, isLoading, dateFilter]);
+  }, [workItems, lifecycleEvents, orders, isLoading, dateFilter]);
 
   return stats;
 }

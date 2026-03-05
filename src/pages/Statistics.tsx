@@ -74,12 +74,18 @@ export default function Statistics() {
     const activeOrders = filteredOrders.filter(o => activeStatuses.includes(o.productionStatus));
     const completedOrders = filteredOrders.filter(o => o.productionStatus === 'completed');
     const billedOrders = filteredOrders.filter(o => {
+      if (o.dataModelVersion === 2 && o.units) {
+        const allObjects = o.units.flatMap(u => u.objects);
+        return allObjects.length > 0 && allObjects.every(ob => ob.billingStatus === 'billed');
+      }
       const allTrucks = (o.objects || []).flatMap(obj => obj.trucks || []);
       return allTrucks.length > 0 && allTrucks.every(t => t.billingStatus === 'billed');
     });
     const readyForBilling = filteredOrders.filter(o => {
-      const allTrucks = (o.objects || []).flatMap(obj => obj.trucks || []);
-      return allTrucks.some(t => t.billingStatus === 'ready_for_billing');
+      if (o.dataModelVersion === 2 && o.units) {
+        return o.units.flatMap(u => u.objects).some(ob => ob.billingStatus === 'ready_for_billing');
+      }
+      return (o.objects || []).flatMap(obj => obj.trucks || []).some(t => t.billingStatus === 'ready_for_billing');
     });
     const deviationOrders = filteredOrders.filter(o => o.hasDeviation);
 
