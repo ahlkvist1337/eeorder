@@ -1794,12 +1794,20 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           changed_by_name: getInitials(profile?.full_name),
         });
 
-        // Optimistic update for object status + billing
-        const allObjectsUpdated = unit.objects.map(ob => ob.id === parentObj.id ? { 
-          ...ob, 
-          status: targetObjectStatus!,
-          ...(rollingBackBilling ? { billingStatus: 'not_billable' as TruckBillingStatus } : {}),
-        } : ob);
+        // Optimistic update for object status + billing + preserve step changes
+        const allObjectsUpdated = unit.objects.map(ob => {
+          // Preserve the step status change from the optimistic update earlier
+          const preservedSteps = ob.steps.map(s => s.id === stepId ? { ...s, status: newStatus } : s);
+          if (ob.id === parentObj.id) {
+            return { 
+              ...ob, 
+              steps: preservedSteps,
+              status: targetObjectStatus!,
+              ...(rollingBackBilling ? { billingStatus: 'not_billable' as TruckBillingStatus } : {}),
+            };
+          }
+          return { ...ob, steps: preservedSteps };
+        });
         const computedUnitStatus = computeAggregateStatus(allObjectsUpdated.map(ob => ob.status));
         
         // Recompute unit billing: if any object is not_billable, unit is not_billable
