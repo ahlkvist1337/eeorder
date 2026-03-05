@@ -74,16 +74,48 @@ export function calculateProportionalBilling(
   const articleRows = order.articleRows || [];
   const results: InvoiceExportArticleRow[] = [];
 
+  const isV2 = order.dataModelVersion === 2;
+
   for (const row of articleRows) {
-    // Find the object this article row belongs to
+    const prev = previouslyBilled.find(p => p.article_row_id === row.id);
+    const prevQty = prev?.total_billed_quantity || 0;
+    const remainingQty = row.quantity - prevQty;
+    const override = quantityOverrides?.[row.id];
+
+    // V2: proportional by units being invoiced
+    if (isV2) {
+      const totalUnits = (order.units || []).length;
+      const readyCount = trucksToInvoice.length;
+      let qty: number;
+      if (override !== undefined) {
+        qty = Math.min(override, remainingQty);
+      } else if (totalUnits === 0) {
+        qty = remainingQty;
+      } else {
+        qty = Math.round((readyCount / totalUnits) * remainingQty);
+      }
+      qty = Math.max(0, qty);
+      if (qty > 0) {
+        results.push({
+          partNumber: row.partNumber,
+          text: row.text,
+          quantity: qty,
+          totalQuantity: row.quantity,
+          previouslyBilled: prevQty,
+          price: row.price,
+          total: qty * row.price,
+          articleRowId: row.id,
+        });
+      }
+      continue;
+    }
+
+    // V1: Find the object this article row belongs to
     const object = order.objects?.find(o => o.id === row.objectId);
     
     if (!object || !object.trucks || object.trucks.length === 0) {
       // No object linkage - use override or full remaining amount
-      const prev = previouslyBilled.find(p => p.article_row_id === row.id);
-      const prevQty = prev?.total_billed_quantity || 0;
-      const override = quantityOverrides?.[row.id];
-      const qty = override !== undefined ? override : (row.quantity - prevQty);
+      const qty = override !== undefined ? override : remainingQty;
       
       if (qty > 0) {
         results.push({
@@ -107,12 +139,8 @@ export function calculateProportionalBilling(
     if (trucksBeingInvoiced.length === 0) continue;
 
     const totalTrucks = object.trucks.length;
-    const prev = previouslyBilled.find(p => p.article_row_id === row.id);
-    const prevQty = prev?.total_billed_quantity || 0;
-    const remainingQty = row.quantity - prevQty;
 
     // Use override if provided, otherwise calculate proportionally
-    const override = quantityOverrides?.[row.id];
     let finalQty: number;
     if (override !== undefined) {
       finalQty = Math.min(override, remainingQty);
