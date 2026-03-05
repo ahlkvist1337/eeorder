@@ -105,9 +105,11 @@ export function OrderFilters({ filters, onFiltersChange, searchQuery, onSearchCh
             </SelectTrigger>
             <SelectContent className="bg-popover">
               <SelectItem value="all">All fakturering</SelectItem>
-              {Object.entries(billingStatusLabels).map(([value, label]) => (
-                <SelectItem key={value} value={value}>{label}</SelectItem>
-              ))}
+              {Object.entries(billingStatusLabels)
+                .filter(([value]) => value !== 'billed')
+                .map(([value, label]) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
             </SelectContent>
           </Select>
         </div>
