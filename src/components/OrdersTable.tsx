@@ -140,7 +140,27 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
   };
 
   const getNextStep = (order: Order): string => {
-    // Collect all step statuses from all work cards (trucks) that are arrived or started
+    // V2: use unit objects and their steps
+    if (order.dataModelVersion === 2 && order.units) {
+      const activeObjects = order.units
+        .flatMap(u => u.objects)
+        .filter(ob => ob.status === 'arrived' || ob.status === 'started');
+      
+      for (const ob of activeObjects) {
+        const inProgress = ob.steps.find(s => s.status === 'in_progress');
+        if (inProgress) return `Pågår: ${inProgress.name}`;
+        const pending = ob.steps.find(s => s.status === 'pending');
+        if (pending) return `Nästa: ${pending.name}`;
+      }
+      
+      const allObjects = order.units.flatMap(u => u.objects);
+      if (allObjects.length > 0 && allObjects.every(ob => ob.status === 'completed')) {
+        return 'Alla klara';
+      }
+      return activeObjects.length > 0 ? 'Pågår' : '-';
+    }
+
+    // V1: Collect all step statuses from all work cards (trucks) that are arrived or started
     const allStepStatuses = (order.objects || [])
       .flatMap(obj => (obj.trucks || [])
         .filter(t => t.status === 'arrived' || t.status === 'started')
@@ -150,21 +170,17 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
         })))
       );
     
-    // Find in-progress step
     const inProgress = allStepStatuses.find(ss => ss.status === 'in_progress');
     if (inProgress) return `Pågår: ${inProgress.stepName}`;
     
-    // Find next pending step
     const pending = allStepStatuses.find(ss => ss.status === 'pending');
     if (pending) return `Nästa: ${pending.stepName}`;
     
-    // Check if all work cards are completed
     const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
     if (allTrucks.length > 0 && allTrucks.every(t => t.status === 'completed')) {
       return 'Alla klara';
     }
     
-    // Fallback: If active work cards exist but no stepStatuses, show object's first step
     const activeTrucks = (order.objects || [])
       .flatMap(obj => (obj.trucks || [])
         .filter(t => t.status === 'arrived' || t.status === 'started')
@@ -182,16 +198,27 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
     return '-';
   };
 
-  // Get truck summary for an order (counts by status)
+  // Get truck/object summary for an order (counts by status)
   const getTruckSummary = (order: Order): { total: number; active: number; completed: number } => {
+    if (order.dataModelVersion === 2 && order.units) {
+      const allObjects = order.units.flatMap(u => u.objects);
+      return {
+        total: allObjects.length,
+        active: allObjects.filter(o => o.status === 'arrived' || o.status === 'started').length,
+        completed: allObjects.filter(o => o.status === 'completed').length,
+      };
+    }
     const allTrucks = (order.objects || []).flatMap(obj => obj.trucks || []);
     const active = allTrucks.filter(t => t.status === 'arrived' || t.status === 'started').length;
     const completed = allTrucks.filter(t => t.status === 'completed').length;
     return { total: allTrucks.length, active, completed };
   };
 
-  // Get all truck numbers for an order
+  // Get all truck/unit numbers for an order
   const getTruckNumbers = (order: Order): string[] => {
+    if (order.dataModelVersion === 2 && order.units) {
+      return order.units.map(u => u.unitNumber ? `#${u.unitNumber}` : 'Enhet');
+    }
     return (order.objects || [])
       .flatMap(obj => (obj.trucks || []).map(t => `#${t.truckNumber}`));
   };
