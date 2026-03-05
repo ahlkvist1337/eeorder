@@ -86,13 +86,25 @@ export function calculateProportionalBilling(
     if (isV2) {
       const totalUnits = (order.units || []).length;
       const readyCount = trucksToInvoice.length;
+
+      // Fallback: derive previously billed from billed unit count
+      let effectiveRemainingQty = remainingQty;
+      if (prevQty === 0 && totalUnits > 0) {
+        const allUnits = order.units || [];
+        const billedUnits = allUnits.filter(u => u.billingStatus === 'billed').length;
+        const prevQtyFromUnits = Math.round((billedUnits / totalUnits) * row.quantity);
+        if (prevQtyFromUnits > 0) {
+          effectiveRemainingQty = Math.max(0, row.quantity - prevQtyFromUnits);
+        }
+      }
+
       let qty: number;
       if (override !== undefined) {
-        qty = Math.min(override, remainingQty);
+        qty = Math.min(override, effectiveRemainingQty);
       } else if (totalUnits === 0) {
-        qty = remainingQty;
+        qty = effectiveRemainingQty;
       } else {
-        qty = Math.round((readyCount / totalUnits) * remainingQty);
+        qty = Math.round((readyCount / totalUnits) * effectiveRemainingQty);
       }
       qty = Math.max(0, qty);
       if (qty > 0) {

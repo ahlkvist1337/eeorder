@@ -115,6 +115,29 @@ export function InvoicingTab() {
   }, [invoicableOrders.length, billedLoaded, loadPreviouslyBilled]);
 
   // Calculate suggested quantity for an article row
+  const getEffectiveRemaining = useCallback((
+    row: ArticleRow,
+    order: Order,
+    allTrucks: ObjectTruck[],
+    isV2?: boolean
+  ): { effectivePrevQty: number; remaining: number } => {
+    const prev = (previouslyBilledByOrder[order.id] || [])
+      .find(p => p.article_row_id === row.id);
+    const prevQty = prev?.total_billed_quantity || 0;
+
+    // Fallback: derive from billed units count for V2
+    let effectivePrevQty = prevQty;
+    if (isV2 && prevQty === 0) {
+      const billedUnits = allTrucks.filter(t => t.billingStatus === 'billed').length;
+      const prevQtyFromUnits = allTrucks.length > 0
+        ? Math.round((billedUnits / allTrucks.length) * row.quantity)
+        : 0;
+      effectivePrevQty = Math.max(prevQty, prevQtyFromUnits);
+    }
+
+    return { effectivePrevQty, remaining: Math.max(0, row.quantity - effectivePrevQty) };
+  }, [previouslyBilledByOrder]);
+
   const getSuggestedQuantity = useCallback((
     row: ArticleRow,
     order: Order,
@@ -122,14 +145,11 @@ export function InvoicingTab() {
     allTrucks: ObjectTruck[],
     isV2?: boolean
   ): number => {
-    const prev = (previouslyBilledByOrder[order.id] || [])
-      .find(p => p.article_row_id === row.id);
-    const prevQty = prev?.total_billed_quantity || 0;
-    const remaining = row.quantity - prevQty;
+    const { remaining } = getEffectiveRemaining(row, order, allTrucks, isV2);
 
     // V2: proportional by units (no object linkage needed)
     if (isV2) {
-      if (allTrucks.length === 0) return Math.max(0, remaining);
+      if (allTrucks.length === 0) return remaining;
       const readyCount = readyTrucks.length;
       const totalCount = allTrucks.length;
       const proportional = (readyCount / totalCount) * remaining;
@@ -315,9 +335,8 @@ export function InvoicingTab() {
                 <TableBody>
                   {articleRows.map(row => {
                     const qty = getQuantityToInvoice(order.id, row, order, readyTrucks, allTrucks, isV2);
-                    const prev = (previouslyBilledByOrder[order.id] || [])
-                      .find(p => p.article_row_id === row.id);
-                    const prevQty = prev?.total_billed_quantity || 0;
+
+                    const { effectivePrevQty, remaining: maxQty } = getEffectiveRemaining(row, order, allTrucks, isV2);
 
                     return (
                       <TableRow key={row.id}>
@@ -325,9 +344,9 @@ export function InvoicingTab() {
                         <TableCell className="text-sm">{row.text}</TableCell>
                         <TableCell className="text-right text-sm">
                           {row.quantity}
-                          {prevQty > 0 && (
+                          {effectivePrevQty > 0 && (
                             <span className="text-xs text-muted-foreground block">
-                              ({prevQty} fakturerat)
+                              ({effectivePrevQty} fakturerat)
                             </span>
                           )}
                         </TableCell>
@@ -336,7 +355,7 @@ export function InvoicingTab() {
                           <Input
                             type="number"
                             min={0}
-                            max={row.quantity - prevQty}
+                            max={maxQty}
                             step="1"
                             value={quantityOverrides[getOverrideKey(order.id, row.id)] ?? qty}
                             onChange={e => handleQuantityChange(order.id, row.id, e.target.value)}
