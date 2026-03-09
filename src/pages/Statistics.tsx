@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useOrders } from '@/hooks/useOrders';
 import { useProductionStats } from '@/hooks/useProductionStats';
+import { calculateOrderBillingStatus } from '@/types/order';
 
 const StatCard = ({ 
   title, 
