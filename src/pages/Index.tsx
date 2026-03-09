@@ -16,7 +16,7 @@ import { useOrders } from '@/contexts/OrdersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { ProductionStatus, BillingStatus, OrderAdminStatus } from '@/types/order';
-import { toAdminStatus } from '@/types/order';
+import { toAdminStatus, calculateOrderBillingStatus } from '@/types/order';
 import { getReadyTrucks } from '@/lib/invoiceExport';
 
 const Index = () => {
