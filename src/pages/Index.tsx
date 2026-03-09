@@ -56,11 +56,11 @@ const Index = () => {
 
   // Separate orders into active and archived
   const activeOrders = useMemo(() => 
-    orders.filter(o => o.billingStatus !== 'billed'), [orders]
+    orders.filter(o => calculateOrderBillingStatus(o) !== 'billed'), [orders]
   );
 
   const archivedOrders = useMemo(() => 
-    orders.filter(o => o.billingStatus === 'billed'), [orders]
+    orders.filter(o => calculateOrderBillingStatus(o) === 'billed'), [orders]
   );
 
   // Bulk edit state
