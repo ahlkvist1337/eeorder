@@ -74,8 +74,9 @@ export default function Statistics() {
     const activeStatuses = ['created', 'started', 'paused', 'arrived'];
     const activeOrders = filteredOrders.filter(o => activeStatuses.includes(o.productionStatus));
     const completedOrders = filteredOrders.filter(o => o.productionStatus === 'completed');
-    const billedOrders = filteredOrders.filter(o => calculateOrderBillingStatus(o) === 'billed');
-    const readyForBilling = filteredOrders.filter(o => calculateOrderBillingStatus(o) === 'ready_for_billing');
+    // Billing stats always use ALL orders (not time-filtered) to match archive count
+    const billedOrders = orders.filter(o => calculateOrderBillingStatus(o) === 'billed');
+    const readyForBilling = orders.filter(o => calculateOrderBillingStatus(o) === 'ready_for_billing');
     const deviationOrders = filteredOrders.filter(o => o.hasDeviation);
 
     const billedValue = billedOrders.reduce((sum, o) => sum + o.totalPrice, 0);
