@@ -380,6 +380,9 @@ export function calculateObjectQuantities(trucks: ObjectTruck[] | undefined): {
 
 // Calculate computed billing status for an order based on its trucks
 export function calculateOrderBillingStatus(order: Order): BillingStatus {
+  // Admin override: if order-level status is billed, respect it
+  if (order.billingStatus === 'billed') return 'billed';
+
   // V2: aggregate from unit objects, not unit level
   if (order.dataModelVersion === 2 && order.units) {
     const allObjects = order.units.flatMap(u => u.objects);

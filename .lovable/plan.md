@@ -2,55 +2,34 @@
 
 ## Problem
 
-There are two different billing status checks that are out of sync:
+Orders with billing status "Fakturerad" (billed) should appear under "Orderhistorik" instead of only orders that are both `completed` AND `billed`. The "Fakturerad" option should be removed from the billing filter dropdown on the active orders tab since those orders will no longer appear there.
 
-1. **Index.tsx** (archive split) uses `o.billingStatus` — the raw database field on the order record
-2. **Statistics.tsx** checks individual unit objects/trucks directly (lines 76-83), ignoring the order-level field
+## Changes
 
-When orders are billed via admin override (which sets the order-level `billingStatus` to `'billed'`), they appear in the archive (26 orders) but Statistics doesn't count them (shows only 7) because it only looks at individual truck/object statuses.
+### 1. `src/pages/Index.tsx` — Update archive/active split logic
 
-The existing `calculateOrderBillingStatus()` function in `src/types/order.ts` also doesn't account for admin overrides — it only aggregates from child items.
+Currently (lines 58-68):
+- Active: orders where NOT (`completed` AND `billed`)
+- Archive: orders where `completed` AND `billed`
 
-## Fix
+Change to:
+- Active: orders where billing status is NOT `billed` (regardless of production status)
+- Archive: orders where billing status IS `billed` OR (`completed` AND `billed`)
 
-### 1. `src/types/order.ts` — Respect admin override in `calculateOrderBillingStatus`
+More precisely: any order whose computed billing status is `billed` goes to archive.
 
-If the order-level `billingStatus` is `'billed'` (set by admin override), return `'billed'` immediately before checking child items:
+### 2. `src/components/OrderFilters.tsx` — Remove "Fakturerad" from billing filter
 
-```typescript
-export function calculateOrderBillingStatus(order: Order): BillingStatus {
-  // Admin override: if order-level status is billed, respect it
-  if (order.billingStatus === 'billed') return 'billed';
-  
-  // ... existing V2/V1 logic unchanged ...
-}
-```
+Filter the `billingStatusLabels` entries to exclude `billed`, since those orders are now only in the archive tab. Only show `not_ready` and `ready_for_billing`.
 
-### 2. `src/pages/Statistics.tsx` — Use `calculateOrderBillingStatus` instead of inline checks
+### 3. `src/types/order.ts` — No changes needed
 
-Replace the inline billed/ready checks (lines 76-89) with the shared function:
-
-```typescript
-import { calculateOrderBillingStatus } from '@/types/order';
-
-const billedOrders = filteredOrders.filter(o => calculateOrderBillingStatus(o) === 'billed');
-const readyForBilling = filteredOrders.filter(o => calculateOrderBillingStatus(o) === 'ready_for_billing');
-```
-
-### 3. `src/pages/Index.tsx` — Use `calculateOrderBillingStatus` for archive split
-
-Replace `o.billingStatus` with `calculateOrderBillingStatus(o)` for consistency:
-
-```typescript
-const activeOrders = orders.filter(o => calculateOrderBillingStatus(o) !== 'billed');
-const archivedOrders = orders.filter(o => calculateOrderBillingStatus(o) === 'billed');
-```
+The `billingStatusLabels` object stays as-is since it's used elsewhere (e.g., badge display).
 
 | File | Change |
 |------|--------|
-| `src/types/order.ts` | Respect order-level `billed` override in `calculateOrderBillingStatus` |
-| `src/pages/Statistics.tsx` | Use shared function instead of inline truck/object checks |
-| `src/pages/Index.tsx` | Use shared function for archive/active split |
+| `src/pages/Index.tsx` | Archive = billed orders; Active = non-billed |
+| `src/components/OrderFilters.tsx` | Remove "Fakturerad" from billing dropdown |
 
 No database changes needed.
 

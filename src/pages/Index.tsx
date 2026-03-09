@@ -16,7 +16,7 @@ import { useOrders } from '@/contexts/OrdersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { ProductionStatus, BillingStatus, OrderAdminStatus } from '@/types/order';
-import { toAdminStatus } from '@/types/order';
+import { toAdminStatus, calculateOrderBillingStatus } from '@/types/order';
 import { getReadyTrucks } from '@/lib/invoiceExport';
 
 const Index = () => {
@@ -56,11 +56,11 @@ const Index = () => {
 
   // Separate orders into active and archived
   const activeOrders = useMemo(() => 
-    orders.filter(o => o.billingStatus !== 'billed'), [orders]
+    orders.filter(o => calculateOrderBillingStatus(o) !== 'billed'), [orders]
   );
 
   const archivedOrders = useMemo(() => 
-    orders.filter(o => o.billingStatus === 'billed'), [orders]
+    orders.filter(o => calculateOrderBillingStatus(o) === 'billed'), [orders]
   );
 
   // Bulk edit state
