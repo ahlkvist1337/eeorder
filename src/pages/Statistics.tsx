@@ -105,7 +105,7 @@ export default function Statistics() {
       readyValue,
       avgPlannedLeadTimeDays,
     };
-  }, [filteredOrders]);
+  }, [filteredOrders, orders]);
 
   const zeroPriceOrders = useMemo(() => {
     return filteredOrders
