@@ -29,7 +29,7 @@ export function exportInvoiceToExcel(data: InvoiceExportData): void {
       rows.push([
         data.exportId,
         data.exportDate,
-        data.isPartial ? 'DELFAKTURA' : 'SLUTFAKTURA',
+        data.isLastPartial ? 'SLUTFAKTURA' : data.isPartial ? 'DELFAKTURA' : 'SLUTFAKTURA',
         order.orderNumber,
         order.customer,
         order.customerReference || '',
