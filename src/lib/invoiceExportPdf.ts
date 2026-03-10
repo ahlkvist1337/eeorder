@@ -185,6 +185,6 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
     doc.text(`Sida ${i} av ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
   }
   
-  const prefix = data.isPartial ? 'delfaktura' : (data.orderCount > 1 ? 'samlat-fakturaunderlag' : 'fakturaunderlag');
+  const prefix = data.isLastPartial ? 'slutfaktura' : data.isPartial ? 'delfaktura' : (data.orderCount > 1 ? 'samlat-fakturaunderlag' : 'fakturaunderlag');
   doc.save(`${prefix}-${data.exportId}.pdf`);
 }
