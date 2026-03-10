@@ -107,7 +107,7 @@ export default function Statistics() {
   }, [filteredOrders]);
 
   const zeroPriceOrders = useMemo(() => {
-    return filteredOrders
+    return orders
       .map(o => ({
         ...o,
         zeroPriceCount: (o.articleRows || []).filter(r => r.price === 0).length,
