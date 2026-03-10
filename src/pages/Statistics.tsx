@@ -312,7 +312,7 @@ export default function Statistics() {
           <StatCard
             title="Ordrar med 0-pris artiklar"
             value={zeroPriceOrders.length}
-            subtitle={`Av ${stats.total} ordrar i vald period`}
+            subtitle={`Av totalt ${orders.length} ordrar`}
             icon={AlertTriangle}
             className={zeroPriceOrders.length > 0 ? 'border-destructive/50' : ''}
           />
