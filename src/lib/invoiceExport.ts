@@ -197,6 +197,7 @@ export function prepareInvoiceExportData(
   const now = new Date();
   
   let isPartial = false;
+  let isLastPartial = false;
 
   const exportOrders: InvoiceExportOrder[] = orders.map(order => {
     const trucksToInvoice = trucksByOrder[order.id] || [];
@@ -206,6 +207,12 @@ export function prepareInvoiceExportData(
     const allCount = (order.dataModelVersion === 2 && order.units)
       ? order.units.length
       : (order.objects || []).flatMap(obj => obj.trucks || []).length;
+    
+    // Count already billed units
+    const billedCount = (order.dataModelVersion === 2 && order.units)
+      ? order.units.filter(u => u.billingStatus === 'billed').length
+      : (order.objects || []).flatMap(obj => (obj.trucks || []).filter(t => t.billingStatus === 'billed')).length;
+    
     if (trucksToInvoice.length < allCount) {
       isPartial = true;
     }
