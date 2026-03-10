@@ -113,7 +113,7 @@ export default function Statistics() {
         zeroPriceCount: (o.articleRows || []).filter(r => r.price === 0).length,
       }))
       .filter(o => o.zeroPriceCount > 0);
-  }, [filteredOrders]);
+  }, [orders]);
 
   return (
     <Layout>
