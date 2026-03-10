@@ -217,10 +217,18 @@ export function prepareInvoiceExportData(
       isPartial = true;
     }
     
+    // Detect if this invoice completes all remaining (non-billed) units
+    if (billedCount > 0 && trucksToInvoice.length + billedCount >= allCount) {
+      isLastPartial = true;
+    }
+    
     // Check if there's previously billed items
     const prevTotal = previouslyBilled.reduce((sum, p) => sum + (p.total_billed_amount || 0), 0);
     if (prevTotal > 0) {
       isPartial = true;
+      if (trucksToInvoice.length + billedCount >= allCount) {
+        isLastPartial = true;
+      }
     }
 
     const articleRows = calculateProportionalBilling(order, trucksToInvoice, previouslyBilled, quantityOverrides);
