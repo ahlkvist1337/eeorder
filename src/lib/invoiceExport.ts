@@ -262,6 +262,7 @@ export function prepareInvoiceExportData(
     grandTotal,
     previouslyBilledGrandTotal,
     isPartial,
+    isLastPartial: isPartial && isLastPartial,
     orderCount: exportOrders.length,
   };
 }
