@@ -151,8 +151,11 @@ export function InvoicingTab() {
     if (isV2) {
       if (allTrucks.length === 0) return remaining;
       const readyCount = readyTrucks.length;
-      const totalCount = allTrucks.length;
-      const proportional = (readyCount / totalCount) * remaining;
+      // Use non-billed units as denominator so remaining ready units get full remaining qty
+      const billedCount = allTrucks.filter(t => t.billingStatus === 'billed').length;
+      const nonBilledCount = allTrucks.length - billedCount;
+      if (nonBilledCount === 0) return 0;
+      const proportional = (readyCount / nonBilledCount) * remaining;
       return Math.max(0, Math.min(Math.round(proportional), remaining));
     }
 
@@ -164,9 +167,11 @@ export function InvoicingTab() {
 
     const objectTruckIds = new Set(object.trucks.map(t => t.id));
     const readyCount = readyTrucks.filter(t => objectTruckIds.has(t.id)).length;
-    const totalCount = object.trucks.length;
+    const billedCount = object.trucks.filter(t => t.billingStatus === 'billed').length;
+    const nonBilledCount = object.trucks.length - billedCount;
+    if (nonBilledCount === 0) return 0;
 
-    const proportional = (readyCount / totalCount) * row.quantity;
+    const proportional = (readyCount / nonBilledCount) * remaining;
     return Math.max(0, Math.min(Math.round(proportional * 100) / 100, remaining));
   }, [previouslyBilledByOrder]);
 

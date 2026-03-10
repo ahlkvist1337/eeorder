@@ -98,13 +98,17 @@ export function calculateProportionalBilling(
         }
       }
 
+      // Use non-billed units as denominator so remaining ready units get full remaining qty
+      const billedUnits = (order.units || []).filter(u => u.billingStatus === 'billed').length;
+      const nonBilledCount = totalUnits - billedUnits;
+
       let qty: number;
       if (override !== undefined) {
         qty = Math.min(override, effectiveRemainingQty);
-      } else if (totalUnits === 0) {
+      } else if (nonBilledCount === 0) {
         qty = effectiveRemainingQty;
       } else {
-        qty = Math.round((readyCount / totalUnits) * effectiveRemainingQty);
+        qty = Math.round((readyCount / nonBilledCount) * effectiveRemainingQty);
       }
       qty = Math.max(0, qty);
       if (qty > 0) {
