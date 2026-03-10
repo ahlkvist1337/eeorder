@@ -35,6 +35,7 @@ export interface InvoiceExportData {
   grandTotal: number;
   previouslyBilledGrandTotal: number;
   isPartial: boolean; // DELFAKTURA or SLUTFAKTURA
+  isLastPartial: boolean; // True when this completes all remaining units
   orderCount: number; // antal ordrar i exporten
 }
 
