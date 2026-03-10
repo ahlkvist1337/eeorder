@@ -81,7 +81,7 @@ export function exportInvoiceToExcel(data: InvoiceExportData): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  const prefix = data.isPartial ? 'delfaktura' : 'fakturaunderlag';
+  const prefix = data.isLastPartial ? 'slutfaktura' : data.isPartial ? 'delfaktura' : 'fakturaunderlag';
   link.download = `${prefix}-${data.exportId}.csv`;
   document.body.appendChild(link);
   link.click();
