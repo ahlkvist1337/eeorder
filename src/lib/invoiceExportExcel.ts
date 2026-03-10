@@ -29,7 +29,7 @@ export function exportInvoiceToExcel(data: InvoiceExportData): void {
       rows.push([
         data.exportId,
         data.exportDate,
-        data.isPartial ? 'DELFAKTURA' : 'SLUTFAKTURA',
+        data.isLastPartial ? 'SLUTFAKTURA' : data.isPartial ? 'DELFAKTURA' : 'SLUTFAKTURA',
         order.orderNumber,
         order.customer,
         order.customerReference || '',
@@ -49,7 +49,7 @@ export function exportInvoiceToExcel(data: InvoiceExportData): void {
       rows.push([
         data.exportId,
         data.exportDate,
-        data.isPartial ? 'DELFAKTURA' : 'SLUTFAKTURA',
+        data.isLastPartial ? 'SLUTFAKTURA' : data.isPartial ? 'DELFAKTURA' : 'SLUTFAKTURA',
         order.orderNumber,
         order.customer,
         order.customerReference || '',
@@ -81,7 +81,7 @@ export function exportInvoiceToExcel(data: InvoiceExportData): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  const prefix = data.isPartial ? 'delfaktura' : 'fakturaunderlag';
+  const prefix = data.isLastPartial ? 'slutfaktura' : data.isPartial ? 'delfaktura' : 'fakturaunderlag';
   link.download = `${prefix}-${data.exportId}.csv`;
   document.body.appendChild(link);
   link.click();

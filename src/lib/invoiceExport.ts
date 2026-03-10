@@ -35,6 +35,7 @@ export interface InvoiceExportData {
   grandTotal: number;
   previouslyBilledGrandTotal: number;
   isPartial: boolean; // DELFAKTURA or SLUTFAKTURA
+  isLastPartial: boolean; // True when this completes all remaining units
   orderCount: number; // antal ordrar i exporten
 }
 
@@ -98,13 +99,17 @@ export function calculateProportionalBilling(
         }
       }
 
+      // Use non-billed units as denominator so remaining ready units get full remaining qty
+      const billedUnits = (order.units || []).filter(u => u.billingStatus === 'billed').length;
+      const nonBilledCount = totalUnits - billedUnits;
+
       let qty: number;
       if (override !== undefined) {
         qty = Math.min(override, effectiveRemainingQty);
-      } else if (totalUnits === 0) {
+      } else if (nonBilledCount === 0) {
         qty = effectiveRemainingQty;
       } else {
-        qty = Math.round((readyCount / totalUnits) * effectiveRemainingQty);
+        qty = Math.round((readyCount / nonBilledCount) * effectiveRemainingQty);
       }
       qty = Math.max(0, qty);
       if (qty > 0) {
@@ -192,6 +197,7 @@ export function prepareInvoiceExportData(
   const now = new Date();
   
   let isPartial = false;
+  let isLastPartial = false;
 
   const exportOrders: InvoiceExportOrder[] = orders.map(order => {
     const trucksToInvoice = trucksByOrder[order.id] || [];
@@ -201,14 +207,28 @@ export function prepareInvoiceExportData(
     const allCount = (order.dataModelVersion === 2 && order.units)
       ? order.units.length
       : (order.objects || []).flatMap(obj => obj.trucks || []).length;
+    
+    // Count already billed units
+    const billedCount = (order.dataModelVersion === 2 && order.units)
+      ? order.units.filter(u => u.billingStatus === 'billed').length
+      : (order.objects || []).flatMap(obj => (obj.trucks || []).filter(t => t.billingStatus === 'billed')).length;
+    
     if (trucksToInvoice.length < allCount) {
       isPartial = true;
+    }
+    
+    // Detect if this invoice completes all remaining (non-billed) units
+    if (billedCount > 0 && trucksToInvoice.length + billedCount >= allCount) {
+      isLastPartial = true;
     }
     
     // Check if there's previously billed items
     const prevTotal = previouslyBilled.reduce((sum, p) => sum + (p.total_billed_amount || 0), 0);
     if (prevTotal > 0) {
       isPartial = true;
+      if (trucksToInvoice.length + billedCount >= allCount) {
+        isLastPartial = true;
+      }
     }
 
     const articleRows = calculateProportionalBilling(order, trucksToInvoice, previouslyBilled, quantityOverrides);
@@ -242,6 +262,7 @@ export function prepareInvoiceExportData(
     grandTotal,
     previouslyBilledGrandTotal,
     isPartial,
+    isLastPartial: isPartial && isLastPartial,
     orderCount: exportOrders.length,
   };
 }

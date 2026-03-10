@@ -7,11 +7,13 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   
-  // Title - DELFAKTURA, FAKTURAUNDERLAG, or multi-order
+  // Title - DELFAKTURA, SLUTFAKTURA, FAKTURAUNDERLAG, or multi-order
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
   let title: string;
-  if (data.isPartial) {
+  if (data.isLastPartial) {
+    title = 'SLUTFAKTURAUNDERLAG';
+  } else if (data.isPartial) {
     title = 'DELFAKTURAUNDERLAG';
   } else if (data.orderCount > 1) {
     title = `FAKTURAUNDERLAG – ${data.orderCount} ORDRAR`;
@@ -183,6 +185,6 @@ export function exportInvoiceToPdf(data: InvoiceExportData): void {
     doc.text(`Sida ${i} av ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
   }
   
-  const prefix = data.isPartial ? 'delfaktura' : (data.orderCount > 1 ? 'samlat-fakturaunderlag' : 'fakturaunderlag');
+  const prefix = data.isLastPartial ? 'slutfaktura' : data.isPartial ? 'delfaktura' : (data.orderCount > 1 ? 'samlat-fakturaunderlag' : 'fakturaunderlag');
   doc.save(`${prefix}-${data.exportId}.pdf`);
 }
