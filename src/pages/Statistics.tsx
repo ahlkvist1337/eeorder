@@ -74,9 +74,8 @@ export default function Statistics() {
     const activeStatuses = ['created', 'started', 'paused', 'arrived'];
     const activeOrders = filteredOrders.filter(o => activeStatuses.includes(o.productionStatus));
     const completedOrders = filteredOrders.filter(o => o.productionStatus === 'completed');
-    // Billing stats always use ALL orders (not time-filtered) to match archive count
-    const billedOrders = orders.filter(o => calculateOrderBillingStatus(o) === 'billed');
-    const readyForBilling = orders.filter(o => calculateOrderBillingStatus(o) === 'ready_for_billing');
+    const billedOrders = filteredOrders.filter(o => calculateOrderBillingStatus(o) === 'billed');
+    const readyForBilling = filteredOrders.filter(o => calculateOrderBillingStatus(o) === 'ready_for_billing');
     const deviationOrders = filteredOrders.filter(o => o.hasDeviation);
 
     const billedValue = billedOrders.reduce((sum, o) => sum + o.totalPrice, 0);
@@ -105,16 +104,16 @@ export default function Statistics() {
       readyValue,
       avgPlannedLeadTimeDays,
     };
-  }, [filteredOrders, orders]);
+  }, [filteredOrders]);
 
   const zeroPriceOrders = useMemo(() => {
-    return filteredOrders
+    return orders
       .map(o => ({
         ...o,
         zeroPriceCount: (o.articleRows || []).filter(r => r.price === 0).length,
       }))
       .filter(o => o.zeroPriceCount > 0);
-  }, [filteredOrders]);
+  }, [orders]);
 
   return (
     <Layout>
@@ -313,7 +312,7 @@ export default function Statistics() {
           <StatCard
             title="Ordrar med 0-pris artiklar"
             value={zeroPriceOrders.length}
-            subtitle={`Av ${stats.total} ordrar i vald period`}
+            subtitle={`Av totalt ${orders.length} ordrar`}
             icon={AlertTriangle}
             className={zeroPriceOrders.length > 0 ? 'border-destructive/50' : ''}
           />

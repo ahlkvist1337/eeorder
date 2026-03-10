@@ -1,23 +1,35 @@
 
 
-## Plan
+## Problem
 
-### Problem
-1. **Billing stats use unfiltered `orders`** — the last change made billing stats ignore the time filter. User wants this reverted so billing stats follow the time filter like everything else.
-2. **Zero-price orders follow time filter** — should always show ALL orders with 0-price articles regardless of selected period.
-3. **Billed orders show in "Aktuella ordrar"** — Index.tsx already uses `calculateOrderBillingStatus` which checks admin override first (line 59). Need to verify this is working; if not, the issue is likely that the order-level `billingStatus` field isn't set to `'billed'` for all overridden orders, or the function has a bug.
+Orders with billing status "Fakturerad" (billed) should appear under "Orderhistorik" instead of only orders that are both `completed` AND `billed`. The "Fakturerad" option should be removed from the billing filter dropdown on the active orders tab since those orders will no longer appear there.
 
-### Changes
+## Changes
 
-#### 1. `src/pages/Statistics.tsx` — Revert billing stats to use `filteredOrders`
+### 1. `src/pages/Index.tsx` — Update archive/active split logic
 
-Lines 77-79: Change `orders.filter(...)` back to `filteredOrders.filter(...)` for both `billedOrders` and `readyForBilling`. Remove `orders` from the `useMemo` dependency on line 108.
+Currently (lines 58-68):
+- Active: orders where NOT (`completed` AND `billed`)
+- Archive: orders where `completed` AND `billed`
 
-#### 2. `src/pages/Statistics.tsx` — Zero-price uses all orders
+Change to:
+- Active: orders where billing status is NOT `billed` (regardless of production status)
+- Archive: orders where billing status IS `billed` OR (`completed` AND `billed`)
 
-Lines 110-117: Change `zeroPriceOrders` to use `orders` instead of `filteredOrders`. Update subtitle on line 316 to clarify it shows all orders.
+More precisely: any order whose computed billing status is `billed` goes to archive.
 
-#### 3. `src/pages/Index.tsx` — Verify archive split
+### 2. `src/components/OrderFilters.tsx` — Remove "Fakturerad" from billing filter
 
-Lines 58-64 already use `calculateOrderBillingStatus(o)` which respects admin override (`order.billingStatus === 'billed'`). This should work correctly. If orders still appear in "Aktuella" with status "Fakturerad", I'll check how `calculateOrderBillingStatus` handles the case and ensure the function in `src/types/order.ts` is correct (the admin override on line ~233 was added in a previous edit).
+Filter the `billingStatusLabels` entries to exclude `billed`, since those orders are now only in the archive tab. Only show `not_ready` and `ready_for_billing`.
+
+### 3. `src/types/order.ts` — No changes needed
+
+The `billingStatusLabels` object stays as-is since it's used elsewhere (e.g., badge display).
+
+| File | Change |
+|------|--------|
+| `src/pages/Index.tsx` | Archive = billed orders; Active = non-billed |
+| `src/components/OrderFilters.tsx` | Remove "Fakturerad" from billing dropdown |
+
+No database changes needed.
 
