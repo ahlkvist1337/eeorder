@@ -26,6 +26,7 @@ export function ArticleRowsEditor({
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<ArticleRow>>({});
   const [isAdding, setIsAdding] = useState(false);
+  const [showTextError, setShowTextError] = useState(false);
   const [newRow, setNewRow] = useState<Partial<ArticleRow>>({
     rowNumber: '',
     partNumber: '',
