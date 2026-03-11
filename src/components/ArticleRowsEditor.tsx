@@ -26,6 +26,7 @@ export function ArticleRowsEditor({
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<ArticleRow>>({});
   const [isAdding, setIsAdding] = useState(false);
+  const [showTextError, setShowTextError] = useState(false);
   const [newRow, setNewRow] = useState<Partial<ArticleRow>>({
     rowNumber: '',
     partNumber: '',
@@ -39,7 +40,10 @@ export function ArticleRowsEditor({
   const { findAllMatches } = usePriceListLookup();
 
   const handleAddRow = () => {
-    if (!newRow.text?.trim()) return;
+    if (!newRow.text?.trim()) {
+      setShowTextError(true);
+      return;
+    }
     
     const row: ArticleRow = {
       id: crypto.randomUUID(),
@@ -61,6 +65,7 @@ export function ArticleRowsEditor({
       price: 0,
     });
     setIsAdding(false);
+    setShowTextError(false);
   };
 
   const handleDeleteRow = (rowId: string) => {
@@ -155,11 +160,11 @@ export function ArticleRowsEditor({
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2">
-                    <Button className="flex-1 h-11" onClick={handleSaveEdit}>
+                    <Button type="button" className="flex-1 h-11" onClick={handleSaveEdit}>
                       <Check className="h-4 w-4 mr-2" />
                       Spara
                     </Button>
-                    <Button variant="outline" className="flex-1 h-11" onClick={handleCancelEdit}>
+                    <Button type="button" variant="outline" className="flex-1 h-11" onClick={handleCancelEdit}>
                       <X className="h-4 w-4 mr-2" />
                       Avbryt
                     </Button>
@@ -225,6 +230,7 @@ export function ArticleRowsEditor({
                 {!readOnly && (
                   <div className="flex gap-2 pt-2 border-t">
                     <Button 
+                      type="button"
                       variant="outline" 
                       size="sm" 
                       className="flex-1 h-10"
@@ -234,6 +240,7 @@ export function ArticleRowsEditor({
                       Redigera
                     </Button>
                     <Button 
+                      type="button"
                       variant="outline" 
                       size="sm" 
                       className="h-10 text-destructive hover:text-destructive"
@@ -275,9 +282,10 @@ export function ArticleRowsEditor({
                 <label className="text-xs text-muted-foreground">Beskrivning</label>
                 <Input
                   value={newRow.text || ''}
-                  onChange={(e) => setNewRow({ ...newRow, text: e.target.value })}
-                  className="h-9"
+                  onChange={(e) => { setNewRow({ ...newRow, text: e.target.value }); setShowTextError(false); }}
+                  className={`h-9 ${showTextError ? 'border-destructive' : ''}`}
                 />
+                {showTextError && <p className="text-xs text-destructive mt-1">Beskrivning krävs</p>}
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
@@ -308,11 +316,11 @@ export function ArticleRowsEditor({
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
-                <Button className="flex-1 h-11" onClick={handleAddRow}>
+                <Button type="button" className="flex-1 h-11" onClick={handleAddRow}>
                   <Check className="h-4 w-4 mr-2" />
                   Lägg till
                 </Button>
-                <Button variant="outline" className="flex-1 h-11" onClick={() => setIsAdding(false)}>
+                <Button type="button" variant="outline" className="flex-1 h-11" onClick={() => { setIsAdding(false); setShowTextError(false); }}>
                   <X className="h-4 w-4 mr-2" />
                   Avbryt
                 </Button>
@@ -322,7 +330,7 @@ export function ArticleRowsEditor({
         )}
 
         {!readOnly && !isAdding && (
-          <Button variant="outline" className="w-full h-11" onClick={() => setIsAdding(true)}>
+          <Button type="button" variant="outline" className="w-full h-11" onClick={() => setIsAdding(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Lägg till artikelrad
           </Button>
@@ -414,10 +422,10 @@ export function ArticleRowsEditor({
                     </td>
                     <td className="py-2">
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSaveEdit}>
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={handleSaveEdit}>
                           <Check className="h-4 w-4 text-primary" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCancelEdit}>
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={handleCancelEdit}>
                           <X className="h-4 w-4" />
                         </Button>
                       </div>
@@ -453,6 +461,7 @@ export function ArticleRowsEditor({
                       <td className="py-2">
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100">
                           <Button 
+                            type="button"
                             variant="ghost" 
                             size="icon" 
                             className="h-8 w-8"
@@ -461,6 +470,7 @@ export function ArticleRowsEditor({
                             <Edit2 className="h-4 w-4" />
                           </Button>
                           <Button 
+                            type="button"
                             variant="ghost" 
                             size="icon" 
                             className="h-8 w-8 text-destructive hover:text-destructive"
@@ -498,10 +508,11 @@ export function ArticleRowsEditor({
                 <td className="py-2 pr-2">
                   <Input
                     value={newRow.text || ''}
-                    onChange={(e) => setNewRow({ ...newRow, text: e.target.value })}
+                    onChange={(e) => { setNewRow({ ...newRow, text: e.target.value }); setShowTextError(false); }}
                     placeholder="Beskrivning"
-                    className="h-8 w-full"
+                    className={`h-8 w-full ${showTextError ? 'border-destructive' : ''}`}
                   />
+                  {showTextError && <p className="text-xs text-destructive mt-1">Beskrivning krävs</p>}
                 </td>
                 <td className="py-2 pr-2">
                   <Input
@@ -531,10 +542,10 @@ export function ArticleRowsEditor({
                 </td>
                 <td className="py-2">
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleAddRow}>
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={handleAddRow}>
                       <Check className="h-4 w-4 text-primary" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsAdding(false)}>
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setIsAdding(false); setShowTextError(false); }}>
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
@@ -546,7 +557,7 @@ export function ArticleRowsEditor({
       </div>
 
       {!readOnly && !isAdding && (
-        <Button variant="outline" size="sm" onClick={() => setIsAdding(true)}>
+        <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Lägg till artikelrad
         </Button>

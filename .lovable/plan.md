@@ -2,23 +2,34 @@
 
 ## Problem
 
-When adding an article row without a description ("benämning"), pressing Enter or clicking the add button submits the **parent form** in CreateOrder.tsx, navigating away. This happens because:
+Orders with billing status "Fakturerad" (billed) should appear under "Orderhistorik" instead of only orders that are both `completed` AND `billed`. The "Fakturerad" option should be removed from the billing filter dropdown on the active orders tab since those orders will no longer appear there.
 
-1. Buttons in `ArticleRowsEditor` lack `type="button"`, so they default to `type="submit"` inside a `<form>`.
-2. `handleAddRow` silently returns when text is empty (line 42) — no validation message shown.
+## Changes
 
-## Fix
+### 1. `src/pages/Index.tsx` — Update archive/active split logic
 
-### `src/components/ArticleRowsEditor.tsx`
+Currently (lines 58-68):
+- Active: orders where NOT (`completed` AND `billed`)
+- Archive: orders where `completed` AND `billed`
 
-1. **Add `type="button"` to all buttons** — lines 311, 315, 325 (mobile), 534, 537, 549 (desktop), and edit buttons (417, 420, 228-237). This prevents parent form submission.
+Change to:
+- Active: orders where billing status is NOT `billed` (regardless of production status)
+- Archive: orders where billing status IS `billed` OR (`completed` AND `billed`)
 
-2. **Show validation feedback** when the user tries to add a row without a description:
-   - Add a local state `showTextError` that is set to `true` when `handleAddRow` is called with empty text.
-   - Show a small red text ("Beskrivning krävs") below the description input when `showTextError` is true.
-   - Clear the error when text changes.
+More precisely: any order whose computed billing status is `billed` goes to archive.
+
+### 2. `src/components/OrderFilters.tsx` — Remove "Fakturerad" from billing filter
+
+Filter the `billingStatusLabels` entries to exclude `billed`, since those orders are now only in the archive tab. Only show `not_ready` and `ready_for_billing`.
+
+### 3. `src/types/order.ts` — No changes needed
+
+The `billingStatusLabels` object stays as-is since it's used elsewhere (e.g., badge display).
 
 | File | Change |
 |------|--------|
-| `src/components/ArticleRowsEditor.tsx` | Add `type="button"` to all `<Button>` elements; add validation message for empty description |
+| `src/pages/Index.tsx` | Archive = billed orders; Active = non-billed |
+| `src/components/OrderFilters.tsx` | Remove "Fakturerad" from billing dropdown |
+
+No database changes needed.
 
