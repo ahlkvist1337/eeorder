@@ -65,6 +65,7 @@ export function ArticleRowsEditor({
       price: 0,
     });
     setIsAdding(false);
+    setShowTextError(false);
   };
 
   const handleDeleteRow = (rowId: string) => {
