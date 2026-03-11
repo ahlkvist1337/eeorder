@@ -422,10 +422,10 @@ export function ArticleRowsEditor({
                     </td>
                     <td className="py-2">
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSaveEdit}>
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={handleSaveEdit}>
                           <Check className="h-4 w-4 text-primary" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCancelEdit}>
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={handleCancelEdit}>
                           <X className="h-4 w-4" />
                         </Button>
                       </div>
