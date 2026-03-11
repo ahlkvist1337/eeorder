@@ -160,33 +160,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
 
     if (onUnitStepStatusChange) {
       onUnitStepStatusChange(unitId, stepId, nextStatus);
-
-      // Auto-status: step → in_progress → object starts
-      if (nextStatus === 'in_progress') {
-        if (obj.status === 'waiting' || obj.status === 'arrived' || obj.status === 'paused') {
-          onUnitObjectStatusChange?.(unitId, objectId, 'started');
-        }
-      }
-
-      // Auto-status: all steps in this object completed → object completed
-      if (nextStatus === 'completed') {
-        const allCompleted = obj.steps.every(s =>
-          s.id === stepId ? true : s.status === 'completed'
-        );
-        if (allCompleted && obj.status !== 'completed') {
-          onUnitObjectStatusChange?.(unitId, objectId, 'completed');
-        }
-      }
-
-      // Auto-status: all steps back to pending → object back to arrived
-      if (nextStatus === 'pending') {
-        const allPending = obj.steps.every(s =>
-          s.id === stepId ? true : s.status === 'pending'
-        );
-        if (allPending && (obj.status === 'started' || obj.status === 'paused')) {
-          onUnitObjectStatusChange?.(unitId, objectId, 'arrived');
-        }
-      }
+      // Auto-status logic is handled centrally in OrdersContext.updateV2StepStatus
     } else {
       // Fallback: local-only update (for create mode)
       onUnitsChange(units.map(u => {
