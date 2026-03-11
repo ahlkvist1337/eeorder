@@ -316,11 +316,11 @@ export function ArticleRowsEditor({
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
-                <Button className="flex-1 h-11" onClick={handleAddRow}>
+                <Button type="button" className="flex-1 h-11" onClick={handleAddRow}>
                   <Check className="h-4 w-4 mr-2" />
                   Lägg till
                 </Button>
-                <Button variant="outline" className="flex-1 h-11" onClick={() => setIsAdding(false)}>
+                <Button type="button" variant="outline" className="flex-1 h-11" onClick={() => { setIsAdding(false); setShowTextError(false); }}>
                   <X className="h-4 w-4 mr-2" />
                   Avbryt
                 </Button>
