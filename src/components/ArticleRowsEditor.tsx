@@ -557,7 +557,7 @@ export function ArticleRowsEditor({
       </div>
 
       {!readOnly && !isAdding && (
-        <Button variant="outline" size="sm" onClick={() => setIsAdding(true)}>
+        <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Lägg till artikelrad
         </Button>
