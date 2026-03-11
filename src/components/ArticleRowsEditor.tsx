@@ -40,7 +40,10 @@ export function ArticleRowsEditor({
   const { findAllMatches } = usePriceListLookup();
 
   const handleAddRow = () => {
-    if (!newRow.text?.trim()) return;
+    if (!newRow.text?.trim()) {
+      setShowTextError(true);
+      return;
+    }
     
     const row: ArticleRow = {
       id: crypto.randomUUID(),
