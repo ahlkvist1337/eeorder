@@ -282,9 +282,10 @@ export function ArticleRowsEditor({
                 <label className="text-xs text-muted-foreground">Beskrivning</label>
                 <Input
                   value={newRow.text || ''}
-                  onChange={(e) => setNewRow({ ...newRow, text: e.target.value })}
-                  className="h-9"
+                  onChange={(e) => { setNewRow({ ...newRow, text: e.target.value }); setShowTextError(false); }}
+                  className={`h-9 ${showTextError ? 'border-destructive' : ''}`}
                 />
+                {showTextError && <p className="text-xs text-destructive mt-1">Beskrivning krävs</p>}
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
