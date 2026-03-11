@@ -461,6 +461,7 @@ export function ArticleRowsEditor({
                       <td className="py-2">
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100">
                           <Button 
+                            type="button"
                             variant="ghost" 
                             size="icon" 
                             className="h-8 w-8"
@@ -469,6 +470,7 @@ export function ArticleRowsEditor({
                             <Edit2 className="h-4 w-4" />
                           </Button>
                           <Button 
+                            type="button"
                             variant="ghost" 
                             size="icon" 
                             className="h-8 w-8 text-destructive hover:text-destructive"
