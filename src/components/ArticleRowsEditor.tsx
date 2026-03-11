@@ -508,10 +508,11 @@ export function ArticleRowsEditor({
                 <td className="py-2 pr-2">
                   <Input
                     value={newRow.text || ''}
-                    onChange={(e) => setNewRow({ ...newRow, text: e.target.value })}
+                    onChange={(e) => { setNewRow({ ...newRow, text: e.target.value }); setShowTextError(false); }}
                     placeholder="Beskrivning"
-                    className="h-8 w-full"
+                    className={`h-8 w-full ${showTextError ? 'border-destructive' : ''}`}
                   />
+                  {showTextError && <p className="text-xs text-destructive mt-1">Beskrivning krävs</p>}
                 </td>
                 <td className="py-2 pr-2">
                   <Input
