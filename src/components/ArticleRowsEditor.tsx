@@ -230,6 +230,7 @@ export function ArticleRowsEditor({
                 {!readOnly && (
                   <div className="flex gap-2 pt-2 border-t">
                     <Button 
+                      type="button"
                       variant="outline" 
                       size="sm" 
                       className="flex-1 h-10"
@@ -239,6 +240,7 @@ export function ArticleRowsEditor({
                       Redigera
                     </Button>
                     <Button 
+                      type="button"
                       variant="outline" 
                       size="sm" 
                       className="h-10 text-destructive hover:text-destructive"
