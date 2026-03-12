@@ -46,7 +46,7 @@ export default function CreateOrder() {
   const [xmlInstructions, setXmlInstructions] = useState<Instruction[]>([]);
   const [xmlArticleRows, setXmlArticleRows] = useState<ArticleRow[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-
+  const [isParsing, setIsParsing] = useState(false);
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setManualError(null);
