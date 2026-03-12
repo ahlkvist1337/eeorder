@@ -1,38 +1,35 @@
 
 
-## PDF-import av ordrar
+## Problem
 
-Lägger till stöd för att importera ordrar från PDF-filer (förfrågningar och inköpsordrar) bredvid den befintliga XML-importen. Eftersom PDF-format varierar mycket mellan leverantörer används AI för att extrahera orderdata.
+Orders with billing status "Fakturerad" (billed) should appear under "Orderhistorik" instead of only orders that are both `completed` AND `billed`. The "Fakturerad" option should be removed from the billing filter dropdown on the active orders tab since those orders will no longer appear there.
 
-### Upplägg
+## Changes
 
-**Fliken "Importera fil"** — den nuvarande XML-fliken utökas till att acceptera både `.xml` och `.pdf`. Vid PDF-uppladdning skickas filinnehållet till en backend-funktion som använder AI för att tolka texten och returnera strukturerad orderdata i samma format som XML-parsern.
+### 1. `src/pages/Index.tsx` — Update archive/active split logic
 
-### Ändringar
+Currently (lines 58-68):
+- Active: orders where NOT (`completed` AND `billed`)
+- Archive: orders where `completed` AND `billed`
 
-| Fil | Ändring |
-|-----|---------|
-| `supabase/functions/parse-pdf-order/index.ts` | Ny backend-funktion: tar emot PDF som base64, extraherar text med pdf-parse, skickar till AI-modell (Gemini 2.5 Flash) med prompt att returnera JSON med orderNumber, customer, customerReference, deliveryAddress, orderDate, deliveryDate, artikelrader och instruktioner. Returnerar samma struktur som `ParsedXMLOrder`. |
-| `src/pages/CreateOrder.tsx` | Byt namn på XML-fliken till "Importera fil". Acceptera `.xml` och `.pdf`. Vid PDF: läs filen som base64, anropa edge function, mappa svaret till `ParsedXMLOrder` och visa samma förhandsgransknings-/redigeringsvy som idag. |
-| `src/pages/CreateOrder.tsx` | Uppdatera drop-zone och fil-input att acceptera `.pdf` utöver `.xml`. Visa laddningsindikator under AI-tolkning. |
+Change to:
+- Active: orders where billing status is NOT `billed` (regardless of production status)
+- Archive: orders where billing status IS `billed` OR (`completed` AND `billed`)
 
-### AI-prompten (i edge function)
+More precisely: any order whose computed billing status is `billed` goes to archive.
 
-Modellen får instruktionen att extrahera exakt dessa fält från PDF-texten:
-- `orderNumber` — ordernummer/förfrågannummer
-- `customer` — köpare/kund
-- `customerReference` — referensperson
-- `deliveryAddress` — leveransadress
-- `orderDate`, `deliveryDate`
-- `rows[]` — artikelrader med `rowNumber`, `partNumber`, `text`, `quantity`, `unit`, `price`
-- `instructions[]` — instruktioner/behandlingsbeskrivningar
+### 2. `src/components/OrderFilters.tsx` — Remove "Fakturerad" from billing filter
 
-Svaret returneras som JSON och mappas direkt till `ParsedXMLOrder`.
+Filter the `billingStatusLabels` entries to exclude `billed`, since those orders are now only in the archive tab. Only show `not_ready` and `ready_for_billing`.
 
-### Användarflöde
+### 3. `src/types/order.ts` — No changes needed
 
-1. Användaren väljer "Importera fil"-fliken
-2. Drar och släpper en PDF (eller XML som förut)
-3. Vid PDF: kort laddning medan AI tolkar
-4. Samma förhandsgranskningsvy visas — användaren kan redigera/lägga till enheter innan skapande
+The `billingStatusLabels` object stays as-is since it's used elsewhere (e.g., badge display).
+
+| File | Change |
+|------|--------|
+| `src/pages/Index.tsx` | Archive = billed orders; Active = non-billed |
+| `src/components/OrderFilters.tsx` | Remove "Fakturerad" from billing dropdown |
+
+No database changes needed.
 

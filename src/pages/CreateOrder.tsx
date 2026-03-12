@@ -11,11 +11,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useOrders } from '@/hooks/useOrders';
 import { parseMonitorXML } from '@/lib/xmlParser';
-import { Upload, FileText, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
+import { Upload, FileText, AlertCircle, CheckCircle2, Trash2, Loader2 } from 'lucide-react';
 import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
 import { InstructionsEditor } from '@/components/InstructionsEditor';
 
 import { UnitsEditor } from '@/components/UnitsEditor';
+import { supabase } from '@/integrations/supabase/client';
 import type { Order, ParsedXMLOrder, ArticleRow, Instruction, OrderUnit } from '@/types/order';
 
 export default function CreateOrder() {
@@ -45,7 +46,7 @@ export default function CreateOrder() {
   const [xmlInstructions, setXmlInstructions] = useState<Instruction[]>([]);
   const [xmlArticleRows, setXmlArticleRows] = useState<ArticleRow[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-
+  const [isParsing, setIsParsing] = useState(false);
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setManualError(null);
@@ -89,37 +90,89 @@ export default function CreateOrder() {
     }
   };
 
-  const handleFileUpload = useCallback((file: File) => {
+  const handleFileUpload = useCallback(async (file: File) => {
     setXmlError(null);
     setParsedXml(null);
 
-    if (!file.name.toLowerCase().endsWith('.xml')) {
-      setXmlError('Filen måste vara en XML-fil.');
+    const isXml = file.name.toLowerCase().endsWith('.xml');
+    const isPdf = file.name.toLowerCase().endsWith('.pdf');
+
+    if (!isXml && !isPdf) {
+      setXmlError('Filen måste vara en XML- eller PDF-fil.');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const xmlString = e.target?.result as string;
-        const parsed = parseMonitorXML(xmlString);
+    if (isXml) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const xmlString = e.target?.result as string;
+          const parsed = parseMonitorXML(xmlString);
 
-        if (orderNumberExists(parsed.orderNumber)) {
-          setXmlError(`Order med nummer "${parsed.orderNumber}" finns redan i systemet.`);
-          return;
+          if (orderNumberExists(parsed.orderNumber)) {
+            setXmlError(`Order med nummer "${parsed.orderNumber}" finns redan i systemet.`);
+            return;
+          }
+
+          setParsedXml(parsed);
+          setXmlArticleRows(parsed.rows || []);
+          setXmlInstructions(parsed.instructions || []);
+        } catch (err) {
+          setXmlError(err instanceof Error ? err.message : 'Kunde inte läsa XML-filen.');
         }
+      };
+      reader.onerror = () => setXmlError('Kunde inte läsa filen.');
+      reader.readAsText(file);
+      return;
+    }
 
-        setParsedXml(parsed);
-        setXmlArticleRows(parsed.rows || []);
-        setXmlInstructions(parsed.instructions || []);
-      } catch (err) {
-        setXmlError(err instanceof Error ? err.message : 'Kunde inte läsa XML-filen.');
+    // PDF handling
+    setIsParsing(true);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]); // strip data:...;base64, prefix
+        };
+        reader.onerror = () => reject(new Error('Kunde inte läsa filen.'));
+        reader.readAsDataURL(file);
+      });
+
+      const { data, error } = await supabase.functions.invoke('parse-pdf-order', {
+        body: { pdfBase64: base64 },
+      });
+
+      if (error) throw new Error(error.message || 'Kunde inte tolka PDF-filen.');
+
+      if (data.error) throw new Error(data.error);
+
+      const parsed: ParsedXMLOrder = {
+        orderNumber: data.orderNumber || '',
+        customer: data.customer || '',
+        customerReference: data.customerReference || '',
+        deliveryAddress: data.deliveryAddress || '',
+        supplier: '',
+        orderDate: data.orderDate || '',
+        deliveryDate: data.deliveryDate || '',
+        rows: data.rows || [],
+        instructions: data.instructions || [],
+      };
+
+      if (parsed.orderNumber && orderNumberExists(parsed.orderNumber)) {
+        setXmlError(`Order med nummer "${parsed.orderNumber}" finns redan i systemet.`);
+        setIsParsing(false);
+        return;
       }
-    };
-    reader.onerror = () => {
-      setXmlError('Kunde inte läsa filen.');
-    };
-    reader.readAsText(file);
+
+      setParsedXml(parsed);
+      setXmlArticleRows(parsed.rows || []);
+      setXmlInstructions(parsed.instructions || []);
+    } catch (err) {
+      setXmlError(err instanceof Error ? err.message : 'Kunde inte tolka PDF-filen.');
+    } finally {
+      setIsParsing(false);
+    }
   }, [orderNumberExists]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -217,7 +270,7 @@ export default function CreateOrder() {
         <Tabs defaultValue={defaultTab}>
           <TabsList className="grid w-full grid-cols-2 mb-6">
             <TabsTrigger value="manual">Manuellt</TabsTrigger>
-            <TabsTrigger value="xml">Importera XML</TabsTrigger>
+            <TabsTrigger value="xml">Importera fil</TabsTrigger>
           </TabsList>
 
           {/* Manual creation tab */}
@@ -332,12 +385,12 @@ export default function CreateOrder() {
             </Card>
           </TabsContent>
 
-          {/* XML import tab */}
+          {/* File import tab */}
           <TabsContent value="xml">
             <Card>
               <CardHeader>
-                <CardTitle>Importera från XML</CardTitle>
-                <CardDescription>Ladda upp en XML-fil från Monitor ERP</CardDescription>
+                <CardTitle>Importera från fil</CardTitle>
+                <CardDescription>Ladda upp en XML- eller PDF-fil</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {xmlError && (
@@ -347,7 +400,7 @@ export default function CreateOrder() {
                   </Alert>
                 )}
 
-                {!parsedXml ? (
+                {!parsedXml && !isParsing ? (
                   <div
                     className={`border-2 border-dashed rounded-sm p-8 text-center transition-colors ${
                       isDragging ? 'border-primary bg-primary/5' : 'border-border'
@@ -358,14 +411,14 @@ export default function CreateOrder() {
                   >
                     <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
                     <p className="text-lg font-medium mb-2">
-                      Dra och släpp XML-fil här
+                      Dra och släpp fil här
                     </p>
                     <p className="text-sm text-muted-foreground mb-4">
-                      eller klicka för att välja fil
+                      XML eller PDF — klicka för att välja fil
                     </p>
                     <input
                       type="file"
-                      accept=".xml"
+                      accept=".xml,.pdf"
                       onChange={handleFileInput}
                       className="hidden"
                       id="xml-upload"
@@ -376,12 +429,18 @@ export default function CreateOrder() {
                       </label>
                     </Button>
                   </div>
+                ) : isParsing ? (
+                  <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                    <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                    <p className="text-lg font-medium">Tolkar PDF med AI...</p>
+                    <p className="text-sm text-muted-foreground">Detta kan ta några sekunder</p>
+                  </div>
                 ) : (
                   <div className="space-y-4">
                     <Alert className="border-primary/50 bg-primary/5">
                       <CheckCircle2 className="h-4 w-4 text-primary" />
                       <AlertDescription>
-                        XML-fil inläst! Kontrollera uppgifterna nedan.
+                        Fil inläst! Kontrollera uppgifterna nedan.
                       </AlertDescription>
                     </Alert>
 
