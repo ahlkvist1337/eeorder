@@ -1,1 +1,4 @@
 project_id = "qqhevrvvzrxrgtwmjsyf"
+
+[functions.parse-pdf-order]
+verify_jwt = false

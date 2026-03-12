@@ -11,11 +11,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useOrders } from '@/hooks/useOrders';
 import { parseMonitorXML } from '@/lib/xmlParser';
-import { Upload, FileText, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
+import { Upload, FileText, AlertCircle, CheckCircle2, Trash2, Loader2 } from 'lucide-react';
 import { ArticleRowsEditor } from '@/components/ArticleRowsEditor';
 import { InstructionsEditor } from '@/components/InstructionsEditor';
 
 import { UnitsEditor } from '@/components/UnitsEditor';
+import { supabase } from '@/integrations/supabase/client';
 import type { Order, ParsedXMLOrder, ArticleRow, Instruction, OrderUnit } from '@/types/order';
 
 export default function CreateOrder() {
