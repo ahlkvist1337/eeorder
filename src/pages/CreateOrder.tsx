@@ -385,12 +385,12 @@ export default function CreateOrder() {
             </Card>
           </TabsContent>
 
-          {/* XML import tab */}
+          {/* File import tab */}
           <TabsContent value="xml">
             <Card>
               <CardHeader>
-                <CardTitle>Importera från XML</CardTitle>
-                <CardDescription>Ladda upp en XML-fil från Monitor ERP</CardDescription>
+                <CardTitle>Importera från fil</CardTitle>
+                <CardDescription>Ladda upp en XML- eller PDF-fil</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {xmlError && (
@@ -400,7 +400,7 @@ export default function CreateOrder() {
                   </Alert>
                 )}
 
-                {!parsedXml ? (
+                {!parsedXml && !isParsing ? (
                   <div
                     className={`border-2 border-dashed rounded-sm p-8 text-center transition-colors ${
                       isDragging ? 'border-primary bg-primary/5' : 'border-border'
@@ -411,14 +411,14 @@ export default function CreateOrder() {
                   >
                     <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
                     <p className="text-lg font-medium mb-2">
-                      Dra och släpp XML-fil här
+                      Dra och släpp fil här
                     </p>
                     <p className="text-sm text-muted-foreground mb-4">
-                      eller klicka för att välja fil
+                      XML eller PDF — klicka för att välja fil
                     </p>
                     <input
                       type="file"
-                      accept=".xml"
+                      accept=".xml,.pdf"
                       onChange={handleFileInput}
                       className="hidden"
                       id="xml-upload"
