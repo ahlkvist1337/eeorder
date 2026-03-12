@@ -429,12 +429,18 @@ export default function CreateOrder() {
                       </label>
                     </Button>
                   </div>
+                ) : isParsing ? (
+                  <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                    <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                    <p className="text-lg font-medium">Tolkar PDF med AI...</p>
+                    <p className="text-sm text-muted-foreground">Detta kan ta några sekunder</p>
+                  </div>
                 ) : (
                   <div className="space-y-4">
                     <Alert className="border-primary/50 bg-primary/5">
                       <CheckCircle2 className="h-4 w-4 text-primary" />
                       <AlertDescription>
-                        XML-fil inläst! Kontrollera uppgifterna nedan.
+                        Fil inläst! Kontrollera uppgifterna nedan.
                       </AlertDescription>
                     </Alert>
 
