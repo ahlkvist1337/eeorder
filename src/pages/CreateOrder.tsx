@@ -270,7 +270,7 @@ export default function CreateOrder() {
         <Tabs defaultValue={defaultTab}>
           <TabsList className="grid w-full grid-cols-2 mb-6">
             <TabsTrigger value="manual">Manuellt</TabsTrigger>
-            <TabsTrigger value="xml">Importera XML</TabsTrigger>
+            <TabsTrigger value="xml">Importera fil</TabsTrigger>
           </TabsList>
 
           {/* Manual creation tab */}
