@@ -90,37 +90,89 @@ export default function CreateOrder() {
     }
   };
 
-  const handleFileUpload = useCallback((file: File) => {
+  const handleFileUpload = useCallback(async (file: File) => {
     setXmlError(null);
     setParsedXml(null);
 
-    if (!file.name.toLowerCase().endsWith('.xml')) {
-      setXmlError('Filen måste vara en XML-fil.');
+    const isXml = file.name.toLowerCase().endsWith('.xml');
+    const isPdf = file.name.toLowerCase().endsWith('.pdf');
+
+    if (!isXml && !isPdf) {
+      setXmlError('Filen måste vara en XML- eller PDF-fil.');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const xmlString = e.target?.result as string;
-        const parsed = parseMonitorXML(xmlString);
+    if (isXml) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const xmlString = e.target?.result as string;
+          const parsed = parseMonitorXML(xmlString);
 
-        if (orderNumberExists(parsed.orderNumber)) {
-          setXmlError(`Order med nummer "${parsed.orderNumber}" finns redan i systemet.`);
-          return;
+          if (orderNumberExists(parsed.orderNumber)) {
+            setXmlError(`Order med nummer "${parsed.orderNumber}" finns redan i systemet.`);
+            return;
+          }
+
+          setParsedXml(parsed);
+          setXmlArticleRows(parsed.rows || []);
+          setXmlInstructions(parsed.instructions || []);
+        } catch (err) {
+          setXmlError(err instanceof Error ? err.message : 'Kunde inte läsa XML-filen.');
         }
+      };
+      reader.onerror = () => setXmlError('Kunde inte läsa filen.');
+      reader.readAsText(file);
+      return;
+    }
 
-        setParsedXml(parsed);
-        setXmlArticleRows(parsed.rows || []);
-        setXmlInstructions(parsed.instructions || []);
-      } catch (err) {
-        setXmlError(err instanceof Error ? err.message : 'Kunde inte läsa XML-filen.');
+    // PDF handling
+    setIsParsing(true);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]); // strip data:...;base64, prefix
+        };
+        reader.onerror = () => reject(new Error('Kunde inte läsa filen.'));
+        reader.readAsDataURL(file);
+      });
+
+      const { data, error } = await supabase.functions.invoke('parse-pdf-order', {
+        body: { pdfBase64: base64 },
+      });
+
+      if (error) throw new Error(error.message || 'Kunde inte tolka PDF-filen.');
+
+      if (data.error) throw new Error(data.error);
+
+      const parsed: ParsedXMLOrder = {
+        orderNumber: data.orderNumber || '',
+        customer: data.customer || '',
+        customerReference: data.customerReference || '',
+        deliveryAddress: data.deliveryAddress || '',
+        supplier: '',
+        orderDate: data.orderDate || '',
+        deliveryDate: data.deliveryDate || '',
+        rows: data.rows || [],
+        instructions: data.instructions || [],
+      };
+
+      if (parsed.orderNumber && orderNumberExists(parsed.orderNumber)) {
+        setXmlError(`Order med nummer "${parsed.orderNumber}" finns redan i systemet.`);
+        setIsParsing(false);
+        return;
       }
-    };
-    reader.onerror = () => {
-      setXmlError('Kunde inte läsa filen.');
-    };
-    reader.readAsText(file);
+
+      setParsedXml(parsed);
+      setXmlArticleRows(parsed.rows || []);
+      setXmlInstructions(parsed.instructions || []);
+    } catch (err) {
+      setXmlError(err instanceof Error ? err.message : 'Kunde inte tolka PDF-filen.');
+    } finally {
+      setIsParsing(false);
+    }
   }, [orderNumberExists]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
