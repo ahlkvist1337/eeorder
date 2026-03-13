@@ -59,11 +59,21 @@ Om ett fält saknas, returnera tom sträng eller tom array.`;
         },
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
+          model: "google/gemini-2.5-flash",
+          temperature: 0,
           messages: [
             { role: "system", content: systemPrompt },
             {
               role: "user",
-              content: `Extrahera orderdata från denna PDF:\n\n${pdfBase64}`,
+              content: [
+                { type: "text", text: "Extrahera orderdata från denna PDF." },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: `data:application/pdf;base64,${pdfBase64}`,
+                  },
+                },
+              ],
             },
           ],
           tools: [
