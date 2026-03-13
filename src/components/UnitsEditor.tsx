@@ -469,7 +469,7 @@ export function UnitsEditor({ units, onUnitsChange, onUnitStatusChange, onUnitSt
                             await printWorkCardV2Object({
                               unitObject: obj,
                               unitNumber: unit.unitNumber,
-                              articleRows: articleRows?.filter(r => r.unitId === unit.id),
+                              articleRows: articleRows?.filter(r => r.unitId === unit.id || !r.unitId),
                               order: orderInfo,
                               baseUrl: window.location.origin,
                             });
