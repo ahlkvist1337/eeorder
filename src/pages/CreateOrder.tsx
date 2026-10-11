@@ -18,6 +18,7 @@ import { InstructionsEditor } from '@/components/InstructionsEditor';
 import { UnitsEditor } from '@/components/UnitsEditor';
 import { supabase } from '@/integrations/supabase/client';
 import type { Order, ParsedXMLOrder, ArticleRow, Instruction, OrderUnit } from '@/types/order';
+import { isValidPlannedDate } from '@/lib/utils';
 
 export default function CreateOrder() {
   useDocumentTitle('Ny order');
@@ -208,25 +209,27 @@ export default function CreateOrder() {
     
     // Try parsing the date string
     const date = new Date(dateStr);
-    if (!isNaN(date.getTime())) {
+    if (!isNaN(date.getTime()) && isValidPlannedDate(dateStr)) {
       return date.toISOString();
     }
-    
+
     // Try common Swedish/European formats (YYYY-MM-DD, DD-MM-YYYY, etc.)
     const parts = dateStr.split(/[-/.]/);
     if (parts.length === 3) {
       // Try YYYY-MM-DD
       if (parts[0].length === 4) {
-        const isoDate = new Date(`${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`);
-        if (!isNaN(isoDate.getTime())) return isoDate.toISOString();
+        const isoStr = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+        const isoDate = new Date(isoStr);
+        if (!isNaN(isoDate.getTime()) && isValidPlannedDate(isoStr)) return isoDate.toISOString();
       }
       // Try DD-MM-YYYY or DD/MM/YYYY
       if (parts[2].length === 4) {
-        const isoDate = new Date(`${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`);
-        if (!isNaN(isoDate.getTime())) return isoDate.toISOString();
+        const isoStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        const isoDate = new Date(isoStr);
+        if (!isNaN(isoDate.getTime()) && isValidPlannedDate(isoStr)) return isoDate.toISOString();
       }
     }
-    
+
     return undefined;
   };
 
@@ -332,6 +335,8 @@ export default function CreateOrder() {
                       <Input
                         id="plannedStart"
                         type="date"
+                        min="2000-01-01"
+                        max="2099-12-31"
                         value={plannedStart}
                         onChange={e => setPlannedStart(e.target.value)}
                       />
@@ -341,6 +346,8 @@ export default function CreateOrder() {
                       <Input
                         id="plannedEnd"
                         type="date"
+                        min="2000-01-01"
+                        max="2099-12-31"
                         value={plannedEnd}
                         onChange={e => setPlannedEnd(e.target.value)}
                       />

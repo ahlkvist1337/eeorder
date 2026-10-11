@@ -589,8 +589,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       delivery_address: order.deliveryAddress || null,
       production_status: order.productionStatus,
       billing_status: order.billingStatus,
-      planned_start: order.plannedStart || null,
-      planned_end: order.plannedEnd || null,
+      planned_start: isValidPlannedDate(order.plannedStart) ? order.plannedStart || null : null,
+      planned_end: isValidPlannedDate(order.plannedEnd) ? order.plannedEnd || null : null,
       actual_start: order.actualStart || null,
       actual_end: order.actualEnd || null,
       has_deviation: order.hasDeviation,
@@ -786,8 +786,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     if (updates.deliveryAddress !== undefined) dbUpdates.delivery_address = updates.deliveryAddress || null;
     if (updates.productionStatus !== undefined) dbUpdates.production_status = updates.productionStatus;
     if (updates.billingStatus !== undefined) dbUpdates.billing_status = updates.billingStatus;
-    if (updates.plannedStart !== undefined) dbUpdates.planned_start = updates.plannedStart || null;
-    if (updates.plannedEnd !== undefined) dbUpdates.planned_end = updates.plannedEnd || null;
+    if (updates.plannedStart !== undefined) dbUpdates.planned_start = isValidPlannedDate(updates.plannedStart) ? updates.plannedStart || null : null;
+    if (updates.plannedEnd !== undefined) dbUpdates.planned_end = isValidPlannedDate(updates.plannedEnd) ? updates.plannedEnd || null : null;
     if (updates.actualStart !== undefined) dbUpdates.actual_start = updates.actualStart || null;
     if (updates.actualEnd !== undefined) dbUpdates.actual_end = updates.actualEnd || null;
     if (updates.hasDeviation !== undefined) dbUpdates.has_deviation = updates.hasDeviation;
