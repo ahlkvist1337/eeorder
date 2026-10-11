@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { format } from 'date-fns';
-import { sv } from 'date-fns/locale';
 import { AlertTriangle, Trash2, Send } from 'lucide-react';
+import { safeFormatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -64,7 +63,7 @@ export function OrderDeviations({ orderId }: OrderDeviationsProps) {
                 <p className="text-sm whitespace-pre-wrap">{deviation.message}</p>
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-muted-foreground">
-                    {deviation.createdByName} • {format(new Date(deviation.createdAt), 'd MMM yyyy \'kl\' HH:mm', { locale: sv })}
+                    {deviation.createdByName} • {safeFormatDate(deviation.createdAt, 'd MMM yyyy \'kl\' HH:mm')}
                   </p>
                   {canDelete && (
                     <Button
