@@ -29,8 +29,7 @@ import {
 import { useDocuments, type DocumentCategory, type Document } from '@/hooks/useDocuments';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import { format } from 'date-fns';
-import { sv } from 'date-fns/locale';
+import { safeFormatDate } from '@/lib/utils';
 
 const categoryConfig: Record<DocumentCategory, { label: string; icon: typeof FileText; description: string }> = {
   lathundar: { 
@@ -208,7 +207,7 @@ export default function Documents() {
                                 <div className="min-w-0 flex-1">
                                   <p className="font-medium truncate">{doc.name}</p>
                                   <p className="text-xs text-muted-foreground">
-                                    {format(new Date(doc.created_at), 'd MMM yyyy', { locale: sv })}
+                                    {safeFormatDate(doc.created_at, 'd MMM yyyy')}
                                     {doc.file_size && ` • ${formatFileSize(doc.file_size)}`}
                                   </p>
                                 </div>
