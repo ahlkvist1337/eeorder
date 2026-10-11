@@ -1,9 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
-import { sv } from 'date-fns/locale';
 import { ArrowUpDown, AlertTriangle, MessageSquare, Truck } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, safeFormatDate } from '@/lib/utils';
 import {
   Table,
   TableBody,
@@ -341,12 +339,12 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
                   </TableCell>
                   <TableCell className="text-sm">
                     {order.plannedStart 
-                      ? format(new Date(order.plannedStart), 'd MMM', { locale: sv })
+                      ? safeFormatDate(order.plannedStart, 'd MMM')
                       : '-'}
                   </TableCell>
                   <TableCell className="text-sm">
                     {order.plannedEnd 
-                      ? format(new Date(order.plannedEnd), 'd MMM', { locale: sv })
+                      ? safeFormatDate(order.plannedEnd, 'd MMM')
                       : '-'}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
@@ -450,7 +448,7 @@ export function OrdersTable({ orders, filters, searchQuery, selectedOrderIds, on
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 {order.plannedEnd && (
                   <span>
-                    Klart: {format(new Date(order.plannedEnd), 'd MMM', { locale: sv })}
+                    Klart: {safeFormatDate(order.plannedEnd, 'd MMM')}
                   </span>
                 )}
                 <span className="text-muted-foreground/50">•</span>
