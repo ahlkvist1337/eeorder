@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { isValidPlannedDate } from '@/lib/utils';
 import type { Order, ProductionStatus, BillingStatus, OrderStep, StatusChange, ArticleRow, StepStatusChange, StepStatus, OrderObject, ObjectTruck, TruckStepStatus, TruckStatusChange, TruckStatus, Instruction, TruckLifecycleEvent, TruckLifecycleEventType, TruckBillingStatus, OrderUnit } from '@/types/order';
 
 // Database types (manual since types.ts may not be updated yet)
