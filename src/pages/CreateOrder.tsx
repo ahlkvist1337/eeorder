@@ -61,6 +61,11 @@ export default function CreateOrder() {
       return;
     }
 
+    if (!isValidPlannedDate(plannedStart) || !isValidPlannedDate(plannedEnd)) {
+      setManualError('Ogiltigt datum. Årtalet måste ha fyra siffror (2000–2099).');
+      return;
+    }
+
     const totalPrice = manualArticleRows.reduce((sum, row) => sum + row.price * row.quantity, 0);
 
     const newOrder: Omit<Order, 'id' | 'createdAt' | 'updatedAt' | 'statusHistory'> = {
