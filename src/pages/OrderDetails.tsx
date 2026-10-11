@@ -304,14 +304,14 @@ export default function OrderDetails() {
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
                             {order.plannedStart
-                              ? format(new Date(order.plannedStart), 'd MMM yyyy', { locale: sv })
+                              ? safeFormatDate(order.plannedStart, 'd MMM yyyy')
                               : 'Välj datum'}
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
-                            selected={order.plannedStart ? new Date(order.plannedStart) : undefined}
+                            selected={order.plannedStart && !isNaN(new Date(order.plannedStart).getTime()) ? new Date(order.plannedStart) : undefined}
                             onSelect={async (date) => {
                               try {
                                 await updateOrder(order.id, { 
@@ -331,7 +331,7 @@ export default function OrderDetails() {
                     ) : (
                       <p className="font-medium text-sm sm:text-base">
                         {order.plannedStart 
-                          ? format(new Date(order.plannedStart), 'd MMM yyyy', { locale: sv })
+                          ? safeFormatDate(order.plannedStart, 'd MMM yyyy')
                           : '-'}
                       </p>
                     )}
@@ -350,14 +350,14 @@ export default function OrderDetails() {
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
                             {order.plannedEnd
-                              ? format(new Date(order.plannedEnd), 'd MMM yyyy', { locale: sv })
+                              ? safeFormatDate(order.plannedEnd, 'd MMM yyyy')
                               : 'Välj datum'}
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
-                            selected={order.plannedEnd ? new Date(order.plannedEnd) : undefined}
+                            selected={order.plannedEnd && !isNaN(new Date(order.plannedEnd).getTime()) ? new Date(order.plannedEnd) : undefined}
                             onSelect={async (date) => {
                               try {
                                 await updateOrder(order.id, { 
@@ -377,7 +377,7 @@ export default function OrderDetails() {
                     ) : (
                       <p className="font-medium text-sm sm:text-base">
                         {order.plannedEnd 
-                          ? format(new Date(order.plannedEnd), 'd MMM yyyy', { locale: sv })
+                          ? safeFormatDate(order.plannedEnd, 'd MMM yyyy')
                           : '-'}
                       </p>
                     )}
@@ -610,7 +610,7 @@ export default function OrderDetails() {
                                           <div className="absolute -left-[9px] top-1.5 w-2 h-2 rounded-full bg-primary" />
                                           <div className="flex items-center gap-2 text-sm">
                                             <span className="text-muted-foreground min-w-[80px]">
-                                              {format(new Date(event.timestamp), 'd MMM HH:mm', { locale: sv })}
+                                              {safeFormatDate(event.timestamp, 'd MMM HH:mm')}
                                             </span>
                                             <span className="flex-1">{event.label}</span>
                                             {event.changedBy && (
@@ -668,7 +668,7 @@ export default function OrderDetails() {
                                       <div className="absolute -left-[9px] top-1.5 w-2 h-2 rounded-full bg-primary" />
                                       <div className="flex items-center gap-2 text-sm">
                                         <span className="text-muted-foreground min-w-[80px]">
-                                          {format(new Date(event.timestamp), 'd MMM HH:mm', { locale: sv })}
+                                          {safeFormatDate(event.timestamp, 'd MMM HH:mm')}
                                         </span>
                                         <span className="flex-1">{event.label}</span>
                                         {event.changedBy && (
@@ -747,7 +747,7 @@ export default function OrderDetails() {
                                     <div className="absolute -left-[9px] top-1.5 w-2 h-2 rounded-full bg-primary" />
                                     <div className="flex items-center gap-2 text-sm">
                                       <span className="text-muted-foreground min-w-[80px]">
-                                        {format(new Date(event.timestamp), 'd MMM HH:mm', { locale: sv })}
+                                        {safeFormatDate(event.timestamp, 'd MMM HH:mm')}
                                       </span>
                                       <span className="flex-1">{event.label}</span>
                                       {event.changedBy && (
@@ -837,11 +837,11 @@ export default function OrderDetails() {
               <CardContent className="text-xs sm:text-sm space-y-1.5 sm:space-y-2 pt-0 sm:pt-0">
                 <div>
                   <span className="text-muted-foreground">Skapad:</span>{' '}
-                  {format(new Date(order.createdAt), 'd MMM yyyy HH:mm', { locale: sv })}
+                  {safeFormatDate(order.createdAt, 'd MMM yyyy HH:mm')}
                 </div>
                 <div>
                   <span className="text-muted-foreground">Uppdaterad:</span>{' '}
-                  {format(new Date(order.updatedAt), 'd MMM yyyy HH:mm', { locale: sv })}
+                  {safeFormatDate(order.updatedAt, 'd MMM yyyy HH:mm')}
                 </div>
               </CardContent>
             </Card>
