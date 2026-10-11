@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import { format } from 'date-fns';
-import { sv } from 'date-fns/locale';
+import { safeFormatDate } from '@/lib/utils';
 import { ArrowLeft, AlertTriangle, Clock, Package, Wrench, Save, CalendarIcon, FileText, Box, Pencil } from 'lucide-react';
 import { BillingStatusOverrideDialog } from '@/components/BillingStatusOverrideDialog';
 import { Layout } from '@/components/Layout';
