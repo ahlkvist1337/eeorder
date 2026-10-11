@@ -17,3 +17,19 @@ export function safeFormatDate(value: string | Date | null | undefined, pattern:
   if (isNaN(date.getTime())) return '-';
   return format(date, pattern, { locale: sv });
 }
+
+/** Årtal måste ha fyra siffror och ligga inom rimligt intervall. */
+export const MIN_YEAR = 2000;
+export const MAX_YEAR = 2099;
+
+/**
+ * Validates a date string for storage. Empty values are allowed;
+ * non-empty values must parse and have a four-digit year within range.
+ */
+export function isValidPlannedDate(value: string | null | undefined): boolean {
+  if (!value) return true;
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return false;
+  const year = date.getFullYear();
+  return year >= MIN_YEAR && year <= MAX_YEAR;
+}
